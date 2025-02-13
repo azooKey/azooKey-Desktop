@@ -62,4 +62,25 @@ extension Config {
         static let `default` = false
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
     }
+    /// OpenAI APIキー
+    struct UseCustomZenzModel: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.useCustomZenzModel"
+        static func customZenzDirectoryURL(applicationSupportDirectory: URL) -> URL {
+            if #available(macOS 13, *) {
+                applicationSupportDirectory.appending(path: "gguf", directoryHint: .isDirectory)
+            } else {
+                applicationSupportDirectory.appendingPathComponent("gguf", isDirectory: true)
+            }
+        }
+        static func customZenzFileURL(applicationSupportDirectory: URL) -> URL {
+            if #available(macOS 13, *) {
+                customZenzDirectoryURL(applicationSupportDirectory: applicationSupportDirectory)
+                    .appending(path: "custom_zenz_model.gguf", directoryHint: .notDirectory)
+            } else {
+                customZenzDirectoryURL(applicationSupportDirectory: applicationSupportDirectory)
+                    .appendingPathComponent("custom_zenz_model.gguf", isDirectory: false)
+            }
+        }
+    }
 }

@@ -103,9 +103,15 @@ final class SegmentsManager {
     }
 
     private func zenzaiMode(leftSideContext: String?, requestRichCandidates: Bool) -> ConvertRequestOptions.ZenzaiMode {
+        let zenzWeightURL = if Config.UseCustomZenzModel().value {
+            // UseCustomZenzModelがONの場合は、サポートディレクトリに保存したウェイトを読み込む
+            Config.UseCustomZenzModel.customZenzFileURL(applicationSupportDirectory: self.azooKeyDir)
+        } else {
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/ggml-model-Q5_K_M.gguf", isDirectory: false)
+        }
         if self.zenzaiEnabled {
             return .on(
-                weight: Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/ggml-model-Q5_K_M.gguf", isDirectory: false),
+                weight: zenzWeightURL,
                 inferenceLimit: Config.ZenzaiInferenceLimit().value,
                 requestRichCandidates: requestRichCandidates,
                 personalizationMode: self.zenzaiPersonalizationMode,
@@ -135,15 +141,21 @@ final class SegmentsManager {
         )
     }
 
-    var azooKeyMemoryDir: URL {
+    private var azooKeyDir: URL {
         if #available(macOS 13, *) {
             URL.applicationSupportDirectory
                 .appending(path: "azooKey", directoryHint: .isDirectory)
-                .appending(path: "memory", directoryHint: .isDirectory)
         } else {
             FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
                 .appendingPathComponent("azooKey", isDirectory: true)
-                .appendingPathComponent("memory", isDirectory: true)
+        }
+    }
+
+    var azooKeyMemoryDir: URL {
+        if #available(macOS 13, *) {
+            azooKeyDir.appending(path: "memory", directoryHint: .isDirectory)
+        } else {
+            azooKeyDir.appendingPathComponent("memory", isDirectory: true)
         }
     }
 
