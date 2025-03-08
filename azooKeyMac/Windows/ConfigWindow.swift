@@ -21,11 +21,25 @@ struct ConfigWindow: View {
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var userDictionary = Config.UserDictionary()
+    @ConfigState private var useCustomZenzModel = Config.UseCustomZenzModel()
 
     @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
     @State private var openAiApiKeyPopover = false
+
+    @State private var fileImporterPresented = false
+    @State private var debugInfo: String = ""
+
+    private var supportDirectory: URL {
+        if #available(macOS 13, *) {
+            URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+        } else {
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+        }
+    }
 
     @ViewBuilder
     private func helpButton(helpContent: LocalizedStringKey, isPresented: Binding<Bool>) -> some View {
@@ -110,7 +124,6 @@ struct ConfigWindow: View {
                             (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
                         }
                         Divider()
-                        Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
                         Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
                         HStack {
                             SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
@@ -119,6 +132,41 @@ struct ConfigWindow: View {
                                 isPresented: $openAiApiKeyPopover
                             )
                         }
+                        Divider()
+                        HStack {
+                            Toggle("（開発者用）独自のGGUFの有効化", isOn: $useCustomZenzModel)
+                                .labelsHidden()
+                            Button("（開発者用）独自のGGUFを利用") {
+                                self.fileImporterPresented = true
+                            }.disabled(useCustomZenzModel.value == false)
+                        }
+                        Button("（開発者用）サポートディレクトリを開く") {
+                            let folderURL = self.supportDirectory.deletingLastPathComponent()
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+                        }
+                        Text(debugInfo)
+                        Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
+                    }
+                    .fileImporter(isPresented: $fileImporterPresented, allowedContentTypes: [.init(filenameExtension: "gguf")!]) { item in
+                        switch item {
+                        case .success(let ggufURL):
+                            guard ggufURL.startAccessingSecurityScopedResource() else {
+                                return
+                            }
+                            do {
+                                try FileManager.default.createDirectory(at: Config.UseCustomZenzModel.customZenzDirectoryURL(applicationSupportDirectory: self.supportDirectory), withIntermediateDirectories: true)
+                                try FileManager.default.copyItem(
+                                    at: ggufURL,
+                                    to: Config.UseCustomZenzModel.customZenzFileURL(applicationSupportDirectory: self.supportDirectory)
+                                )
+                                self.useCustomZenzModel.value = true
+                            } catch {
+                                return
+                            }
+                        case .failure(let failure):
+                            debugInfo = "Error: \(failure.localizedDescription)"
+                        }
+
                     }
                 }
                 Spacer()
