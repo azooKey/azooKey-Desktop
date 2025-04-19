@@ -41,3 +41,7 @@ extension Config {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.ZenzaiProfile"
     }
 }
+
+extension Config {
+    static let openAiApiKey = OpenAiApiKey()
+}

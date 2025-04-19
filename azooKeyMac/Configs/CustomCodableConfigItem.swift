@@ -132,3 +132,16 @@ extension Config {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
     }
 }
+
+extension Config {
+    /// OpenAIモデル名
+    struct OpenAiModelName: CustomCodableConfigItem {
+        typealias Value = String
+        static var `default`: String = "gpt-4o-mini"
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
+    }
+}
+
+extension Config {
+    static let openAiModelName = OpenAiModelName()
+}

@@ -178,17 +178,19 @@ private struct Prompt {
 // - properties:
 //    - prompt: 変換対象の前のテキスト
 //    - target: 変換対象のテキスト
+//    - modelName: モデル名を追加
 //
 // - methods:
 //    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
 struct OpenAIRequest {
     let prompt: String
     let target: String
+    let modelName: String
 
     // リクエストをJSON形式に変換する関数
     func toJSON() -> [String: Any] {
         [
-            "model": "gpt-4o-mini", // Structured Outputs対応モデル
+            "model": modelName,
             "messages": [
                 ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
                 ["role": "user", "content": """

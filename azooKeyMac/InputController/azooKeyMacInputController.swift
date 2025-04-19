@@ -465,15 +465,17 @@ extension azooKeyMacInputController {
 
         self.segmentsManager.appendDebugMessage("プロンプト取得成功: \(prompt) << \(composingText)")
 
-        let apiKey = Config.OpenAiApiKey().value
-        let request = OpenAIRequest(prompt: prompt, target: composingText)
-        self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText)")
+        let apiKey = Config.openAiApiKey.value
+        let modelName = Config.openAiModelName.value
+        let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
+        self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
+        self.segmentsManager.appendDebugMessage("Using OpenAI Model: \(modelName)")
 
         // 非同期タスクでリクエストを送信
         Task {
             do {
                 self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, segmentsManager: segmentsManager)
+                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, segmentsManager: self.segmentsManager)
                 self.segmentsManager.appendDebugMessage("APIレスポンス受信成功: \(predictions)")
 
                 // String配列からCandidate配列に変換
