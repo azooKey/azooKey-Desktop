@@ -178,7 +178,7 @@ private struct Prompt {
 // - properties:
 //    - prompt: 変換対象の前のテキスト
 //    - target: 変換対象のテキスト
-//    - modelName: モデル名を追加
+//    - modelName: モデル名
 //
 // - methods:
 //    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
