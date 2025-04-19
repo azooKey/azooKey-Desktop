@@ -43,10 +43,6 @@ extension Config {
 }
 
 extension Config {
-    static let zenzaiProfile = ZenzaiProfile()
-}
-
-extension Config {
     /// OpenAIモデル名
     struct OpenAiModelName: StringConfigItem {
         static var `default`: String = "gpt-4o-mini"

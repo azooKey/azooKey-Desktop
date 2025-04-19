@@ -475,7 +475,7 @@ extension azooKeyMacInputController {
         Task {
             do {
                 self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, segmentsManager: self.segmentsManager)
+                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, segmentsManager: segmentsManager)
                 self.segmentsManager.appendDebugMessage("APIレスポンス受信成功: \(predictions)")
 
                 // String配列からCandidate配列に変換

@@ -131,7 +131,3 @@ extension Config {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
     }
 }
-
-extension Config {
-    static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
-}
