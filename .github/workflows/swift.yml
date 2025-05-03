@@ -44,6 +44,8 @@ jobs:
         run: |
           brew update
           brew install swiftlint
+      - name: Check SwiftLint version
+        run: swiftlint version
       - name: Run SwiftLint
         run: |
           swiftlint --fix --format
