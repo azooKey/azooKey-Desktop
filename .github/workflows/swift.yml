@@ -1,0 +1,51 @@
+name: Swift Build and Test
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos-build:
+    name: Build and Test on macOS
+    runs-on: macos-latest
+    steps:
+      - uses: swift-actions/setup-swift@v2.3.0
+        with:
+          swift-version: 6.1
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build
+        run: swift build --package-path Core
+      - name: Test
+        run: swift test --package-path Core
+
+  xcodebuild-test:
+    name: Xcodebuild test on macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Verify xcodebuild installation
+        run: xcodebuild -version
+      - name: List available schemes
+        run: xcodebuild -project azooKeyMac.xcodeproj -list
+      - name: Test building azooKeyMac (Release configuration)
+        run: xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac -configuration Release -quiet build
+
+  swiftlint:
+    name: SwiftLint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install SwiftLint
+        run: |
+          brew update
+          brew install swiftlint
+      - name: Run SwiftLint
+        run: |
+          swiftlint --fix --format
+          swiftlint --quiet --strict
+  
