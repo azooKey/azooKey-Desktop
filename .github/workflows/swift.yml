@@ -40,7 +40,8 @@ jobs:
       - name: List available schemes
         run: xcodebuild -project azooKeyMac.xcodeproj -list
       - name: Test building azooKeyMac (Release configuration)
-        run: xcodebuild \
+        run: |
+         xcodebuild \
           -project azooKeyMac.xcodeproj \
           -scheme azooKeyMac \
           -configuration Release \
