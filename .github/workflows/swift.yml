@@ -6,7 +6,7 @@ on:
 jobs:
   macos-build:
     name: Build and Test on macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: swift-actions/setup-swift@v2.3.0
         with:
@@ -21,7 +21,7 @@ jobs:
 
   xcodebuild-test:
     name: Xcodebuild test on macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +35,7 @@ jobs:
 
   swiftlint:
     name: SwiftLint
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
