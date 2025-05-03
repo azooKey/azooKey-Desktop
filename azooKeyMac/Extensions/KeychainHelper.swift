@@ -33,7 +33,7 @@ enum KeychainHelper {
         let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
 
         if status == errSecSuccess, let data = dataTypeRef as? Data {
-            return String(decoding: data, as: UTF8.self)
+            return String(bytes: data, encoding: .utf8)
         }
 
         return nil

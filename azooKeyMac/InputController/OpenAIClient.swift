@@ -271,7 +271,7 @@ enum OpenAIClient {
         }
 
         guard httpResponse.statusCode == 200 else {
-            let responseBody = String(decoding: data, as: UTF8.self)
+            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
             throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
         }
 
