@@ -40,7 +40,14 @@ jobs:
       - name: List available schemes
         run: xcodebuild -project azooKeyMac.xcodeproj -list
       - name: Test building azooKeyMac (Release configuration)
-        run: xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac -configuration Release -quiet build
+        run: xcodebuild \
+          -project azooKeyMac.xcodeproj \
+          -scheme azooKeyMac \
+          -configuration Release \
+          -destination 'generic/platform=macOS' \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY=""
 
   swiftlint:
     name: SwiftLint
