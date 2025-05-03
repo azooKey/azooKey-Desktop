@@ -8,9 +8,12 @@ jobs:
     name: Build and Test on macOS
     runs-on: macos-15
     steps:
-      - uses: swift-actions/setup-swift@v2.3.0
-        with:
-          swift-version: 6.1
+      - name: Select Xcode 16.3
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
+          echo "Using Xcode at $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -23,6 +26,12 @@ jobs:
     name: Xcodebuild test on macOS
     runs-on: macos-15
     steps:
+      - name: Select Xcode 16.3
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
+          echo "Using Xcode at $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
       - uses: actions/checkout@v4
         with:
           submodules: true
