@@ -119,11 +119,11 @@ extension Config {
                 case .off:
                     0
                 case .soft:
-                    0.2
-                case .normal:
                     0.5
+                case .normal:
+                    1.0
                 case .hard:
-                    0.8
+                    1.5
                 }
             }
         }
