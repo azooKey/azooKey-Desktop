@@ -5,6 +5,7 @@ struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var typeCommaAndPeriod = Config.TypeCommaAndPeriod()
+    @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
     @ConfigState private var zenzai = Config.ZenzaiIntegration()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
@@ -98,6 +99,7 @@ struct ConfigWindow: View {
                         Toggle("ライブ変換を有効化", isOn: $liveConversion)
                         Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                         Toggle("「、」「。」の代わりに「，」「．」を入力", isOn: $typeCommaAndPeriod)
+                        Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
                         Divider()
                         Button("ユーザ辞書を編集する") {
                             (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()

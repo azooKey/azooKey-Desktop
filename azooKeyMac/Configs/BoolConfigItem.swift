@@ -40,6 +40,11 @@ extension Config {
         static let `default` = false
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeCommaAndPeriod"
     }
+    /// 「　」の代わりに「 」を入力する設定
+    struct TypeHalfSpace: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
+    }
     /// Zenzaiを利用する設定
     struct ZenzaiIntegration: BoolConfigItem {
         static let `default` = true
