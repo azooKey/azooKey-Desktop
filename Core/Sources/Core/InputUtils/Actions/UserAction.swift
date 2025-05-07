@@ -2,7 +2,7 @@ public enum UserAction {
     case input(String)
     case backspace
     case enter
-    case space
+    case space(Bool)
     case escape
     case tab
     case unknown

@@ -106,7 +106,13 @@ extension UserAction {
         case 48: // Tab
             return .tab
         case 49: // Space
-            return .space
+            switch (Config.TypeHalfSpace().value, event.modifierFlags.contains(.shift)) {
+            case (true, true), (false, false):
+                // 全角スペース
+                return .space(true)
+            default:
+                return .space(false)
+            }
         case 51: // Delete
             return .backspace
         case 53: // Escape

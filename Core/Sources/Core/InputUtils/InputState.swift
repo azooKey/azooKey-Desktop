@@ -71,12 +71,11 @@ public enum InputState: Sendable, Hashable {
                 return (.selectInputLanguage(.japanese), .fallthrough)
             case .英数:
                 return (.selectInputLanguage(.english), .fallthrough)
-            case .space:
-                // Shift+Spaceでは半角スペースを入力
-                if inputLanguage == .english || event.modifierFlags.contains(.shift) {
-                    return (.insertWithoutMarkedText(" "), .fallthrough)
-                } else {
+            case .space(let isFullSpace):
+                if inputLanguage != .english && isFullSpace {
                     return (.insertWithoutMarkedText("　"), .fallthrough)
+                } else {
+                    return (.insertWithoutMarkedText(" "), .fallthrough)
                 }
             case .suggest:
                 if enableSuggestion {
