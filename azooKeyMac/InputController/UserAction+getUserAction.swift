@@ -109,9 +109,9 @@ extension UserAction {
             switch (Config.TypeHalfSpace().value, event.modifierFlags.contains(.shift)) {
             case (true, true), (false, false):
                 // 全角スペース
-                return .space(true)
+                return .space(prefersFullWidthWhenInput: true)
             case (true, false), (false, true):
-                return .space(false)
+                return .space(prefersFullWidthWhenInput: false)
             }
         case 51: // Delete
             return .backspace

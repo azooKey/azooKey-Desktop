@@ -2,7 +2,7 @@ public enum UserAction {
     case input(String)
     case backspace
     case enter
-    case space(Bool)
+    case space(prefersFullWidthWhenInput: Bool)
     case escape
     case tab
     case unknown
