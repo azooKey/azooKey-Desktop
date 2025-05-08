@@ -110,7 +110,7 @@ extension UserAction {
             case (true, true), (false, false):
                 // 全角スペース
                 return .space(true)
-            default:
+            case (true, false), (false, true):
                 return .space(false)
             }
         case 51: // Delete
