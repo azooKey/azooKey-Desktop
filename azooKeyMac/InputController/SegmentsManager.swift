@@ -128,6 +128,7 @@ final class SegmentsManager {
             requireEnglishPrediction: false,
             keyboardLanguage: .ja_JP,
             englishCandidateInRoman2KanaInput: false,
+            fullWidthRomanCandidate: true,
             learningType: Config.Learning().value.learningType,
             memoryDirectoryURL: self.azooKeyMemoryDir,
             sharedContainerURL: self.azooKeyMemoryDir,
