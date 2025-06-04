@@ -8,6 +8,7 @@
 import Foundation
 import enum KanaKanjiConverterModuleWithDefaultDictionary.LearningType
 import struct KanaKanjiConverterModuleWithDefaultDictionary.ConvertRequestOptions
+import Core
 
 protocol CustomCodableConfigItem: ConfigItem {
     static var `default`: Value { get }
@@ -129,5 +130,15 @@ extension Config {
         }
         static var `default`: Value = .normal
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
+    }
+}
+
+extension Config {
+    /// カスタムローマ字テーブル設定
+    struct CustomRomajiTable: CustomCodableConfigItem {
+        typealias Value = RomajiTable
+
+        static var `default`: Value = RomajiTable.defaultTable
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.custom_romaji_table"
     }
 }

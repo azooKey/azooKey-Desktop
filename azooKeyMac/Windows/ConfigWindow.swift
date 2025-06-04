@@ -16,11 +16,13 @@ struct ConfigWindow: View {
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var userDictionary = Config.UserDictionary()
+    @ConfigState private var customRomajiTable = Config.CustomRomajiTable()
 
     @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
     @State private var openAiApiKeyPopover = false
+    @State private var showingRomajiTableEditor = false
 
     @ViewBuilder
     private func helpButton(helpContent: LocalizedStringKey, isPresented: Binding<Bool>) -> some View {
@@ -102,6 +104,12 @@ struct ConfigWindow: View {
                     Divider()
                     Button("ユーザ辞書を編集する") {
                         (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
+                    }
+                    Button("カスタムローマ字テーブルを編集する") {
+                        showingRomajiTableEditor = true
+                    }
+                    .sheet(isPresented: $showingRomajiTableEditor) {
+                        RomajiTableEditorWindow(romajiTable: $customRomajiTable)
                     }
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)

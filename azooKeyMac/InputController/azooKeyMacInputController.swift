@@ -8,11 +8,16 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     var segmentsManager: SegmentsManager
     private var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
+    private var romajiConverterManager: RomajiConverterManager
+
     var zenzaiEnabled: Bool {
         Config.ZenzaiIntegration().value
     }
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
+    }
+    var customRomajiTable: RomajiTable {
+        Config.CustomRomajiTable().value
     }
 
     var appMenu: NSMenu
@@ -27,6 +32,13 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         self.segmentsManager = SegmentsManager()
+
+        // カスタムローマ字変換マネージャーを初期化
+        self.romajiConverterManager = RomajiConverterManager(
+            initialTable: Config.CustomRomajiTable().value
+        ) { _ in
+            // テーブル更新時のコールバック（必要に応じて実装）
+        }
 
         self.appMenu = NSMenu(title: "azooKey")
         self.zenzaiToggleMenuItem = NSMenuItem()
@@ -78,6 +90,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.prepareApplicationSupportDirectory()
         self.updateZenzaiToggleMenuItem(newValue: self.zenzaiEnabled)
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
+        // カスタムローマ字テーブルを更新
+        self.romajiConverterManager.updateCustomTable(self.customRomajiTable)
         self.segmentsManager.activate()
 
         if let client = sender as? IMKTextInput {
@@ -155,7 +169,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             return false
         }
 
-        let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
+        let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage, romajiConverter: self.romajiConverterManager)
         let (clientAction, clientActionCallback) = inputState.event(
             event,
             userAction: userAction,
@@ -181,7 +195,30 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .enterCandidateSelectionMode:
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            // カスタムローマ字変換の処理
+            if self.inputLanguage == .japanese && self.romajiConverterManager.isCustomTableEnabled {
+                let conversionResult = self.romajiConverterManager.processInput(string)
+
+                switch conversionResult {
+                case .converted(let converted):
+                    self.segmentsManager.insertAtCursorPosition(converted, inputStyle: .roman2kana)
+                case .buffering:
+                    // バッファリング中は何もしない（変換待ち）
+                    break
+                case .partialConversion(let converted, let remaining):
+                    self.segmentsManager.insertAtCursorPosition(converted, inputStyle: .roman2kana)
+                    // 残りの文字列を再帰的に処理
+                    for char in remaining {
+                        let subResult = self.romajiConverterManager.processInput(String(char))
+                        if case .converted(let subConverted) = subResult {
+                            self.segmentsManager.insertAtCursorPosition(subConverted, inputStyle: .roman2kana)
+                        }
+                    }
+                }
+            } else {
+                // 通常の処理
+                self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            }
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -202,7 +239,12 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             self.submitSelectedCandidate()
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
         case .removeLastMarkedText:
-            self.segmentsManager.deleteBackwardFromCursorPosition()
+            // カスタムローマ字変換のバッファがある場合は、まずバッファから削除
+            if self.inputLanguage == .japanese && self.romajiConverterManager.isCustomTableEnabled && !self.romajiConverterManager.isEmpty {
+                _ = self.romajiConverterManager.deleteLastCharacter()
+            } else {
+                self.segmentsManager.deleteBackwardFromCursorPosition()
+            }
             self.segmentsManager.requestResettingSelection()
         case .selectPrevCandidate:
             self.segmentsManager.requestSelectingPrevCandidate()
