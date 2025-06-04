@@ -9,6 +9,7 @@ struct RomajiTableEditorWindow: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var searchText = ""
+    @Environment(\.dismiss) private var dismiss
 
     private var filteredMappings: [RomajiMapping] {
         guard !searchText.isEmpty else {
@@ -165,14 +166,14 @@ struct RomajiTableEditorWindow: View {
     private var footerView: some View {
         HStack {
             Button("キャンセル") {
-                NSApp.keyWindow?.close()
+                dismiss()
             }
 
             Spacer()
 
             Button("保存") {
                 saveChanges()
-                NSApp.keyWindow?.close()
+                dismiss()
             }
             .buttonStyle(.borderedProminent)
         }
