@@ -24,14 +24,32 @@ extension Config {
     struct OpenAiApiKey: StringConfigItem {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiKey"
 
+        private static var cachedValue: String = ""
+        private static var isLoaded: Bool = false
+
         // keychainで保存
         var value: String {
             get {
-                KeychainHelper.read(key: Self.key) ?? ""
+                if !Self.isLoaded {
+                    Task {
+                        Self.cachedValue = await KeychainHelper.read(key: Self.key) ?? ""
+                        Self.isLoaded = true
+                    }
+                }
+                return Self.cachedValue
             }
             nonmutating set {
-                KeychainHelper.save(key: Self.key, value: newValue)
+                Self.cachedValue = newValue
+                Task {
+                    await KeychainHelper.save(key: Self.key, value: newValue)
+                }
             }
+        }
+
+        // 初期化時にKeychainから値を読み込む
+        static func loadFromKeychain() async {
+            cachedValue = await KeychainHelper.read(key: key) ?? ""
+            isLoaded = true
         }
     }
 }
