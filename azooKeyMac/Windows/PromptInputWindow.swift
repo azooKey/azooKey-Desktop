@@ -1,4 +1,5 @@
 import Cocoa
+import Foundation
 import SwiftUI
 
 extension Notification.Name {
@@ -87,7 +88,7 @@ class PromptInputWindow: NSWindow {
     private func resizeWindowToContent(isPreviewMode: Bool) {
         let headerHeight: CGFloat = 36  // Compact header
         let textFieldHeight: CGFloat = 36  // Compact text field
-        let historyHeight: CGFloat = 72  // Compact history (3 items)
+        let historyHeight: CGFloat = isPreviewMode ? 0 : 200  // More space for 10 items when not in preview mode
         let buttonHeight: CGFloat = 36  // Compact button row
         let containerPadding: CGFloat = 16  // Reduced padding
 
@@ -326,10 +327,19 @@ struct PromptInputView: View {
                     hoveredHistoryIndex = nil
                     isTextFieldFocused = true
                 }
+                .onChange(of: promptText) { _ in
+                    // When text field is edited after preview, hide preview and show history
+                    if showPreview {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showPreview = false
+                            onPreviewModeChanged(false)
+                        }
+                    }
+                }
                 .padding(.horizontal, 12)
 
-            // Recent prompts (always visible when available)
-            if !promptHistory.isEmpty {
+            // Recent prompts (visible when not in preview mode and available)
+            if !promptHistory.isEmpty && !showPreview {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack {
                         Text("Recent")
@@ -338,44 +348,47 @@ struct PromptInputView: View {
                         Spacer()
                     }
 
-                    VStack(spacing: 1) {
-                        ForEach(Array(getVisibleHistory().enumerated()), id: \.offset) { index, item in
-                            HStack(spacing: 4) {
-                                // Pin button
-                                Button {
-                                    togglePin(for: item)
-                                } label: {
-                                    Image(systemName: item.isPinned ? "pin.fill" : "pin")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(item.isPinned ? .accentColor : .secondary.opacity(0.4))
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .help(item.isPinned ? "Unpin" : "Pin")
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(spacing: 1) {
+                            ForEach(Array(getVisibleHistory().enumerated()), id: \.offset) { index, item in
+                                HStack(spacing: 4) {
+                                    // Pin button
+                                    Button {
+                                        togglePin(for: item)
+                                    } label: {
+                                        Image(systemName: item.isPinned ? "pin.fill" : "pin")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(item.isPinned ? .accentColor : .secondary.opacity(0.4))
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .help(item.isPinned ? "Unpin" : "Pin")
 
-                                // Prompt text
-                                Text(item.prompt)
-                                    .font(.system(size: 11))
-                                    .foregroundColor(hoveredHistoryIndex == index ? .primary : .secondary)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(hoveredHistoryIndex == index ? Color.accentColor.opacity(0.2) : Color.clear)
-                            )
-                            .onHover { isHovered in
-                                hoveredHistoryIndex = isHovered ? index : nil
-                            }
-                            .onTapGesture {
-                                promptText = item.prompt
-                                hoveredHistoryIndex = nil
-                                isTextFieldFocused = true
-                                requestPreview()
+                                    // Prompt text
+                                    Text(item.prompt)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(hoveredHistoryIndex == index ? .primary : .secondary)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(hoveredHistoryIndex == index ? Color.accentColor.opacity(0.2) : Color.clear)
+                                )
+                                .onHover { isHovered in
+                                    hoveredHistoryIndex = isHovered ? index : nil
+                                }
+                                .onTapGesture {
+                                    promptText = item.prompt
+                                    hoveredHistoryIndex = nil
+                                    isTextFieldFocused = true
+                                    requestPreview()
+                                }
                             }
                         }
                     }
+                    .frame(maxHeight: 180)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 2)
@@ -544,7 +557,7 @@ struct PromptInputView: View {
     }
 
     private func loadPromptHistory() {
-        let historyString = Config.PromptHistory().value
+        let historyString = UserDefaults.standard.string(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory") ?? ""
         if !historyString.isEmpty,
            let data = historyString.data(using: .utf8) {
             // Try to load new format first
@@ -560,7 +573,7 @@ struct PromptInputView: View {
 
     private func getVisibleHistory() -> [PromptHistoryItem] {
         let pinnedItems = promptHistory.filter { $0.isPinned }
-        let recentItems = promptHistory.filter { !$0.isPinned }.prefix(3 - pinnedItems.count)
+        let recentItems = promptHistory.filter { !$0.isPinned }.prefix(10 - pinnedItems.count)
         return Array(pinnedItems + recentItems)
     }
 
@@ -590,7 +603,7 @@ struct PromptInputView: View {
 
     private func savePinnedHistory() {
         if let data = try? JSONEncoder().encode(promptHistory) {
-            Config.PromptHistory().value = String(decoding: data, as: UTF8.self)
+            UserDefaults.standard.set(String(decoding: data, as: UTF8.self), forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory")
         }
     }
 
