@@ -5,12 +5,14 @@ import SwiftUI
 extension Notification.Name {
     static let navigateHistoryUp = Notification.Name("navigateHistoryUp")
     static let navigateHistoryDown = Notification.Name("navigateHistoryDown")
+    static let textFieldFocusChanged = Notification.Name("textFieldFocusChanged")
 }
 
 class PromptInputWindow: NSWindow {
     private var completion: ((String?) -> Void)?
     private var previewCallback: ((String, @escaping (String) -> Void) -> Void)?
     private var applyCallback: ((String) -> Void)?
+    private var isTextFieldCurrentlyFocused: Bool = false
 
     init() {
         super.init(
@@ -26,11 +28,25 @@ class PromptInputWindow: NSWindow {
         self.hasShadow = true
         self.acceptsMouseMovedEvents = true
 
-        // Enable transparency and blending
+        // Use native material backing
         self.isOpaque = false
-        self.alphaValue = 0.95
+        self.alphaValue = 1.0
 
         setupUI()
+
+        // Listen for text field focus changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(textFieldFocusChanged(_:)),
+            name: .textFieldFocusChanged,
+            object: nil
+        )
+    }
+
+    @objc private func textFieldFocusChanged(_ notification: Notification) {
+        if let isFocused = notification.object as? Bool {
+            isTextFieldCurrentlyFocused = isFocused
+        }
     }
 
     private func setupUI() {
@@ -221,8 +237,13 @@ class PromptInputWindow: NSWindow {
             // Send up arrow event to SwiftUI view for history navigation
             NotificationCenter.default.post(name: .navigateHistoryUp, object: nil)
         } else if event.keyCode == 125 { // Down arrow key
-            // Send down arrow event to SwiftUI view for history navigation
-            NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
+            if isTextFieldCurrentlyFocused {
+                // When text field is focused and down key is pressed, start history navigation
+                NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
+            } else {
+                // Continue with normal history navigation
+                NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
+            }
         } else {
             super.keyDown(with: event)
         }
@@ -307,6 +328,10 @@ struct PromptInputView: View {
             TextField("例: フォーマルにして", text: $promptText)
                 .textFieldStyle(ModernTextFieldStyle())
                 .focused($isTextFieldFocused)
+                .onChange(of: isTextFieldFocused) { isFocused in
+                    // Notify parent window about focus changes
+                    NotificationCenter.default.post(name: .textFieldFocusChanged, object: isFocused)
+                }
                 .onSubmit {
                     if hoveredHistoryIndex != nil {
                         // If history item is selected, use it and generate preview automatically
@@ -632,7 +657,10 @@ struct PromptInputView: View {
             } else if hoveredHistoryIndex! > 0 {
                 hoveredHistoryIndex! -= 1
             } else {
+                // When at the first history item and pressing up, return to text field
                 hoveredHistoryIndex = nil
+                isTextFieldFocused = true
+                return // Don't update promptText, keep current text
             }
         case .down:
             if hoveredHistoryIndex == nil {
