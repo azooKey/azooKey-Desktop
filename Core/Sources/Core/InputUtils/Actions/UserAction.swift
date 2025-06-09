@@ -14,6 +14,7 @@ public enum UserAction {
     case editSegment(Int)
     case suggest
     case forget
+    case transformSelectedText
 
     public enum NavigationDirection: Sendable, Equatable, Hashable {
         case up, down, right, left

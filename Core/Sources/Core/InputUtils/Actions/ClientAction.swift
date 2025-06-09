@@ -58,6 +58,10 @@ public enum ClientAction {
     case submitReplaceSuggestionCandidate
     case hideReplaceSuggestionWindow
 
+    // Selected Text Transform
+    case showPromptInputWindow
+    case transformSelectedText(String, String)  // (selectedText, prompt)
+
     case stopComposition
 }
 

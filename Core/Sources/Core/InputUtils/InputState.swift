@@ -83,7 +83,7 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
-            case .unknown, .navigation, .backspace, .enter, .escape, .function, .editSegment, .tab, .forget:
+            case .unknown, .navigation, .backspace, .enter, .escape, .function, .editSegment, .tab, .forget, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
         case .composing:
@@ -136,7 +136,7 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
-            case .forget, .unknown, .tab:
+            case .forget, .unknown, .tab, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
         case .previewing:
@@ -179,7 +179,7 @@ public enum InputState: Sendable, Hashable {
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
-            case .unknown, .suggest, .tab, .forget:
+            case .unknown, .suggest, .tab, .forget, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
         case .selecting:
@@ -248,7 +248,7 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
-            case .unknown, .suggest, .tab:
+            case .unknown, .suggest, .tab, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
         case .replaceSuggestion:
