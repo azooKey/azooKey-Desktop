@@ -9,7 +9,17 @@ extension UserAction {
         let keyMap: (String) -> String = switch inputLanguage {
         case .english: { $0 }
         case .japanese:
-            if Config.TypeCommaAndPeriod().value {
+            if Config.KanaInput().value {
+                // かな入力モードの場合
+                { text in
+                    if let kana = KeyMap.toKana(text, shiftPressed: event.modifierFlags.contains(.shift)) {
+                        return kana
+                    } else {
+                        // マッピングがない場合は元の文字を返す
+                        return text
+                    }
+                }
+            } else if Config.TypeCommaAndPeriod().value {
                 {
                     KeyMap.h2zMap($0)
                         .replacingOccurrences(of: "、", with: "，")
@@ -169,7 +179,14 @@ extension UserAction {
         case 126: // Up
             return .navigation(.up)
         case 18, 19, 20, 21, 23, 22, 26, 28, 25, 29:
-            if !event.modifierFlags.contains(.shift) && !event.modifierFlags.contains(.option) {
+            // かな入力モードの場合は数字キーもかな変換する
+            if Config.KanaInput().value && inputLanguage == .japanese {
+                if let text = event.characters, isPrintable(text) {
+                    return .input(keyMap(text))
+                } else {
+                    return .unknown
+                }
+            } else if !event.modifierFlags.contains(.shift) && !event.modifierFlags.contains(.option) {
                 let number: UserAction.Number = [
                     18: .one,
                     19: .two,
