@@ -309,11 +309,14 @@ struct PromptInputView: View {
                 .focused($isTextFieldFocused)
                 .onSubmit {
                     if hoveredHistoryIndex != nil {
-                        // If history item is selected, use it and generate preview
+                        // If history item is selected, use it and generate preview automatically
                         promptText = getVisibleHistory()[hoveredHistoryIndex!].prompt
                         hoveredHistoryIndex = nil
                         isTextFieldFocused = true
-                        requestPreview()
+                        // Automatically request preview after setting the text
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            requestPreview()
+                        }
                     } else if showPreview {
                         // Apply when Enter is pressed in preview mode
                         onApply(previewText)
@@ -383,7 +386,10 @@ struct PromptInputView: View {
                                     promptText = item.prompt
                                     hoveredHistoryIndex = nil
                                     isTextFieldFocused = true
-                                    requestPreview()
+                                    // Automatically request preview after setting the text
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        requestPreview()
+                                    }
                                 }
                             }
                         }
