@@ -572,6 +572,15 @@ struct PromptInputView: View {
                 savePinnedHistory() // Save in new format
             }
         }
+
+        // Add default pinned prompts if history is empty
+        if promptHistory.isEmpty {
+            let defaultPinnedPrompts = ["elaborate", "rewrite", "formal", "english"]
+            promptHistory = defaultPinnedPrompts.map { prompt in
+                PromptHistoryItem(prompt: prompt, isPinned: true)
+            }
+            savePinnedHistory()
+        }
     }
 
     private func getVisibleHistory() -> [PromptHistoryItem] {
