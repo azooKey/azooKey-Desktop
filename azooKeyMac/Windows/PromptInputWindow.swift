@@ -6,6 +6,7 @@ extension Notification.Name {
     static let navigateHistoryUp = Notification.Name("navigateHistoryUp")
     static let navigateHistoryDown = Notification.Name("navigateHistoryDown")
     static let textFieldFocusChanged = Notification.Name("textFieldFocusChanged")
+    static let requestTextFieldFocus = Notification.Name("requestTextFieldFocus")
 }
 
 class PromptInputWindow: NSWindow {
@@ -128,28 +129,13 @@ class PromptInputWindow: NSWindow {
     }
 
     private func focusTextField() {
-        // Enhanced focus handling with more aggressive approach
+        // Make window key and active
         NSApp.activate(ignoringOtherApps: true)
-        self.orderFront(nil)
         self.makeKeyAndOrderFront(nil)
 
-        // Force the window to become key immediately
-        if !self.isKeyWindow {
-            self.makeKey()
-        }
-
-        // Multiple attempts to ensure the text field gets focus with extended timing
-        self.makeFirstResponder(self.contentView)
-
-        // Extended focus attempts with more frequent retries
-        for delay in [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0, 1.5] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                if !self.isKeyWindow {
-                    NSApp.activate(ignoringOtherApps: true)
-                    self.makeKeyAndOrderFront(nil)
-                }
-                self.makeFirstResponder(self.contentView)
-            }
+        // Single delayed focus request
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NotificationCenter.default.post(name: .requestTextFieldFocus, object: nil)
         }
     }
 
@@ -234,15 +220,18 @@ class PromptInputWindow: NSWindow {
             completion?(nil)
             close()
         } else if event.keyCode == 126 { // Up arrow key
-            // Send up arrow event to SwiftUI view for history navigation
-            NotificationCenter.default.post(name: .navigateHistoryUp, object: nil)
+            // Only handle up arrow if not in text field (CustomTextField handles it directly)
+            if !isTextFieldCurrentlyFocused {
+                NotificationCenter.default.post(name: .navigateHistoryUp, object: nil)
+            } else {
+                super.keyDown(with: event)
+            }
         } else if event.keyCode == 125 { // Down arrow key
-            if isTextFieldCurrentlyFocused {
-                // When text field is focused and down key is pressed, start history navigation
+            // Only handle down arrow if not in text field (CustomTextField handles it directly)
+            if !isTextFieldCurrentlyFocused {
                 NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
             } else {
-                // Continue with normal history navigation
-                NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
+                super.keyDown(with: event)
             }
         } else {
             super.keyDown(with: event)
@@ -324,15 +313,12 @@ struct PromptInputView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            // Input field with keyboard navigation
-            TextField("例: フォーマルにして", text: $promptText)
-                .textFieldStyle(ModernTextFieldStyle())
-                .focused($isTextFieldFocused)
-                .onChange(of: isTextFieldFocused) { isFocused in
-                    // Notify parent window about focus changes
-                    NotificationCenter.default.post(name: .textFieldFocusChanged, object: isFocused)
-                }
-                .onSubmit {
+            // Input field with custom key handling
+            CustomTextField(
+                text: $promptText,
+                placeholder: "例: フォーマルにして",
+                isFocused: $isTextFieldFocused,
+                onSubmit: {
                     if hoveredHistoryIndex != nil {
                         // If history item is selected, use it and generate preview automatically
                         promptText = getVisibleHistory()[hoveredHistoryIndex!].prompt
@@ -350,21 +336,39 @@ struct PromptInputView: View {
                         // Preview when Enter is pressed in input mode
                         requestPreview()
                     }
+                },
+                onDownArrow: {
+                    // Handle down arrow to start history navigation
+                    navigateHistory(direction: .down)
+                },
+                onUpArrow: {
+                    // Handle up arrow for history navigation
+                    navigateHistory(direction: .up)
                 }
-                .onTapGesture {
-                    hoveredHistoryIndex = nil
-                    isTextFieldFocused = true
-                }
-                .onChange(of: promptText) { _ in
-                    // When text field is edited after preview, hide preview and show history
-                    if showPreview {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showPreview = false
-                            onPreviewModeChanged(false)
-                        }
+            )
+            .onChange(of: isTextFieldFocused) { isFocused in
+                // Notify parent window about focus changes
+                NotificationCenter.default.post(name: .textFieldFocusChanged, object: isFocused)
+            }
+            .onChange(of: promptText) { _ in
+                // When text field is edited after preview, hide preview and show history
+                if showPreview {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showPreview = false
+                        onPreviewModeChanged(false)
                     }
                 }
-                .padding(.horizontal, 12)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.quaternary, lineWidth: 1)
+                    )
+            )
 
             // Recent prompts (visible when not in preview mode and available)
             if !promptHistory.isEmpty && !showPreview {
@@ -491,43 +495,14 @@ struct PromptInputView: View {
             .padding(.bottom, 8)
         }
         .background(
-            ZStack {
-                // Glass blur effect
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.8)
-
-                // Subtle gradient overlay
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.1),
-                                Color.clear,
-                                Color.black.opacity(0.05)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-
-                // Border highlight
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.3),
-                                Color.white.opacity(0.1),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            }
-            .shadow(color: .black.opacity(0.2), radius: 24, x: 0, y: 12)
-            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(.quaternary, lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
+                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         )
         .onAppear {
             // Reset all state variables when the view appears
@@ -543,21 +518,18 @@ struct PromptInputView: View {
             // Notify initial preview mode state
             onPreviewModeChanged(false)
 
-            // Enhanced focus handling with more aggressive timing
+            // Simple focus setting
             isTextFieldFocused = true
-
-            // Multiple attempts to ensure focus is properly set with extended timing
-            for delay in [0.0, 0.01, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.7, 1.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    isTextFieldFocused = true
-                }
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryUp)) { _ in
             navigateHistory(direction: .up)
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryDown)) { _ in
             navigateHistory(direction: .down)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestTextFieldFocus)) { _ in
+            // Force focus to text field
+            isTextFieldFocused = true
         }
     }
 
@@ -664,11 +636,14 @@ struct PromptInputView: View {
             }
         case .down:
             if hoveredHistoryIndex == nil {
+                // When down is pressed from text field, start history navigation
                 hoveredHistoryIndex = 0
+                isTextFieldFocused = false // Remove focus from text field
             } else if hoveredHistoryIndex! < maxIndex {
                 hoveredHistoryIndex! += 1
             } else {
-                hoveredHistoryIndex = nil
+                // At the end of history, cycle back to start
+                hoveredHistoryIndex = 0
             }
         }
 
@@ -719,21 +694,160 @@ struct ModernSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-struct ModernTextFieldStyle: TextFieldStyle {
-    // swiftlint:disable:next identifier_name
-    func _body(configuration: TextField<Self._Label>) -> some View {
-        configuration
-            .font(.system(size: 12))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.regularMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(.quaternary, lineWidth: 1)
-                    )
-            )
+// Custom TextField with key handling
+struct CustomTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    @FocusState.Binding var isFocused: Bool
+    var onSubmit: () -> Void
+    var onDownArrow: () -> Void
+    var onUpArrow: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = KeyHandlingTextField()
+        textField.placeholderString = placeholder
+        textField.delegate = context.coordinator
+        textField.target = context.coordinator
+        textField.action = #selector(Coordinator.textFieldAction(_:))
+
+        // Set up appearance
+        textField.isBordered = false
+        textField.backgroundColor = NSColor.clear
+        textField.focusRingType = .none
+        textField.font = NSFont.systemFont(ofSize: 12)
+        textField.textColor = NSColor.labelColor
+
+        // Set up key handling
+        textField.onDownArrow = onDownArrow
+        textField.onUpArrow = onUpArrow
+        textField.onSubmit = onSubmit
+
+        return textField
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        nsView.stringValue = text
+
+        // Update callbacks in case they changed
+        if let keyTextField = nsView as? KeyHandlingTextField {
+            keyTextField.onDownArrow = onDownArrow
+            keyTextField.onUpArrow = onUpArrow
+            keyTextField.onSubmit = onSubmit
+        }
+
+        // Handle focus changes
+        if isFocused && nsView.window?.firstResponder != nsView {
+            nsView.window?.makeFirstResponder(nsView)
+        } else if !isFocused && nsView.window?.firstResponder == nsView {
+            nsView.window?.makeFirstResponder(nil)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: CustomTextField
+
+        init(_ parent: CustomTextField) {
+            self.parent = parent
+        }
+
+        @objc func textFieldAction(_ sender: NSTextField) {
+            parent.onSubmit()
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            if let textField = obj.object as? NSTextField {
+                parent.text = textField.stringValue
+            }
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            parent.isFocused = true
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            parent.isFocused = false
+        }
+    }
+}
+
+class KeyHandlingTextField: NSTextField {
+    var onDownArrow: (() -> Void)?
+    var onUpArrow: (() -> Void)?
+    var onSubmit: (() -> Void)?
+
+    override func awakeFromNib() {
+        super.awakeFromNib()
+        setupCell()
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupCell()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupCell()
+    }
+
+    private func setupCell() {
+        // Set up cell properties
+        if let cell = self.cell as? NSTextFieldCell {
+            cell.usesSingleLineMode = true
+            cell.lineBreakMode = .byTruncatingTail
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Handle special keys first
+        switch event.keyCode {
+        case 125: // Down arrow key
+            onDownArrow?()
+            return // Don't call super to prevent default behavior
+        case 126: // Up arrow key
+            onUpArrow?()
+            return // Don't call super to prevent default behavior
+        case 36: // Return key
+            onSubmit?()
+            return
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    // Override interpretKeyEvents to prevent arrow key processing by the field editor
+    override func interpretKeyEvents(_ eventArray: [NSEvent]) {
+        for event in eventArray {
+            switch event.keyCode {
+            case 125, 126: // Up and down arrow keys
+                // Skip interpretation for arrow keys - we handle them directly
+                continue
+            default:
+                break
+            }
+        }
+        super.interpretKeyEvents(eventArray.filter { ![125, 126].contains($0.keyCode) })
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Backup method to catch arrow keys
+        if event.keyCode == 125 { // Down arrow key
+            onDownArrow?()
+            return true
+        } else if event.keyCode == 126 { // Up arrow key
+            onUpArrow?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    // Override to intercept key events before they reach the field editor
+    override func textShouldBeginEditing(_ textObject: NSText) -> Bool {
+        true
     }
 }
 
