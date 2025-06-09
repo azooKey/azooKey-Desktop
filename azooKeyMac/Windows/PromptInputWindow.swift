@@ -1,6 +1,11 @@
 import Cocoa
 import SwiftUI
 
+extension Notification.Name {
+    static let navigateHistoryUp = Notification.Name("navigateHistoryUp")
+    static let navigateHistoryDown = Notification.Name("navigateHistoryDown")
+}
+
 class PromptInputWindow: NSWindow {
     private var completion: ((String?) -> Void)?
     private var previewCallback: ((String, @escaping (String) -> Void) -> Void)?
@@ -8,7 +13,7 @@ class PromptInputWindow: NSWindow {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 200),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -19,6 +24,10 @@ class PromptInputWindow: NSWindow {
         self.backgroundColor = NSColor.clear
         self.hasShadow = true
         self.acceptsMouseMovedEvents = true
+
+        // Enable transparency and blending
+        self.isOpaque = false
+        self.alphaValue = 0.95
 
         setupUI()
     }
@@ -76,12 +85,18 @@ class PromptInputWindow: NSWindow {
     }
 
     private func resizeWindowToContent(isPreviewMode: Bool) {
-        let baseHeight: CGFloat = 120  // Base height for input field and buttons
-        let previewHeight: CGFloat = isPreviewMode ? 100 : 0  // Additional height for preview
-        let totalHeight = baseHeight + previewHeight
+        let headerHeight: CGFloat = 36  // Compact header
+        let textFieldHeight: CGFloat = 36  // Compact text field
+        let historyHeight: CGFloat = 72  // Compact history (3 items)
+        let buttonHeight: CGFloat = 36  // Compact button row
+        let containerPadding: CGFloat = 16  // Reduced padding
+
+        let previewHeight: CGFloat = isPreviewMode ? 90 : 0  // Compact preview
+
+        let totalHeight = headerHeight + textFieldHeight + historyHeight + buttonHeight + previewHeight + containerPadding
 
         var currentFrame = self.frame
-        let newSize = NSSize(width: 380, height: totalHeight)
+        let newSize = NSSize(width: 360, height: totalHeight)
 
         // Adjust origin to keep the window in the same relative position
         currentFrame.origin.y += (currentFrame.size.height - newSize.height)
@@ -96,32 +111,33 @@ class PromptInputWindow: NSWindow {
     }
 
     private func focusTextField() {
-        // Force window to be key and active
+        // Enhanced focus handling with more aggressive approach
+        NSApp.activate(ignoringOtherApps: true)
         self.orderFront(nil)
         self.makeKeyAndOrderFront(nil)
 
-        // Multiple attempts to ensure the text field gets focus
+        // Force the window to become key immediately
+        if !self.isKeyWindow {
+            self.makeKey()
+        }
+
+        // Multiple attempts to ensure the text field gets focus with extended timing
         self.makeFirstResponder(self.contentView)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-            self.makeFirstResponder(self.contentView)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            self.makeFirstResponder(self.contentView)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.makeFirstResponder(self.contentView)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            self.makeFirstResponder(self.contentView)
+        // Extended focus attempts with more frequent retries
+        for delay in [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                if !self.isKeyWindow {
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.makeKeyAndOrderFront(nil)
+                }
+                self.makeFirstResponder(self.contentView)
+            }
         }
     }
 
     private func adjustWindowPosition(for cursorLocation: NSPoint, windowSize: NSSize) -> NSPoint {
-        guard let screen = NSScreen.main else {
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(cursorLocation, $0.frame, false) }) ?? NSScreen.main else {
             return cursorLocation
         }
 
@@ -132,15 +148,32 @@ class PromptInputWindow: NSWindow {
         origin.x += 10
         origin.y -= windowSize.height + 20
 
-        // Ensure window stays within screen bounds
-        if origin.x + windowSize.width > screenFrame.maxX {
-            origin.x = screenFrame.maxX - windowSize.width - 10
+        // Ensure window stays within screen bounds with padding
+        let padding: CGFloat = 20
+
+        // Check right edge
+        if origin.x + windowSize.width + padding > screenFrame.maxX {
+            origin.x = screenFrame.maxX - windowSize.width - padding
         }
-        if origin.y < screenFrame.minY {
+
+        // Check left edge
+        if origin.x < screenFrame.minX + padding {
+            origin.x = screenFrame.minX + padding
+        }
+
+        // Check bottom edge - if too low, show above cursor
+        if origin.y < screenFrame.minY + padding {
             origin.y = cursorLocation.y + 30
+
+            // If still doesn't fit above, position at screen edge
+            if origin.y + windowSize.height + padding > screenFrame.maxY {
+                origin.y = screenFrame.maxY - windowSize.height - padding
+            }
         }
-        if origin.x < screenFrame.minX {
-            origin.x = screenFrame.minX + 10
+
+        // Check top edge
+        if origin.y + windowSize.height + padding > screenFrame.maxY {
+            origin.y = screenFrame.maxY - windowSize.height - padding
         }
 
         return origin
@@ -178,13 +211,33 @@ class PromptInputWindow: NSWindow {
     }
 
     override func keyDown(with event: NSEvent) {
-        // Handle Escape key at window level
+        // Handle navigation keys at window level
         if event.keyCode == 53 { // Escape key
+            // Send escape event to SwiftUI view and close window
             completion?(nil)
             close()
+        } else if event.keyCode == 126 { // Up arrow key
+            // Send up arrow event to SwiftUI view for history navigation
+            NotificationCenter.default.post(name: .navigateHistoryUp, object: nil)
+        } else if event.keyCode == 125 { // Down arrow key
+            // Send down arrow event to SwiftUI view for history navigation
+            NotificationCenter.default.post(name: .navigateHistoryDown, object: nil)
         } else {
             super.keyDown(with: event)
         }
+    }
+}
+
+// Structure for prompt history item with pinned status
+struct PromptHistoryItem: Codable {
+    let prompt: String
+    var isPinned: Bool = false
+    var lastUsed: Date = Date()
+
+    init(prompt: String, isPinned: Bool = false) {
+        self.prompt = prompt
+        self.isPinned = isPinned
+        self.lastUsed = Date()
     }
 }
 
@@ -193,6 +246,8 @@ struct PromptInputView: View {
     @State private var previewText: String = ""
     @State private var isLoading: Bool = false
     @State private var showPreview: Bool = false
+    @State private var promptHistory: [PromptHistoryItem] = []
+    @State private var hoveredHistoryIndex: Int?
     @FocusState private var isTextFieldFocused: Bool
 
     let onSubmit: (String?) -> Void
@@ -202,36 +257,63 @@ struct PromptInputView: View {
     let onPreviewModeChanged: (Bool) -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            // Header
+        VStack(spacing: 4) {
+            // Header with Apple Intelligence-like design
             HStack {
-                Image(systemName: "wand.and.stars")
-                    .foregroundColor(.blue)
-                    .font(.system(size: 14, weight: .medium))
+                // Gradient AI icon with glow effect
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .purple, .pink],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 16, height: 16)
+                        .blur(radius: 2)
+                        .opacity(0.7)
 
-                Text("AI Text Transform")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.primary)
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.white)
+                        .font(.system(size: 8, weight: .semibold))
+                }
+
+                Text("AI Transform")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.primary, .secondary],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
 
                 Spacer()
 
                 Button(action: onCancel) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 14))
+                    Image(systemName: "xmark")
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .font(.system(size: 10, weight: .medium))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .keyboardShortcut(.escape)
             }
             .padding(.horizontal, 12)
-            .padding(.top, 10)
+            .padding(.top, 8)
 
-            // Input field
+            // Input field with keyboard navigation
             TextField("例: フォーマルにして", text: $promptText)
                 .textFieldStyle(ModernTextFieldStyle())
                 .focused($isTextFieldFocused)
                 .onSubmit {
-                    if showPreview {
+                    if hoveredHistoryIndex != nil {
+                        // If history item is selected, use it and generate preview
+                        promptText = getVisibleHistory()[hoveredHistoryIndex!].prompt
+                        hoveredHistoryIndex = nil
+                        isTextFieldFocused = true
+                        requestPreview()
+                    } else if showPreview {
                         // Apply when Enter is pressed in preview mode
                         onApply(previewText)
                         onSubmit(promptText)
@@ -241,16 +323,70 @@ struct PromptInputView: View {
                     }
                 }
                 .onTapGesture {
+                    hoveredHistoryIndex = nil
                     isTextFieldFocused = true
                 }
                 .padding(.horizontal, 12)
 
-            // Preview section
+            // Recent prompts (always visible when available)
+            if !promptHistory.isEmpty {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack {
+                        Text("Recent")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary.opacity(0.6))
+                        Spacer()
+                    }
+
+                    VStack(spacing: 1) {
+                        ForEach(Array(getVisibleHistory().enumerated()), id: \.offset) { index, item in
+                            HStack(spacing: 4) {
+                                // Pin button
+                                Button {
+                                    togglePin(for: item)
+                                } label: {
+                                    Image(systemName: item.isPinned ? "pin.fill" : "pin")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(item.isPinned ? .accentColor : .secondary.opacity(0.4))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .help(item.isPinned ? "Unpin" : "Pin")
+
+                                // Prompt text
+                                Text(item.prompt)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(hoveredHistoryIndex == index ? .primary : .secondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(hoveredHistoryIndex == index ? Color.accentColor.opacity(0.2) : Color.clear)
+                            )
+                            .onHover { isHovered in
+                                hoveredHistoryIndex = isHovered ? index : nil
+                            }
+                            .onTapGesture {
+                                promptText = item.prompt
+                                hoveredHistoryIndex = nil
+                                isTextFieldFocused = true
+                                requestPreview()
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 2)
+            }
+
+            // Preview section with enhanced design
             if showPreview {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Preview:")
-                            .font(.system(size: 11, weight: .medium))
+                        Text("Preview")
+                            .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(.secondary)
                         Spacer()
                     }
@@ -261,21 +397,21 @@ struct PromptInputView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
                             .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.gray.opacity(0.08))
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(.thinMaterial)
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                                     )
                             )
                     }
-                    .frame(minHeight: 40, maxHeight: 80)
+                    .frame(minHeight: 40, maxHeight: 70)
                 }
                 .padding(.horizontal, 12)
             }
 
-            // Action buttons
-            HStack(spacing: 8) {
+            // Action buttons with modern styling
+            HStack(spacing: 10) {
                 if showPreview {
                     Button("Edit") {
                         showPreview = false
@@ -285,7 +421,7 @@ struct PromptInputView: View {
                             isTextFieldFocused = true
                         }
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(ModernSecondaryButtonStyle())
 
                     Spacer()
 
@@ -296,24 +432,58 @@ struct PromptInputView: View {
                         // Close window and submit
                         onSubmit(promptText)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .buttonStyle(ModernPrimaryButtonStyle())
                 } else {
                     Spacer()
 
-                    Button(isLoading ? "Loading..." : "Preview") {
+                    Button(isLoading ? "Generating..." : "Preview") {
                         requestPreview()
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .buttonStyle(ModernPrimaryButtonStyle())
                     .disabled(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .padding(.bottom, 8)
         }
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
+            ZStack {
+                // Glass blur effect
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.8)
+
+                // Subtle gradient overlay
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.1),
+                                Color.clear,
+                                Color.black.opacity(0.05)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                // Border highlight
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.3),
+                                Color.white.opacity(0.1),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.2), radius: 24, x: 0, y: 12)
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         )
         .onAppear {
             // Reset all state variables when the view appears
@@ -321,26 +491,29 @@ struct PromptInputView: View {
             previewText = ""
             isLoading = false
             showPreview = false
+            hoveredHistoryIndex = nil
+
+            // Load prompt history
+            loadPromptHistory()
 
             // Notify initial preview mode state
             onPreviewModeChanged(false)
 
-            // Set focus to text field with aggressive timing
-            DispatchQueue.main.async {
-                isTextFieldFocused = true
+            // Enhanced focus handling with more aggressive timing
+            isTextFieldFocused = true
+
+            // Multiple attempts to ensure focus is properly set with extended timing
+            for delay in [0.0, 0.01, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.7, 1.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    isTextFieldFocused = true
+                }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                isTextFieldFocused = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isTextFieldFocused = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                isTextFieldFocused = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                isTextFieldFocused = true
-            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryUp)) { _ in
+            navigateHistory(direction: .up)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryDown)) { _ in
+            navigateHistory(direction: .down)
         }
     }
 
@@ -350,53 +523,152 @@ struct PromptInputView: View {
             return
         }
 
+        // Save prompt to history
+        savePromptToHistory(trimmedPrompt)
+
+        // Reset hover when requesting preview
+        hoveredHistoryIndex = nil
+
         isLoading = true
         onPreview(trimmedPrompt) { result in
             DispatchQueue.main.async {
-                self.previewText = result
-                self.isLoading = false
-                self.showPreview = true
-                // Notify parent window about preview mode change
-                self.onPreviewModeChanged(true)
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.previewText = result
+                    self.isLoading = false
+                    self.showPreview = true
+                    // Notify parent window about preview mode change
+                    self.onPreviewModeChanged(true)
+                }
             }
+        }
+    }
+
+    private func loadPromptHistory() {
+        let historyString = Config.PromptHistory().value
+        if !historyString.isEmpty,
+           let data = historyString.data(using: .utf8) {
+            // Try to load new format first
+            if let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
+                promptHistory = history
+            } else if let oldHistory = try? JSONDecoder().decode([String].self, from: data) {
+                // Convert old format to new format
+                promptHistory = oldHistory.map { PromptHistoryItem(prompt: $0, isPinned: false) }
+                savePinnedHistory() // Save in new format
+            }
+        }
+    }
+
+    private func getVisibleHistory() -> [PromptHistoryItem] {
+        let pinnedItems = promptHistory.filter { $0.isPinned }
+        let recentItems = promptHistory.filter { !$0.isPinned }.prefix(3 - pinnedItems.count)
+        return Array(pinnedItems + recentItems)
+    }
+
+    private func togglePin(for item: PromptHistoryItem) {
+        if let index = promptHistory.firstIndex(where: { $0.prompt == item.prompt }) {
+            promptHistory[index].isPinned.toggle()
+            savePinnedHistory()
+        }
+    }
+
+    private func savePromptToHistory(_ prompt: String) {
+        // Remove if already exists to move to front
+        promptHistory.removeAll { $0.prompt == prompt }
+
+        // Add to front
+        let newItem = PromptHistoryItem(prompt: prompt, isPinned: false)
+        promptHistory.insert(newItem, at: 0)
+
+        // Keep only last 10 prompts (excluding pinned)
+        let pinnedItems = promptHistory.filter { $0.isPinned }
+        let recentItems = promptHistory.filter { !$0.isPinned }.prefix(10)
+        promptHistory = Array(pinnedItems + recentItems)
+
+        // Save to UserDefaults
+        savePinnedHistory()
+    }
+
+    private func savePinnedHistory() {
+        if let data = try? JSONEncoder().encode(promptHistory) {
+            Config.PromptHistory().value = String(decoding: data, as: UTF8.self)
+        }
+    }
+
+    private enum NavigationDirection {
+        case up, down
+    }
+
+    private func navigateHistory(direction: NavigationDirection) {
+        let visibleHistory = getVisibleHistory()
+        guard !visibleHistory.isEmpty else {
+            return
+        }
+
+        let maxIndex = visibleHistory.count - 1
+
+        switch direction {
+        case .up:
+            if hoveredHistoryIndex == nil {
+                hoveredHistoryIndex = maxIndex
+            } else if hoveredHistoryIndex! > 0 {
+                hoveredHistoryIndex! -= 1
+            } else {
+                hoveredHistoryIndex = nil
+            }
+        case .down:
+            if hoveredHistoryIndex == nil {
+                hoveredHistoryIndex = 0
+            } else if hoveredHistoryIndex! < maxIndex {
+                hoveredHistoryIndex! += 1
+            } else {
+                hoveredHistoryIndex = nil
+            }
+        }
+
+        // Update text field with hovered history item
+        if let index = hoveredHistoryIndex {
+            promptText = visibleHistory[index].prompt
         }
     }
 }
 
-// Custom button styles
-struct PrimaryButtonStyle: ButtonStyle {
+// Modern macOS-style button designs
+struct ModernPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: 11, weight: .medium))
             .foregroundColor(.white)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed ? Color.blue.opacity(0.8) : Color.blue)
+                    .fill(Color.accentColor)
+                    .brightness(configuration.isPressed ? -0.1 : 0)
+                    .saturation(configuration.isPressed ? 0.8 : 1.0)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
-struct SecondaryButtonStyle: ButtonStyle {
+struct ModernSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: 11, weight: .medium))
             .foregroundColor(.primary)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed ? Color.gray.opacity(0.2) : Color.gray.opacity(0.1))
+                    .fill(.regularMaterial)
+                    .opacity(configuration.isPressed ? 0.7 : 1.0)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+                            .stroke(.quaternary, lineWidth: 0.5)
                     )
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -404,15 +676,15 @@ struct ModernTextFieldStyle: TextFieldStyle {
     // swiftlint:disable:next identifier_name
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
-            .font(.system(size: 13))
-            .padding(.horizontal, 10)
+            .font(.system(size: 12))
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.gray.opacity(0.08))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.regularMaterial)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.quaternary, lineWidth: 1)
                     )
             )
     }

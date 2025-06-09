@@ -66,4 +66,9 @@ extension Config {
         static var `default`: String = "gpt-4o-mini"
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
     }
+
+    /// プロンプト履歴（JSON形式で保存）
+    struct PromptHistory: StringConfigItem {
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
+    }
 }

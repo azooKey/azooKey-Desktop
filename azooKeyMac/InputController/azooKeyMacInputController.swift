@@ -787,7 +787,7 @@ extension azooKeyMacInputController {
         self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Set new text to clipboard")
 
         // First, select the text using the stored range
-        guard let client = self.client() else {
+        guard self.client() != nil else {
             self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: No client available")
             return
         }
