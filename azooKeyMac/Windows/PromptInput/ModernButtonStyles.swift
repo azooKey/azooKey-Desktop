@@ -1,10 +1,3 @@
-//
-//  ModernButtonStyles.swift
-//  azooKeyMac
-//
-//  Created by Claude on 2025/06/10.
-//
-
 import SwiftUI
 
 // Modern macOS-style button designs

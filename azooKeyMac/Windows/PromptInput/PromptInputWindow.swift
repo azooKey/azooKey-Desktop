@@ -9,7 +9,7 @@ extension Notification.Name {
     static let requestTextFieldFocus = Notification.Name("requestTextFieldFocus")
 }
 
-class PromptInputWindow: NSWindow {
+final class PromptInputWindow: NSWindow {
     private var completion: ((String?) -> Void)?
     private var previewCallback: ((String, @escaping (String) -> Void) -> Void)?
     private var applyCallback: ((String) -> Void)?

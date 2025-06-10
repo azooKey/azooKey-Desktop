@@ -1,10 +1,3 @@
-//
-//  PromptInputView.swift
-//  azooKeyMac
-//
-//  Created by Claude on 2025/06/10.
-//
-
 import Foundation
 import SwiftUI
 
@@ -118,10 +111,10 @@ struct PromptInputView: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 36)
-            .background(
+            .background {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.regularMaterial)
-            )
+            }
 
             // Recent prompts (visible when not in preview mode and available)
             if !promptHistory.isEmpty && !showPreview {
@@ -157,10 +150,10 @@ struct PromptInputView: View {
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
-                                .background(
+                                .background {
                                     RoundedRectangle(cornerRadius: 4)
                                         .fill(hoveredHistoryIndex == index ? Color.accentColor.opacity(0.2) : Color.clear)
-                                )
+                                }
                                 .onHover { isHovered in
                                     hoveredHistoryIndex = isHovered ? index : nil
                                 }
@@ -217,27 +210,27 @@ struct PromptInputView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
-                            .background(
+                            .background {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(.thinMaterial)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                                     )
-                            )
+                            }
                         } else {
                             Text(previewText)
                                 .font(.system(size: 12))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(8)
-                                .background(
+                                .background {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(.thinMaterial)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 8)
                                                 .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                                         )
-                                )
+                                }
                         }
                     }
                     .frame(minHeight: 40, maxHeight: 70)
@@ -281,12 +274,12 @@ struct PromptInputView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
-        .background(
+        .background {
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
                 .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
                 .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
-        )
+        }
         .onAppear {
             // Reset all state variables when the view appears
             promptText = ""

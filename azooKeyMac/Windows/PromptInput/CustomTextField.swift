@@ -1,10 +1,3 @@
-//
-//  CustomTextField.swift
-//  azooKeyMac
-//
-//  Created by Claude on 2025/06/10.
-//
-
 import Cocoa
 import SwiftUI
 
@@ -88,7 +81,7 @@ struct CustomTextField: NSViewRepresentable {
     }
 }
 
-class KeyHandlingTextField: NSTextField {
+private final class KeyHandlingTextField: NSTextField {
     var onDownArrow: (() -> Void)?
     var onUpArrow: (() -> Void)?
     var onSubmit: (() -> Void)?

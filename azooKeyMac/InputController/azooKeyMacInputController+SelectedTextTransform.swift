@@ -1,10 +1,3 @@
-//
-//  azooKeyMacInputController+SelectedTextTransform.swift
-//  azooKeyMac
-//
-//  Created by Claude on 2025/06/10.
-//
-
 import Cocoa
 import Core
 import Foundation

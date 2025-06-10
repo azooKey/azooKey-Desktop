@@ -1,14 +1,7 @@
-//
-//  PromptHistoryItem.swift
-//  azooKeyMac
-//
-//  Created by Claude on 2025/06/10.
-//
-
 import Foundation
 
 // Structure for prompt history item with pinned status
-struct PromptHistoryItem: Codable {
+struct PromptHistoryItem: Sendable, Codable {
     let prompt: String
     var isPinned: Bool = false
     var lastUsed: Date = Date()
