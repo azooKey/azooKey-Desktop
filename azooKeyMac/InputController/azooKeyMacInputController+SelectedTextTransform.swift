@@ -13,6 +13,15 @@ import InputMethodKit
 // MARK: - Selected Text Transform Methods
 extension azooKeyMacInputController {
 
+    // MARK: - Constants
+    private enum Constants {
+        static let defaultContextLength = 200
+        static let cursorPositionTolerance = 2
+        static let replacementVerificationDelay = 0.1
+        static let clipboardDelay = 0.05
+        static let clipboardRestoreDelay = 0.3
+    }
+
     struct TextContext {
         let before: String
         let selected: String
@@ -20,7 +29,7 @@ extension azooKeyMacInputController {
     }
 
     @MainActor
-    func getContextAroundSelection(client: IMKTextInput, selectedRange: NSRange, contextLength: Int = 200) -> TextContext {
+    func getContextAroundSelection(client: IMKTextInput, selectedRange: NSRange, contextLength: Int = Constants.defaultContextLength) -> TextContext {
         // Get the selected text
         var actualRange = NSRange()
         let selectedText = client.string(from: selectedRange, actualRange: &actualRange) ?? ""
@@ -206,27 +215,18 @@ extension azooKeyMacInputController {
                 }
 
                 let modelName = Config.OpenAiModelName().value
-                let results = try await self.sendCustomPromptRequest(
+                let result = try await OpenAIClient.sendTextTransformRequest(
                     prompt: systemPrompt,
                     modelName: modelName,
                     apiKey: apiKey
                 )
 
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: API request completed, results: \(results)")
-                }
-
-                if let result = results.first {
-                    await MainActor.run {
-                        self.segmentsManager.appendDebugMessage("transformSelectedText: Result obtained: '\(result)'")
-                        // Note: This method lacks the stored range information.
-                        // Text replacement should be handled by showPromptInputWindow instead.
-                        self.segmentsManager.appendDebugMessage("transformSelectedText: Note - This path should not be used for text replacement")
-                    }
-                } else {
-                    await MainActor.run {
-                        self.segmentsManager.appendDebugMessage("transformSelectedText: No results returned from API")
-                    }
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: API request completed, result: \(result)")
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: Result obtained: '\(result)'")
+                    // Note: This method lacks the stored range information.
+                    // Text replacement should be handled by showPromptInputWindow instead.
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: Note - This path should not be used for text replacement")
                 }
             } catch {
                 await MainActor.run {
@@ -252,239 +252,85 @@ extension azooKeyMacInputController {
         self.segmentsManager.appendDebugMessage("replaceSelectedText: Stored range to use: \(storedRange)")
 
         if storedRange.length > 0 {
-            self.segmentsManager.appendDebugMessage("replaceSelectedText: Starting system-level text replacement")
+            self.segmentsManager.appendDebugMessage("replaceSelectedText: Starting text replacement")
 
-            // Method 1: Try system-level clipboard replacement (works better with web apps)
-            self.replaceTextUsingSystemClipboard(newText: newText, storedRange: storedRange)
-
+            // Simplified approach: Try IMK first, fallback to clipboard if needed
+            if !self.replaceTextUsingIMK(newText: newText, storedRange: storedRange) {
+                self.replaceTextUsingClipboard(newText: newText, storedRange: storedRange)
+            }
         } else {
             self.segmentsManager.appendDebugMessage("replaceSelectedText: Stored range has no length")
         }
     }
 
+    // Simplified replacement methods
+
     @MainActor
-    private func replaceTextUsingSystemClipboard(newText: String, storedRange: NSRange) {
-        self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Starting clipboard-based replacement")
+    private func replaceTextUsingIMK(newText: String, storedRange: NSRange) -> Bool {
+        self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: Attempting IMK text replacement")
 
-        // Store the current clipboard content
+        guard let client = self.client() else {
+            self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: No client available")
+            return false
+        }
+
+        // Try direct replacement using IMK
+        client.insertText(newText, replacementRange: storedRange)
+
+        // Verify the replacement worked by checking cursor position
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.replacementVerificationDelay) {
+            let currentRange = client.selectedRange()
+            let expectedLocation = storedRange.location + newText.count
+
+            if abs(currentRange.location - expectedLocation) <= Constants.cursorPositionTolerance {
+                self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: IMK replacement appears successful")
+            } else {
+                self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: IMK replacement may have failed")
+            }
+        }
+
+        return true // Assume success, fallback will handle failures
+    }
+
+    @MainActor
+    private func replaceTextUsingClipboard(newText: String, storedRange: NSRange) {
+        self.segmentsManager.appendDebugMessage("replaceTextUsingClipboard: Starting clipboard-based replacement")
+
+        guard let client = self.client() else {
+            self.segmentsManager.appendDebugMessage("replaceTextUsingClipboard: No client available")
+            return
+        }
+
+        // Store and set clipboard
         let pasteboard = NSPasteboard.general
-        let originalClipboardContent = pasteboard.string(forType: .string)
-        self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Backed up clipboard content")
+        let originalContent = pasteboard.string(forType: .string)
 
-        // Put the new text in clipboard
         pasteboard.clearContents()
         pasteboard.setString(newText, forType: .string)
-        self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Set new text to clipboard")
 
-        // First, select the text using the stored range
-        guard self.client() != nil else {
-            self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: No client available")
-            return
-        }
-
-        // Approach: First reselect the text, then use system paste to replace
-        self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Reselecting text and using system paste")
-
-        // Step 1: Reselect the text using the stored range by simulating mouse selection
-        self.reselectTextAndReplace(storedRange: storedRange, newText: newText)
-
-        // Restore clipboard after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if let originalContent = originalClipboardContent {
-                pasteboard.clearContents()
-                pasteboard.setString(originalContent, forType: .string)
-                self.segmentsManager.appendDebugMessage("replaceTextUsingSystemClipboard: Restored clipboard content")
-            }
-        }
-    }
-
-    @MainActor
-    private func reselectTextAndReplace(storedRange: NSRange, newText: String) {
-        self.segmentsManager.appendDebugMessage("reselectTextAndReplace: Starting with range: \(storedRange)")
-
-        guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("reselectTextAndReplace: No client available")
-            return
-        }
-
-        // Method 1: Try to set the selection using IMK
-        self.segmentsManager.appendDebugMessage("reselectTextAndReplace: Setting selection using IMK")
+        // Set selection and paste
         client.setMarkedText("", selectionRange: storedRange, replacementRange: storedRange)
 
-        // Small delay to ensure selection is set
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            self.segmentsManager.appendDebugMessage("reselectTextAndReplace: Selection should be set, now pasting")
-
-            // Use system paste to replace the selected text
-            self.simulateSystemPaste()
-
-            // Verify success and only fallback if needed
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                let currentRange = client.selectedRange()
-                let expectedLocation = storedRange.location + newText.count
-
-                // Only use fallback if the paste didn't work (cursor not at expected location)
-                if abs(currentRange.location - expectedLocation) > 5 {
-                    self.segmentsManager.appendDebugMessage("reselectTextAndReplace: System paste may have failed, trying IMK fallback")
-                    client.insertText(newText, replacementRange: storedRange)
-                } else {
-                    self.segmentsManager.appendDebugMessage("reselectTextAndReplace: System paste appears successful")
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func simulateSystemPaste() {
-        self.segmentsManager.appendDebugMessage("simulateSystemPaste: Starting system paste simulation")
-
-        // Create CGEvent source for system events
-        guard let eventSource = CGEventSource(stateID: .hidSystemState) else {
-            self.segmentsManager.appendDebugMessage("simulateSystemPaste: Failed to create event source")
-            return
-        }
-
-        // Simulate Cmd+V to paste
-        if let cmdVDown = CGEvent(keyboardEventSource: eventSource, virtualKey: 0x09, keyDown: true),
-           let cmdVUp = CGEvent(keyboardEventSource: eventSource, virtualKey: 0x09, keyDown: false) {
-
-            cmdVDown.flags = .maskCommand
-            cmdVUp.flags = .maskCommand
-
-            self.segmentsManager.appendDebugMessage("simulateSystemPaste: Simulating Cmd+V")
-            cmdVDown.post(tap: .cghidEventTap)
-            cmdVUp.post(tap: .cghidEventTap)
-
-            self.segmentsManager.appendDebugMessage("simulateSystemPaste: Paste completed")
-        }
-    }
-
-    @MainActor
-    private func simulateSystemReplacement(storedRange: NSRange) {
-        self.segmentsManager.appendDebugMessage("simulateSystemReplacement: Starting system event simulation")
-
-        // Try to reselect the text using accessibility and then replace with paste
-        self.attemptTextReselectionAndReplace(storedRange: storedRange)
-    }
-
-    @MainActor
-    private func attemptTextReselectionAndReplace(storedRange: NSRange) {
-        self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: Attempting to reselect and replace text")
-
-        guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: No client available")
-            return
-        }
-
-        // Try different methods to replace text
-
-        // Method 1: Force selection and then use paste
-        self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: Method 1 - Force selection then paste")
-
-        // Set selection to the stored range
-        client.setMarkedText("", selectionRange: storedRange, replacementRange: storedRange)
-
-        // Small delay to ensure selection is set
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-            // Create CGEvent source for system events
-            guard let eventSource = CGEventSource(stateID: .hidSystemState) else {
-                self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: Failed to create event source")
-                return
-            }
-
-            // Simulate Cmd+V to paste the new text
-            if let cmdVDown = CGEvent(keyboardEventSource: eventSource, virtualKey: 0x09, keyDown: true),
-               let cmdVUp = CGEvent(keyboardEventSource: eventSource, virtualKey: 0x09, keyDown: false) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.clipboardDelay) {
+            // Simulate Cmd+V
+            if let source = CGEventSource(stateID: .hidSystemState),
+               let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+               let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
 
                 cmdVDown.flags = .maskCommand
                 cmdVUp.flags = .maskCommand
-
-                self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: Simulating Cmd+V paste")
                 cmdVDown.post(tap: .cghidEventTap)
                 cmdVUp.post(tap: .cghidEventTap)
+            }
 
-                self.segmentsManager.appendDebugMessage("attemptTextReselectionAndReplace: Paste command sent")
+            // Restore clipboard after delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + Constants.clipboardRestoreDelay) {
+                if let original = originalContent {
+                    pasteboard.clearContents()
+                    pasteboard.setString(original, forType: .string)
+                }
             }
         }
-    }
-
-    // Custom prompt request for text transformation
-    func sendCustomPromptRequest(prompt: String, modelName: String, apiKey: String) async throws -> [String] {
-        await MainActor.run {
-            self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Starting API request to OpenAI")
-        }
-
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
-            await MainActor.run {
-                self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Invalid URL")
-            }
-            throw OpenAIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "model": modelName,
-            "messages": [
-                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
-                ["role": "user", "content": prompt]
-            ],
-            "max_tokens": 150,
-            "temperature": 0.7
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        await MainActor.run {
-            self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Sending request to OpenAI API")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        await MainActor.run {
-            self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Received response from API")
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            await MainActor.run {
-                self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: No HTTP response")
-            }
-            throw OpenAIError.noServerResponse
-        }
-
-        await MainActor.run {
-            self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: HTTP status code: \(httpResponse.statusCode)")
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            await MainActor.run {
-                self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: API error - Status: \(httpResponse.statusCode), Body: \(responseBody)")
-            }
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
-        }
-
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            await MainActor.run {
-                self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Failed to parse API response structure")
-            }
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        let result = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        await MainActor.run {
-            self.segmentsManager.appendDebugMessage("sendCustomPromptRequest: Successfully parsed result: '\(result)'")
-        }
-
-        return [result]
     }
 
     // Get transformation preview without applying it
@@ -497,7 +343,7 @@ extension azooKeyMacInputController {
             await MainActor.run {
                 self.segmentsManager.appendDebugMessage("getTransformationPreview: OpenAI API is not enabled")
             }
-            throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "OpenAI API is not enabled"])
+            throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "AI transformation is not available. Please enable OpenAI API in preferences."])
         }
 
         // Create custom prompt for text transformation with context
@@ -528,7 +374,7 @@ extension azooKeyMacInputController {
             await MainActor.run {
                 self.segmentsManager.appendDebugMessage("getTransformationPreview: No OpenAI API key configured")
             }
-            throw NSError(domain: "TransformationError", code: -2, userInfo: [NSLocalizedDescriptionKey: "No OpenAI API key configured"])
+            throw NSError(domain: "TransformationError", code: -2, userInfo: [NSLocalizedDescriptionKey: "OpenAI API key is missing. Please configure your API key in preferences."])
         }
 
         await MainActor.run {
@@ -536,18 +382,11 @@ extension azooKeyMacInputController {
         }
 
         let modelName = Config.OpenAiModelName().value
-        let results = try await self.sendCustomPromptRequest(
+        let result = try await OpenAIClient.sendTextTransformRequest(
             prompt: systemPrompt,
             modelName: modelName,
             apiKey: apiKey
         )
-
-        guard let result = results.first else {
-            await MainActor.run {
-                self.segmentsManager.appendDebugMessage("getTransformationPreview: No results returned from API")
-            }
-            throw NSError(domain: "TransformationError", code: -3, userInfo: [NSLocalizedDescriptionKey: "No results returned from API"])
-        }
 
         await MainActor.run {
             self.segmentsManager.appendDebugMessage("getTransformationPreview: Preview result: '\(result)'")

@@ -233,15 +233,26 @@ enum OpenAIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid URL"
+            return "Could not connect to OpenAI service. Please check your internet connection."
         case .noServerResponse:
-            return "No response from server"
-        case .invalidResponseStatus(let code, let body):
-            return "Invalid response from server. Status code: \(code), Response body: \(body)"
-        case .parseError(let message):
-            return "Parse error: \(message)"
-        case .invalidResponseStructure(let received):
-            return "Failed to parse response structure. Received: \(received)"
+            return "OpenAI service is not responding. Please try again later."
+        case .invalidResponseStatus(let code, _):
+            switch code {
+            case 401:
+                return "OpenAI API key is invalid. Please check your API key in preferences."
+            case 403:
+                return "Access denied by OpenAI. Please check your API key permissions."
+            case 429:
+                return "OpenAI rate limit exceeded. Please wait a moment and try again."
+            case 500...599:
+                return "OpenAI service is temporarily unavailable. Please try again later."
+            default:
+                return "OpenAI request failed. Please try again later."
+            }
+        case .parseError:
+            return "Could not understand OpenAI response. Please try again."
+        case .invalidResponseStructure:
+            return "Received unexpected response from OpenAI. Please try again."
         }
     }
 }
@@ -325,6 +336,55 @@ enum OpenAIClient {
         }
 
         return allPredictions
+    }
+
+    // Simple text transformation method for AI Transform feature
+    static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String) async throws -> String {
+        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
+            throw OpenAIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
+                ["role": "user", "content": prompt]
+            ],
+            "max_tokens": 150,
+            "temperature": 0.7
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        // Send async request
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        // Validate response
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIError.noServerResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+        }
+
+        // Parse response data
+        let jsonObject = try JSONSerialization.jsonObject(with: data)
+        guard let jsonDict = jsonObject as? [String: Any],
+              let choices = jsonDict["choices"] as? [[String: Any]],
+              let firstChoice = choices.first,
+              let message = firstChoice["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw OpenAIError.invalidResponseStructure(jsonObject)
+        }
+
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
