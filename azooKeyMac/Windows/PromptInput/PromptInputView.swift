@@ -346,7 +346,8 @@ struct PromptInputView: View {
     }
 
     private func getVisibleHistory() -> [PromptHistoryItem] {
-        let pinnedItems = promptHistory.filter { $0.isPinned }
+        // Sort pinned items by lastUsed date (most recent first)
+        let pinnedItems = promptHistory.filter { $0.isPinned }.sorted { $0.lastUsed > $1.lastUsed }
         let recentItems = promptHistory.filter { !$0.isPinned }.prefix(10 - pinnedItems.count)
         return Array(pinnedItems + recentItems)
     }
@@ -359,14 +360,29 @@ struct PromptInputView: View {
     }
 
     private func savePromptToHistory(_ prompt: String) {
-        // Remove if already exists to move to front
-        promptHistory.removeAll { $0.prompt == prompt }
+        // Check if prompt already exists and preserve its pinned status
+        if let existingIndex = promptHistory.firstIndex(where: { $0.prompt == prompt }) {
+            // Update lastUsed time and move to appropriate position
+            let existingItem = promptHistory[existingIndex]
+            promptHistory.remove(at: existingIndex)
 
-        // Add to front
-        let newItem = PromptHistoryItem(prompt: prompt, isPinned: false)
-        promptHistory.insert(newItem, at: 0)
+            // Create updated item with new lastUsed time but preserve pinned status
+            let updatedItem = PromptHistoryItem(prompt: prompt, isPinned: existingItem.isPinned)
 
-        // Keep only last 10 prompts (excluding pinned)
+            if existingItem.isPinned {
+                // For pinned items, just update in place (sorting will handle position)
+                promptHistory.append(updatedItem)
+            } else {
+                // For non-pinned items, add to front
+                promptHistory.insert(updatedItem, at: 0)
+            }
+        } else {
+            // Add new item to front (non-pinned)
+            let newItem = PromptHistoryItem(prompt: prompt, isPinned: false)
+            promptHistory.insert(newItem, at: 0)
+        }
+
+        // Keep only last 10 non-pinned prompts
         let pinnedItems = promptHistory.filter { $0.isPinned }
         let recentItems = promptHistory.filter { !$0.isPinned }.prefix(10)
         promptHistory = Array(pinnedItems + recentItems)
@@ -388,6 +404,7 @@ struct PromptInputView: View {
     private func navigateHistory(direction: NavigationDirection) {
         let visibleHistory = getVisibleHistory()
         guard !visibleHistory.isEmpty else {
+            hoveredHistoryIndex = nil
             return
         }
 
@@ -418,9 +435,12 @@ struct PromptInputView: View {
             }
         }
 
-        // Update text field with hovered history item
-        if let index = hoveredHistoryIndex {
+        // Validate index bounds and update text field with hovered history item
+        if let index = hoveredHistoryIndex, index < visibleHistory.count {
             promptText = visibleHistory[index].prompt
+        } else {
+            // Reset invalid index
+            hoveredHistoryIndex = nil
         }
     }
 }
