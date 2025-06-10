@@ -583,6 +583,45 @@ extension azooKeyMacInputController {
 
     // MARK: - Selected Text Transform Methods
 
+    struct TextContext {
+        let before: String
+        let selected: String
+        let after: String
+    }
+
+    @MainActor
+    private func getContextAroundSelection(client: IMKTextInput, selectedRange: NSRange, contextLength: Int = 200) -> TextContext {
+        // Get the selected text
+        var actualRange = NSRange()
+        let selectedText = client.string(from: selectedRange, actualRange: &actualRange) ?? ""
+
+        // Calculate context ranges
+        let documentLength = client.length()
+
+        // Get text before selection (up to contextLength characters)
+        let beforeStart = max(0, selectedRange.location - contextLength)
+        let beforeLength = selectedRange.location - beforeStart
+        let beforeRange = NSRange(location: beforeStart, length: beforeLength)
+
+        // Get text after selection (up to contextLength characters)
+        let afterStart = selectedRange.location + selectedRange.length
+        let afterLength = min(contextLength, documentLength - afterStart)
+        let afterRange = NSRange(location: afterStart, length: afterLength)
+
+        // Extract context strings
+        var beforeActualRange = NSRange()
+        let beforeText = (beforeLength > 0) ? (client.string(from: beforeRange, actualRange: &beforeActualRange) ?? "") : ""
+
+        var afterActualRange = NSRange()
+        let afterText = (afterLength > 0) ? (client.string(from: afterRange, actualRange: &afterActualRange) ?? "") : ""
+
+        self.segmentsManager.appendDebugMessage("getContextAroundSelection: Before context: '\(beforeText)'")
+        self.segmentsManager.appendDebugMessage("getContextAroundSelection: Selected text: '\(selectedText)'")
+        self.segmentsManager.appendDebugMessage("getContextAroundSelection: After context: '\(afterText)'")
+
+        return TextContext(before: beforeText, selected: selectedText, after: afterText)
+    }
+
     @MainActor
     private func showPromptInputWindow() {
         self.segmentsManager.appendDebugMessage("showPromptInputWindow: Starting")
@@ -614,6 +653,9 @@ extension azooKeyMacInputController {
         self.segmentsManager.appendDebugMessage("showPromptInputWindow: Selected text: '\(selectedText)'")
         self.segmentsManager.appendDebugMessage("showPromptInputWindow: Storing selected range for later use: \(selectedRange)")
 
+        // Get context around selection
+        let context = self.getContextAroundSelection(client: client, selectedRange: selectedRange)
+
         // Store the selected range and current app info for later use
         let storedSelectedRange = selectedRange
         let currentApp = NSWorkspace.shared.frontmostApplication
@@ -637,7 +679,12 @@ extension azooKeyMacInputController {
 
                 Task {
                     do {
-                        let result = try await self.getTransformationPreview(selectedText: selectedText, prompt: prompt)
+                        let result = try await self.getTransformationPreview(
+                            selectedText: selectedText,
+                            prompt: prompt,
+                            beforeContext: context.before,
+                            afterContext: context.after
+                        )
                         callback(result)
                     } catch {
                         await MainActor.run {
@@ -677,7 +724,7 @@ extension azooKeyMacInputController {
     }
 
     @MainActor
-    private func transformSelectedText(selectedText: String, prompt: String) {
+    private func transformSelectedText(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") {
         self.segmentsManager.appendDebugMessage("transformSelectedText: Starting with text '\(selectedText)' and prompt '\(prompt)'")
 
         guard Config.EnableOpenAiApiKey().value else {
@@ -689,14 +736,27 @@ extension azooKeyMacInputController {
 
         Task {
             do {
-                // Create custom prompt for text transformation
-                let systemPrompt = """
+                // Create custom prompt for text transformation with context
+                var systemPrompt = """
                 Transform the given text according to the user's instructions.
                 Return only the transformed text without any additional explanation or formatting.
-
-                User instructions: \(prompt)
-                Text to transform: \(selectedText)
                 """
+
+                // Add context if available
+                if !beforeContext.isEmpty || !afterContext.isEmpty {
+                    systemPrompt += "\n\nContext information:"
+                    if !beforeContext.isEmpty {
+                        systemPrompt += "\nText before: ...\(beforeContext)"
+                    }
+                    systemPrompt += "\nText to transform: \(selectedText)"
+                    if !afterContext.isEmpty {
+                        systemPrompt += "\nText after: \(afterContext)..."
+                    }
+                } else {
+                    systemPrompt += "\n\nText to transform: \(selectedText)"
+                }
+
+                systemPrompt += "\n\nUser instructions: \(prompt)"
 
                 await MainActor.run {
                     self.segmentsManager.appendDebugMessage("transformSelectedText: Created system prompt")
@@ -998,7 +1058,7 @@ extension azooKeyMacInputController {
     }
 
     // Get transformation preview without applying it
-    private func getTransformationPreview(selectedText: String, prompt: String) async throws -> String {
+    private func getTransformationPreview(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") async throws -> String {
         await MainActor.run {
             self.segmentsManager.appendDebugMessage("getTransformationPreview: Starting preview request")
         }
@@ -1010,14 +1070,27 @@ extension azooKeyMacInputController {
             throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "OpenAI API is not enabled"])
         }
 
-        // Create custom prompt for text transformation
-        let systemPrompt = """
+        // Create custom prompt for text transformation with context
+        var systemPrompt = """
         Transform the given text according to the user's instructions.
         Return only the transformed text without any additional explanation or formatting.
-
-        User instructions: \(prompt)
-        Text to transform: \(selectedText)
         """
+
+        // Add context if available
+        if !beforeContext.isEmpty || !afterContext.isEmpty {
+            systemPrompt += "\n\nContext information:"
+            if !beforeContext.isEmpty {
+                systemPrompt += "\nText before: ...\(beforeContext)"
+            }
+            systemPrompt += "\nText to transform: \(selectedText)"
+            if !afterContext.isEmpty {
+                systemPrompt += "\nText after: \(afterContext)..."
+            }
+        } else {
+            systemPrompt += "\n\nText to transform: \(selectedText)"
+        }
+
+        systemPrompt += "\n\nUser instructions: \(prompt)"
 
         // Get API key from Config
         let apiKey = Config.OpenAiApiKey().value
