@@ -120,10 +120,6 @@ struct PromptInputView: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.regularMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(.quaternary, lineWidth: 1)
-                    )
             )
 
             // Recent prompts (visible when not in preview mode and available)
@@ -253,10 +249,6 @@ struct PromptInputView: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(.quaternary, lineWidth: 0.5)
-                )
                 .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
                 .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         )
