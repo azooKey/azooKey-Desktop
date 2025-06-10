@@ -1,6 +1,4 @@
-import Core
 import Foundation
-import InputMethodKit
 
 private struct Prompt {
     static let dictionary: [String: String] = [
@@ -262,7 +260,7 @@ enum OpenAIError: LocalizedError {
 // OpenAI APIクライアント
 enum OpenAIClient {
     // APIリクエストを送信する静的メソッド
-    static func sendRequest(_ request: OpenAIRequest, apiKey: String, segmentsManager: SegmentsManager) async throws -> [String] {
+    static func sendRequest(_ request: OpenAIRequest, apiKey: String, logger: ((String) -> Void)? = nil) async throws -> [String] {
         guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
             throw OpenAIError.invalidURL
         }
@@ -289,18 +287,18 @@ enum OpenAIClient {
         }
 
         // レスポンスデータの解析
-        return try parseResponseData(data, segmentsManager: segmentsManager)
+        return try parseResponseData(data, logger: logger)
     }
 
     // レスポンスデータのパースを行う静的メソッド
-    private static func parseResponseData(_ data: Data, segmentsManager: SegmentsManager) throws -> [String] {
-        segmentsManager.appendDebugMessage("Received JSON response")
+    private static func parseResponseData(_ data: Data, logger: ((String) -> Void)? = nil) throws -> [String] {
+        logger?("Received JSON response")
 
         let jsonObject: Any
         do {
             jsonObject = try JSONSerialization.jsonObject(with: data)
         } catch {
-            segmentsManager.appendDebugMessage("Failed to parse JSON response")
+            logger?("Failed to parse JSON response")
             throw OpenAIError.parseError("Failed to parse response")
         }
 
@@ -316,24 +314,24 @@ enum OpenAIClient {
                 continue
             }
 
-            segmentsManager.appendDebugMessage("Raw content string: \(contentString)")
+            logger?("Raw content string: \(contentString)")
 
             guard let contentData = contentString.data(using: .utf8) else {
-                segmentsManager.appendDebugMessage("Failed to convert `content` string to data")
+                logger?("Failed to convert `content` string to data")
                 continue
             }
 
             do {
                 guard let parsedContent = try JSONSerialization.jsonObject(with: contentData) as? [String: [String]],
                       let predictions = parsedContent["predictions"] else {
-                    segmentsManager.appendDebugMessage("Failed to parse `content` as expected JSON dictionary: \(contentString)")
+                    logger?("Failed to parse `content` as expected JSON dictionary: \(contentString)")
                     continue
                 }
 
-                segmentsManager.appendDebugMessage("Parsed predictions: \(predictions)")
+                logger?("Parsed predictions: \(predictions)")
                 allPredictions.append(contentsOf: predictions)
             } catch {
-                segmentsManager.appendDebugMessage("Error parsing JSON from `content`: \(error.localizedDescription)")
+                logger?("Error parsing JSON from `content`: \(error.localizedDescription)")
             }
         }
 
