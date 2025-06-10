@@ -508,22 +508,17 @@ struct PromptInputView: View {
 #Preview {
     PromptInputView(
         onSubmit: { prompt in
-            print("Prompt: \(prompt ?? "nil")")
         },
         onPreview: { prompt, callback in
-            print("Preview request: \(prompt)")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 callback("Transformed: \(prompt)")
             }
         },
         onApply: { text in
-            print("Apply: \(text)")
         },
         onCancel: {
-            print("Cancel")
         },
         onPreviewModeChanged: { isPreviewMode in
-            print("Preview mode changed: \(isPreviewMode)")
         }
     )
     .frame(width: 380)

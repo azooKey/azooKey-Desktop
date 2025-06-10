@@ -47,7 +47,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         }
         rect.size = .init(width: 400, height: 1000)
         self.candidatesWindow.setFrame(rect, display: true)
-        // init直後はこれを表示しない
         self.candidatesWindow.setIsVisible(false)
         self.candidatesWindow.orderOut(nil)
 
@@ -545,7 +544,6 @@ extension azooKeyMacInputController {
                 }
             } catch {
                 self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(error.localizedDescription)")
-                print("APIリクエストエラー: \(error.localizedDescription)")
             }
         }
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")
