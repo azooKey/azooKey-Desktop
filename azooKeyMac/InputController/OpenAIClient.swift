@@ -1,4 +1,6 @@
+import Core
 import Foundation
+import InputMethodKit
 
 private struct Prompt {
     static let dictionary: [String: String] = [
