@@ -10,7 +10,7 @@ import SwiftUI
 // Modern macOS-style button designs
 struct ModernPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 11, weight: .medium))

@@ -107,7 +107,8 @@ struct PromptInputView: View {
                 NotificationCenter.default.post(name: .textFieldFocusChanged, object: isFocused)
             }
             .onChange(of: promptText) { _ in
-                // When text field is edited after preview, hide preview and show history
+                // When text field is edited, clear history selection and hide preview
+                hoveredHistoryIndex = nil
                 if showPreview {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showPreview = false
