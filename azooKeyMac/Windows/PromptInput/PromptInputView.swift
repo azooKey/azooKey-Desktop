@@ -8,6 +8,7 @@ struct PromptInputView: View {
     @State private var showPreview: Bool = false
     @State private var promptHistory: [PromptHistoryItem] = []
     @State private var hoveredHistoryIndex: Int?
+    @State private var isNavigatingHistory: Bool = false
     @FocusState private var isTextFieldFocused: Bool
 
     let onSubmit: (String?) -> Void
@@ -100,14 +101,18 @@ struct PromptInputView: View {
                 NotificationCenter.default.post(name: .textFieldFocusChanged, object: isFocused)
             }
             .onChange(of: promptText) { _ in
-                // When text field is edited, clear history selection and hide preview
-                hoveredHistoryIndex = nil
-                if showPreview {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showPreview = false
-                        onPreviewModeChanged(false)
+                // Only clear history selection if not navigating through history
+                if !isNavigatingHistory {
+                    hoveredHistoryIndex = nil
+                    if showPreview {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showPreview = false
+                            onPreviewModeChanged(false)
+                        }
                     }
                 }
+                // Reset navigation flag after text change
+                isNavigatingHistory = false
             }
             .padding(.horizontal, 12)
             .frame(height: 36)
@@ -287,6 +292,7 @@ struct PromptInputView: View {
             isLoading = false
             showPreview = false
             hoveredHistoryIndex = nil
+            isNavigatingHistory = false
 
             // Load prompt history
             loadPromptHistory()
@@ -490,6 +496,7 @@ struct PromptInputView: View {
 
         // Validate index bounds and update text field with hovered history item
         if let index = hoveredHistoryIndex, index < visibleHistory.count {
+            isNavigatingHistory = true
             promptText = visibleHistory[index].prompt
         } else {
             // Reset invalid index
