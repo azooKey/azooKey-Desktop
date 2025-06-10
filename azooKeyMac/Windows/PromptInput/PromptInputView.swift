@@ -189,11 +189,31 @@ struct PromptInputView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(.secondary)
                         Spacer()
+
+                        // Reload button
+                        Button {
+                            reloadPreview()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .disabled(isLoading)
+                        .help("Reload preview (⌘R)")
+                        .keyboardShortcut("r", modifiers: .command)
                     }
 
                     ScrollView {
-                        Text(previewText)
-                            .font(.system(size: 12))
+                        if isLoading {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Generating...")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
                             .background(
@@ -204,6 +224,20 @@ struct PromptInputView: View {
                                             .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                                     )
                             )
+                        } else {
+                            Text(previewText)
+                                .font(.system(size: 12))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(.thinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                        )
+                                )
+                        }
                     }
                     .frame(minHeight: 40, maxHeight: 70)
                 }
@@ -306,6 +340,27 @@ struct PromptInputView: View {
                     self.showPreview = true
                     // Notify parent window about preview mode change
                     self.onPreviewModeChanged(true)
+                }
+            }
+        }
+    }
+
+    private func reloadPreview() {
+        let trimmedPrompt = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            return
+        }
+
+        // Don't save to history again since this is a reload
+        hoveredHistoryIndex = nil
+
+        isLoading = true
+        onPreview(trimmedPrompt) { result in
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.previewText = result
+                    self.isLoading = false
+                    // Keep showPreview = true and don't notify parent about mode change
                 }
             }
         }
