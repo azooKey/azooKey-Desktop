@@ -266,8 +266,11 @@ struct PromptInputView: View {
             // Notify initial preview mode state
             onPreviewModeChanged(false)
 
-            // Simple focus setting
-            isTextFieldFocused = true
+            // Ensure text field focus with slight delay to override any other focus changes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                hoveredHistoryIndex = nil
+                isTextFieldFocused = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryUp)) { _ in
             navigateHistory(direction: .up)
@@ -276,7 +279,8 @@ struct PromptInputView: View {
             navigateHistory(direction: .down)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestTextFieldFocus)) { _ in
-            // Force focus to text field
+            // Force focus to text field and clear any history selection
+            hoveredHistoryIndex = nil
             isTextFieldFocused = true
         }
     }
