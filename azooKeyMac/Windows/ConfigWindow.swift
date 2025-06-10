@@ -16,6 +16,7 @@ struct ConfigWindow: View {
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var userDictionary = Config.UserDictionary()
+    @ConfigState private var kanaInput = Config.KanaInput()
 
     @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
@@ -95,6 +96,7 @@ struct ConfigWindow: View {
                         helpButton(helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。", isPresented: $zenzaiInferenceLimitHelpPopover)
                     }
                     Divider()
+                    Toggle("かな入力を有効化", isOn: $kanaInput)
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
                     Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                     Toggle("「、」「。」の代わりに「，」「．」を入力", isOn: $typeCommaAndPeriod)

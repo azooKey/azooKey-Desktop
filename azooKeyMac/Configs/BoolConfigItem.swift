@@ -55,4 +55,9 @@ extension Config {
         static let `default` = false
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
     }
+    /// かな入力を有効化する設定
+    struct KanaInput: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableKanaInput"
+    }
 }

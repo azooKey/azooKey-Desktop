@@ -181,7 +181,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .enterCandidateSelectionMode:
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            let inputStyle: InputStyle = Config.KanaInput().value ? .direct : .roman2kana
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -192,12 +193,14 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .commitMarkedTextAndAppendToMarkedText(let string):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            let inputStyle: InputStyle = Config.KanaInput().value ? .direct : .roman2kana
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .submitSelectedCandidate:
             self.submitSelectedCandidate()
         case .submitSelectedCandidateAndAppendToMarkedText(let string):
             self.submitSelectedCandidate()
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            let inputStyle: InputStyle = Config.KanaInput().value ? .direct : .roman2kana
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .submitSelectedCandidateAndEnterFirstCandidatePreviewMode:
             self.submitSelectedCandidate()
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
