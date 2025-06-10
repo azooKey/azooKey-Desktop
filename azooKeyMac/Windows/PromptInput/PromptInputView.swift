@@ -46,7 +46,7 @@ struct PromptInputView: View {
                         .font(.system(size: 8, weight: .semibold))
                 }
 
-                Text("AI Transform")
+                Text("Magic Conversion")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(
                         LinearGradient(
