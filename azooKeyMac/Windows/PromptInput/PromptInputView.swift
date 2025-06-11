@@ -282,9 +282,8 @@ struct PromptInputView: View {
         .background {
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
-                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .onAppear {
             // Reset all state variables when the view appears
             promptText = ""
@@ -507,18 +506,18 @@ struct PromptInputView: View {
 
 #Preview {
     PromptInputView(
-        onSubmit: { prompt in
+        onSubmit: { _ in
         },
         onPreview: { prompt, callback in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 callback("Transformed: \(prompt)")
             }
         },
-        onApply: { text in
+        onApply: { _ in
         },
         onCancel: {
         },
-        onPreviewModeChanged: { isPreviewMode in
+        onPreviewModeChanged: { _ in
         }
     )
     .frame(width: 380)
