@@ -10,12 +10,25 @@ struct LLMConfiguration {
     let apiKey: String
     let modelName: String
     let endpoint: String?
+    let maxTokens: Int
+    let temperature: Double
 
-    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) {
+    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) {
         self.provider = provider
         self.apiKey = apiKey
         self.modelName = modelName
-        self.endpoint = endpoint
+        self.endpoint = endpoint ?? Self.defaultEndpoint(for: provider)
+        self.maxTokens = maxTokens
+        self.temperature = temperature
+    }
+
+    private static func defaultEndpoint(for provider: LLMProviderType) -> String? {
+        switch provider {
+        case .gemini:
+            return "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        case .openai, .custom:
+            return nil
+        }
     }
 }
 

@@ -64,8 +64,8 @@ class CustomLLMClient: LLMClient {
                 ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
                 ["role": "user", "content": prompt]
             ],
-            "max_tokens": 150,
-            "temperature": 0.7
+            "max_tokens": configuration.maxTokens,
+            "temperature": configuration.temperature
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

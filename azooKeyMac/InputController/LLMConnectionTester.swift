@@ -11,7 +11,7 @@ struct LLMConnectionTester {
             let configuration = createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
 
             guard let client = LLMClientFactory.createClient(for: configuration) else {
-                return .failure("クライアントの作成に失敗しました")
+                return .failure("設定が正しくありません。APIキーとモデル名を確認してください。")
             }
 
             // Simple test prompt

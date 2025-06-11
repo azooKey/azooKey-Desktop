@@ -9,7 +9,7 @@ class GeminiClient: LLMClient {
 
     func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)?) async throws -> [String] {
         // Use OpenAI-compatible endpoint
-        let endpoint = configuration.endpoint ?? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        let endpoint = configuration.endpoint!
 
         logger?("Gemini: Using endpoint: \(endpoint)")
         logger?("Gemini: Using model: \(configuration.modelName)")
@@ -49,7 +49,7 @@ class GeminiClient: LLMClient {
     }
 
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
-        let endpoint = configuration.endpoint ?? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        let endpoint = configuration.endpoint!
 
         guard let url = URL(string: endpoint) else {
             throw OpenAIError.invalidURL
@@ -66,8 +66,8 @@ class GeminiClient: LLMClient {
                 ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
                 ["role": "user", "content": prompt]
             ],
-            "max_tokens": 150,
-            "temperature": 0.7
+            "max_tokens": configuration.maxTokens,
+            "temperature": configuration.temperature
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -243,16 +243,20 @@ struct ConfigWindow: View {
                         if llmProvider.value == "custom" {
                             TextField("カスタムエンドポイントURL", text: $customLLMEndpoint, prompt: Text("例: https://api.example.com/v1/chat/completions"))
 
-                            Text("API設定（OpenAI形式またはGemini互換エンドポイント用）")
+                            Text("API設定（OpenAI互換形式）")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
 
                             TextField("APIキー", text: $openAiApiKey, prompt: Text("例: sk-xxx... または AIza..."))
                             TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini または gemini-1.5-flash"))
 
-                            Text("Gemini互換の場合: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+                            Text("注意：Gemini互換エンドポイントの例")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                            Text("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .textSelection(.enabled)
                         }
 
                         // Connection Test Button
