@@ -111,11 +111,13 @@ extension azooKeyMacInputController {
 
                 Task {
                     do {
+                        // Check if context should be included
+                        let includeContext = Config.IncludeContextInAITransform().value
                         let result = try await self.getTransformationPreview(
                             selectedText: selectedText,
                             prompt: prompt,
-                            beforeContext: context.before,
-                            afterContext: context.after
+                            beforeContext: includeContext ? context.before : "",
+                            afterContext: includeContext ? context.after : ""
                         )
                         callback(result)
                     } catch {

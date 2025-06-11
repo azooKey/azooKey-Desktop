@@ -9,10 +9,11 @@ struct PromptInputView: View {
     @State private var promptHistory: [PromptHistoryItem] = []
     @State private var hoveredHistoryIndex: Int?
     @State private var isNavigatingHistory: Bool = false
+    @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
     @FocusState private var isTextFieldFocused: Bool
 
     let onSubmit: (String?) -> Void
-    let onPreview: (String, @escaping (String) -> Void) -> Void
+    let onPreview: (String, Bool, @escaping (String) -> Void) -> Void  // Added includeContext parameter
     let onApply: (String) -> Void
     let onCancel: () -> Void
     let onPreviewModeChanged: (Bool) -> Void
@@ -267,6 +268,17 @@ struct PromptInputView: View {
                     }
                     .buttonStyle(ModernPrimaryButtonStyle())
                 } else {
+                    // Include context checkbox
+                    Toggle(isOn: $includeContext) {
+                        Text("Include context")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+                    .onChange(of: includeContext) { newValue in
+                        Config.IncludeContextInAITransform().value = newValue
+                    }
+
                     Spacer()
 
                     Button(isLoading ? "Generating..." : "Preview") {
@@ -331,7 +343,7 @@ struct PromptInputView: View {
         hoveredHistoryIndex = nil
 
         isLoading = true
-        onPreview(trimmedPrompt) { result in
+        onPreview(trimmedPrompt, includeContext) { result in
             DispatchQueue.main.async {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     self.previewText = result
@@ -354,7 +366,7 @@ struct PromptInputView: View {
         hoveredHistoryIndex = nil
 
         isLoading = true
-        onPreview(trimmedPrompt) { result in
+        onPreview(trimmedPrompt, includeContext) { result in
             DispatchQueue.main.async {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     self.previewText = result
@@ -508,7 +520,7 @@ struct PromptInputView: View {
     PromptInputView(
         onSubmit: { _ in
         },
-        onPreview: { prompt, callback in
+        onPreview: { prompt, _, callback in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 callback("Transformed: \(prompt)")
             }

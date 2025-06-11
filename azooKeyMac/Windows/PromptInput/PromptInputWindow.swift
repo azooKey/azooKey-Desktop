@@ -56,7 +56,7 @@ final class PromptInputWindow: NSWindow {
                 self?.completion?(prompt)
                 self?.close()
             },
-            onPreview: { [weak self] prompt, callback in
+            onPreview: { [weak self] prompt, _, callback in
                 self?.previewCallback?(prompt, callback)
             },
             onApply: { [weak self] transformedText in
