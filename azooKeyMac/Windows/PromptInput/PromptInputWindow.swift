@@ -71,7 +71,10 @@ final class PromptInputWindow: NSWindow {
             }
         )
 
-        self.contentView = NSHostingView(rootView: contentView)
+        let hostingView = NSHostingView(rootView: contentView)
+        hostingView.layer?.cornerRadius = 16
+        hostingView.layer?.masksToBounds = true
+        self.contentView = hostingView
     }
 
     func showPromptInput(
