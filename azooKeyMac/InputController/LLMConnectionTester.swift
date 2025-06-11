@@ -10,7 +10,7 @@ struct LLMConnectionTester {
         do {
             let configuration = createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
 
-            guard let client = LLMClientFactory.createClient(for: provider, configuration: configuration) else {
+            guard let client = LLMClientFactory.createClient(for: configuration) else {
                 return .failure("クライアントの作成に失敗しました")
             }
 
@@ -27,15 +27,8 @@ struct LLMConnectionTester {
         }
     }
 
-    private static func createConfiguration(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String?) -> LLMClientConfiguration {
-        switch provider {
-        case .openai:
-            return OpenAIConfiguration(apiKey: apiKey, modelName: modelName, endpoint: endpoint)
-        case .gemini:
-            return GeminiConfiguration(apiKey: apiKey, modelName: modelName, endpoint: endpoint)
-        case .custom:
-            return CustomConfiguration(apiKey: apiKey, modelName: modelName, endpoint: endpoint)
-        }
+    private static func createConfiguration(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String?) -> LLMConfiguration {
+        LLMConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
     }
 
     private static func handleOpenAIError(_ error: OpenAIError) -> LLMConnectionTestResult {

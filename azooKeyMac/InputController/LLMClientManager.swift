@@ -35,8 +35,8 @@ class LLMClientManager {
         }
 
         let modelName = Config.OpenAiModelName().value
-        let configuration = OpenAIConfiguration(apiKey: apiKey, modelName: modelName)
-        return LLMClientFactory.createClient(for: .openai, configuration: configuration)
+        let configuration = LLMConfiguration(provider: .openai, apiKey: apiKey, modelName: modelName)
+        return LLMClientFactory.createClient(for: configuration)
     }
 
     private func createGeminiClient() -> LLMClient? {
@@ -56,8 +56,8 @@ class LLMClientManager {
 
         let modelName = Config.GeminiModelName().value
         print("DEBUG: GeminiModelName = \(modelName)")
-        let configuration = GeminiConfiguration(apiKey: apiKey, modelName: modelName)
-        let client = LLMClientFactory.createClient(for: .gemini, configuration: configuration)
+        let configuration = LLMConfiguration(provider: .gemini, apiKey: apiKey, modelName: modelName)
+        let client = LLMClientFactory.createClient(for: configuration)
         print("DEBUG: Gemini client created = \(client != nil)")
         return client
     }
@@ -75,7 +75,7 @@ class LLMClientManager {
         }
 
         let modelName = Config.OpenAiModelName().value
-        let configuration = CustomConfiguration(apiKey: apiKey, modelName: modelName, endpoint: endpoint)
-        return LLMClientFactory.createClient(for: .custom, configuration: configuration)
+        let configuration = LLMConfiguration(provider: .custom, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
+        return LLMClientFactory.createClient(for: configuration)
     }
 }

@@ -5,28 +5,18 @@ protocol LLMClient {
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String
 }
 
-protocol LLMClientConfiguration {
-    var apiKey: String { get }
-    var modelName: String { get }
-    var endpoint: String? { get }
-}
+struct LLMConfiguration {
+    let provider: LLMProviderType
+    let apiKey: String
+    let modelName: String
+    let endpoint: String?
 
-struct OpenAIConfiguration: LLMClientConfiguration {
-    var apiKey: String
-    var modelName: String
-    var endpoint: String?
-}
-
-struct GeminiConfiguration: LLMClientConfiguration {
-    var apiKey: String
-    var modelName: String
-    var endpoint: String?
-}
-
-struct CustomConfiguration: LLMClientConfiguration {
-    var apiKey: String
-    var modelName: String
-    var endpoint: String?
+    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) {
+        self.provider = provider
+        self.apiKey = apiKey
+        self.modelName = modelName
+        self.endpoint = endpoint
+    }
 }
 
 enum LLMProviderType {
@@ -60,23 +50,14 @@ enum LLMProviderType {
 }
 
 enum LLMClientFactory {
-    static func createClient(for provider: LLMProviderType, configuration: LLMClientConfiguration) -> LLMClient? {
-        switch provider {
+    static func createClient(for configuration: LLMConfiguration) -> LLMClient? {
+        switch configuration.provider {
         case .openai:
-            guard let config = configuration as? OpenAIConfiguration else {
-                return nil
-            }
-            return OpenAIClientAdapter(configuration: config)
+            return OpenAIClientAdapter(configuration: configuration)
         case .gemini:
-            guard let config = configuration as? GeminiConfiguration else {
-                return nil
-            }
-            return GeminiClient(configuration: config)
+            return GeminiClient(configuration: configuration)
         case .custom:
-            guard let config = configuration as? CustomConfiguration else {
-                return nil
-            }
-            return CustomLLMClient(configuration: config)
+            return CustomLLMClient(configuration: configuration)
         }
     }
 }

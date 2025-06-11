@@ -1,9 +1,9 @@
 import Foundation
 
 class GeminiClient: LLMClient {
-    private let configuration: GeminiConfiguration
+    private let configuration: LLMConfiguration
 
-    init(configuration: GeminiConfiguration) {
+    init(configuration: LLMConfiguration) {
         self.configuration = configuration
     }
 

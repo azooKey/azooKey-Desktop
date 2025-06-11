@@ -1,9 +1,9 @@
 import Foundation
 
 class OpenAIClientAdapter: LLMClient {
-    private let configuration: OpenAIConfiguration
+    private let configuration: LLMConfiguration
 
-    init(configuration: OpenAIConfiguration) {
+    init(configuration: LLMConfiguration) {
         self.configuration = configuration
     }
 

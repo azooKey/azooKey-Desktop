@@ -1,9 +1,9 @@
 import Foundation
 
 class CustomLLMClient: LLMClient {
-    private let configuration: CustomConfiguration
+    private let configuration: LLMConfiguration
 
-    init(configuration: CustomConfiguration) {
+    init(configuration: LLMConfiguration) {
         self.configuration = configuration
     }
 
