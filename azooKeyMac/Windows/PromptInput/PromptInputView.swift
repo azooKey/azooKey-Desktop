@@ -66,7 +66,7 @@ struct PromptInputView: View {
             // Input field with custom key handling
             CustomTextField(
                 text: $promptText,
-                placeholder: "例: フォーマルにして",
+                placeholder: "example: formalize",
                 isFocused: $isTextFieldFocused,
                 onSubmit: {
                     if hoveredHistoryIndex != nil {
