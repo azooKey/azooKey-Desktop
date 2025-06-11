@@ -1,6 +1,6 @@
 import Foundation
 
-private struct Prompt {
+struct Prompt {
     static let dictionary: [String: String] = [
         // 文章補完プロンプト（デフォルト）
         "": """
@@ -185,7 +185,7 @@ private struct Prompt {
 struct OpenAIRequest {
     let prompt: String
     let target: String
-    let modelName: String
+    var modelName: String
 
     // リクエストをJSON形式に変換する関数
     func toJSON() -> [String: Any] {

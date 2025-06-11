@@ -60,4 +60,14 @@ extension Config {
         static let `default` = true
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.includeContextInAITransform"
     }
+    /// Gemini APIキーを有効化
+    struct EnableGeminiApiKey: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableGeminiApiKey"
+    }
+    /// 外部LLMの使用を有効化
+    struct EnableExternalLLM: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableExternalLLM"
+    }
 }
