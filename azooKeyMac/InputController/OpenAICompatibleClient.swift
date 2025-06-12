@@ -1,6 +1,6 @@
 import Foundation
 
-class CustomLLMClient: LLMClient {
+final class OpenAICompatibleClient: LLMClient {
     private let configuration: LLMConfiguration
 
     init(configuration: LLMConfiguration) {

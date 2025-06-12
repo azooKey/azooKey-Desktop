@@ -40,11 +40,11 @@ class LLMClientTests: XCTestCase {
 
             let geminiConfig = try LLMConfiguration(provider: .gemini, apiKey: "test", modelName: "gemini-1.5-flash")
             let geminiClient = LLMClientFactory.createClient(for: geminiConfig)
-            XCTAssertTrue(geminiClient is CustomLLMClient)
+            XCTAssertTrue(geminiClient is OpenAICompatibleClient)
 
             let customConfig = try LLMConfiguration(provider: .custom, apiKey: "test", modelName: "model", endpoint: "https://custom.api.com")
             let customClient = LLMClientFactory.createClient(for: customConfig)
-            XCTAssertTrue(customClient is CustomLLMClient)
+            XCTAssertTrue(customClient is OpenAICompatibleClient)
         } catch {
             XCTFail("Configuration creation should succeed: \(error)")
         }

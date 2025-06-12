@@ -184,7 +184,7 @@ enum LLMClientFactory {
         case .openai:
             return OpenAIClientAdapter(configuration: configuration)
         case .gemini, .custom:
-            return CustomLLMClient(configuration: configuration)
+            return OpenAICompatibleClient(configuration: configuration)
         }
     }
 }

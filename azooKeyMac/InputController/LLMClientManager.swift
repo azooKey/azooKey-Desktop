@@ -1,6 +1,6 @@
 import Foundation
 
-class LLMClientManager {
+final class LLMClientManager {
     static let shared = LLMClientManager()
 
     private init() {}
