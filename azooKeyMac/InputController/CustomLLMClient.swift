@@ -117,7 +117,9 @@ class CustomLLMClient: LLMClient {
         }
 
         // Try plain text response
-        let text = String(decoding: data, as: UTF8.self)
+        guard let text = String(bytes: data, encoding: .utf8) else {
+            throw OpenAIError.parseError("Failed to decode response as UTF-8")
+        }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
