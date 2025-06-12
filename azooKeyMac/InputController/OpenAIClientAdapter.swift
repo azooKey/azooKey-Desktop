@@ -13,6 +13,6 @@ class OpenAIClientAdapter: LLMClient {
     }
 
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
-        try await OpenAIClient.sendTextTransformRequest(prompt: prompt, modelName: modelName, apiKey: configuration.apiKey)
+        try await OpenAIClient.sendTextTransformRequest(prompt: prompt, modelName: configuration.modelName, apiKey: configuration.apiKey)
     }
 }

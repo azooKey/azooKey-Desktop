@@ -1,7 +1,22 @@
 import Foundation
 
+/// Protocol defining the interface for LLM (Large Language Model) clients.
+/// Supports multiple providers including OpenAI, Google Gemini, and custom OpenAI-compatible APIs.
 protocol LLMClient {
+    /// Sends a structured prediction request to the LLM service.
+    /// - Parameters:
+    ///   - request: The OpenAI-formatted request containing prompt and target information
+    ///   - logger: Optional logging function for debugging purposes
+    /// - Returns: Array of prediction strings returned by the LLM
+    /// - Throws: OpenAIError if the request fails or response is invalid
     func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)?) async throws -> [String]
+
+    /// Sends a simple text transformation request to the LLM service.
+    /// - Parameters:
+    ///   - prompt: The text prompt to send to the LLM
+    ///   - modelName: The model name to use (note: some implementations may override this with configuration)
+    /// - Returns: Transformed text response from the LLM
+    /// - Throws: OpenAIError if the request fails or response is invalid
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String
 }
 
@@ -28,14 +43,30 @@ enum LLMConfigurationError: LocalizedError {
     }
 }
 
+/// Configuration structure for LLM clients containing all necessary parameters.
 struct LLMConfiguration {
+    /// The LLM provider type (OpenAI, Gemini, or Custom)
     let provider: LLMProviderType
+    /// API key for authentication
     let apiKey: String
+    /// Model name to use for requests
     let modelName: String
+    /// Optional custom endpoint URL (used for custom providers and Gemini)
     let endpoint: String?
+    /// Maximum number of tokens to generate (default: 150)
     let maxTokens: Int
+    /// Sampling temperature for response generation (0.0-2.0, default: 0.7)
     let temperature: Double
 
+    /// Creates a new LLM configuration with validation.
+    /// - Parameters:
+    ///   - provider: The LLM provider type
+    ///   - apiKey: API key for authentication (will be trimmed of whitespace)
+    ///   - modelName: Model name to use (will be trimmed of whitespace)
+    ///   - endpoint: Optional custom endpoint URL (auto-configured for some providers)
+    ///   - maxTokens: Maximum tokens to generate (must be > 0)
+    ///   - temperature: Sampling temperature (must be 0.0-2.0)
+    /// - Throws: LLMConfigurationError if any parameter is invalid
     init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) throws {
         // APIキーの検証
         let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -95,9 +126,13 @@ struct LLMConfiguration {
     }
 }
 
+/// Enumeration of supported LLM provider types.
 enum LLMProviderType {
+    /// OpenAI provider (GPT models)
     case openai
+    /// Google Gemini provider
     case gemini
+    /// Custom OpenAI-compatible provider
     case custom
 
     // 定数を定義
