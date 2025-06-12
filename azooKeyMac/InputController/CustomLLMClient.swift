@@ -30,7 +30,8 @@ class CustomLLMClient: LLMClient {
 
         guard httpResponse.statusCode == 200 else {
             let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+            let truncatedBody = responseBody.count > 100 ? String(responseBody.prefix(97)) + "..." : responseBody
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
         }
 
         // Try OpenAI format first
@@ -75,7 +76,8 @@ class CustomLLMClient: LLMClient {
 
         guard httpResponse.statusCode == 200 else {
             let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+            let truncatedBody = responseBody.count > 100 ? String(responseBody.prefix(97)) + "..." : responseBody
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
         }
 
         // Try OpenAI format

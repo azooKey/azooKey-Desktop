@@ -6,6 +6,8 @@ enum LLMConnectionTestResult {
 }
 
 struct LLMConnectionTester {
+    // エラーメッセージの最大長を定義
+    private static let maxErrorMessageLength = 60
     static func testConnection(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) async -> LLMConnectionTestResult {
         do {
             let configuration = try createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
@@ -18,14 +20,15 @@ struct LLMConnectionTester {
             let testPrompt = "Hello"
             let result = try await client.sendTextTransformRequest(prompt: testPrompt, modelName: modelName)
 
-            return .success("接続成功: \(result.prefix(50))...")
+            let truncatedResult = truncateMessage(result, maxLength: 30)
+            return .success("接続成功: \(truncatedResult)")
 
         } catch let error as OpenAIError {
             return handleOpenAIError(error)
         } catch let error as LLMConfigurationError {
-            return .failure("設定エラー: \(error.localizedDescription)")
+            return handleConfigurationError(error)
         } catch {
-            return .failure("接続エラー: \(error.localizedDescription)")
+            return handleGenericError(error)
         }
     }
 
@@ -61,5 +64,52 @@ struct LLMConnectionTester {
         default:
             return .failure("HTTPエラー: \(code)")
         }
+    }
+
+    private static func handleConfigurationError(_ error: LLMConfigurationError) -> LLMConnectionTestResult {
+        switch error {
+        case .invalidAPIKey:
+            return .failure("APIキーが無効です")
+        case .invalidModelName:
+            return .failure("モデル名が無効です")
+        case .invalidEndpoint:
+            return .failure("エンドポイントURLが無効です")
+        case .invalidMaxTokens:
+            return .failure("最大トークン数が無効です")
+        case .invalidTemperature:
+            return .failure("温度設定が無効です")
+        }
+    }
+
+    private static func handleGenericError(_ error: Error) -> LLMConnectionTestResult {
+        // URLErrorの場合は簡潔なメッセージを返す
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet:
+                return .failure("インターネット接続がありません")
+            case .timedOut:
+                return .failure("接続がタイムアウトしました")
+            case .cannotFindHost:
+                return .failure("サーバーが見つかりません")
+            case .cannotConnectToHost:
+                return .failure("サーバーに接続できません")
+            default:
+                return .failure("ネットワークエラーが発生しました")
+            }
+        }
+
+        // その他のエラーは短縮して表示
+        let errorMessage = error.localizedDescription
+        let truncatedMessage = truncateMessage(errorMessage)
+        return .failure("接続エラー: \(truncatedMessage)")
+    }
+
+    // エラーメッセージを指定長で切り詰めるヘルパー関数
+    private static func truncateMessage(_ message: String, maxLength: Int? = nil) -> String {
+        let limit = maxLength ?? maxErrorMessageLength
+        if message.count <= limit {
+            return message
+        }
+        return String(message.prefix(limit - 3)) + "..."
     }
 }
