@@ -5,6 +5,29 @@ protocol LLMClient {
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String
 }
 
+enum LLMConfigurationError: LocalizedError {
+    case invalidAPIKey
+    case invalidModelName
+    case invalidEndpoint
+    case invalidMaxTokens
+    case invalidTemperature
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAPIKey:
+            return "APIキーが無効です"
+        case .invalidModelName:
+            return "モデル名が無効です"
+        case .invalidEndpoint:
+            return "エンドポイントURLが無効です"
+        case .invalidMaxTokens:
+            return "最大トークン数は1以上である必要があります"
+        case .invalidTemperature:
+            return "温度は0.0から2.0の範囲である必要があります"
+        }
+    }
+}
+
 struct LLMConfiguration {
     let provider: LLMProviderType
     let apiKey: String
@@ -13,13 +36,53 @@ struct LLMConfiguration {
     let maxTokens: Int
     let temperature: Double
 
-    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) {
+    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) throws {
+        // APIキーの検証
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAPIKey.isEmpty else {
+            throw LLMConfigurationError.invalidAPIKey
+        }
+
+        // モデル名の検証
+        let trimmedModelName = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedModelName.isEmpty else {
+            throw LLMConfigurationError.invalidModelName
+        }
+
+        // エンドポイントの検証（カスタムプロバイダーの場合）
+        let finalEndpoint = endpoint ?? Self.defaultEndpoint(for: provider)
+        if let endpointString = finalEndpoint {
+            guard Self.isValidEndpoint(endpointString) else {
+                throw LLMConfigurationError.invalidEndpoint
+            }
+        }
+
+        // maxTokensの検証
+        guard maxTokens > 0 else {
+            throw LLMConfigurationError.invalidMaxTokens
+        }
+
+        // temperatureの検証
+        guard temperature >= 0.0 && temperature <= 2.0 else {
+            throw LLMConfigurationError.invalidTemperature
+        }
+
         self.provider = provider
-        self.apiKey = apiKey
-        self.modelName = modelName
-        self.endpoint = endpoint ?? Self.defaultEndpoint(for: provider)
+        self.apiKey = trimmedAPIKey
+        self.modelName = trimmedModelName
+        self.endpoint = finalEndpoint
         self.maxTokens = maxTokens
         self.temperature = temperature
+    }
+
+    private static func isValidEndpoint(_ endpoint: String) -> Bool {
+        guard let url = URL(string: endpoint),
+              let scheme = url.scheme,
+              scheme == "https",
+              url.host != nil else {
+            return false
+        }
+        return true
     }
 
     private static func defaultEndpoint(for provider: LLMProviderType) -> String? {
@@ -37,16 +100,34 @@ enum LLMProviderType {
     case gemini
     case custom
 
+    // 定数を定義
+    private enum Constants {
+        static let openai = "openai"
+        static let gemini = "gemini"
+        static let custom = "custom"
+    }
+
     init(from string: String) {
         switch string.lowercased() {
-        case "openai":
+        case Constants.openai:
             self = .openai
-        case "gemini":
+        case Constants.gemini:
             self = .gemini
-        case "custom":
+        case Constants.custom:
             self = .custom
         default:
             self = .openai
+        }
+    }
+
+    var stringValue: String {
+        switch self {
+        case .openai:
+            return Constants.openai
+        case .gemini:
+            return Constants.gemini
+        case .custom:
+            return Constants.custom
         }
     }
 

@@ -184,6 +184,54 @@ struct OpenAIRequest {
     let prompt: String
     let target: String
     var modelName: String
+
+    // 共通のJSON構造を生成するメソッド
+    func toOpenAICompatibleJSON() -> [String: Any] {
+        [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
+                ["role": "user", "content": """
+                    \(Prompt.getPromptText(for: target))
+
+                    `\(prompt)<\(target)>`
+                    """]
+            ],
+            "response_format": [
+                "type": "json_schema",
+                "json_schema": [
+                    "name": "PredictionResponse",
+                    "schema": [
+                        "type": "object",
+                        "properties": [
+                            "predictions": [
+                                "type": "array",
+                                "items": [
+                                    "type": "string",
+                                    "description": "Replacement text"
+                                ]
+                            ]
+                        ],
+                        "required": ["predictions"],
+                        "additionalProperties": false
+                    ]
+                ]
+            ]
+        ]
+    }
+
+    // テキスト変換用のJSON構造を生成するメソッド
+    static func createTextTransformJSON(prompt: String, modelName: String, maxTokens: Int = 150, temperature: Double = 0.7) -> [String: Any] {
+        [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
+                ["role": "user", "content": prompt]
+            ],
+            "max_tokens": maxTokens,
+            "temperature": temperature
+        ]
+    }
 }
 
 enum OpenAIError: LocalizedError {

@@ -26,13 +26,15 @@ class LLMClientManager {
         }
 
         let apiKey = Config.LLMApiKey().value
-        guard !apiKey.isEmpty else {
+        let modelName = Config.OpenAiModelName().value
+
+        do {
+            let configuration = try LLMConfiguration(provider: .openai, apiKey: apiKey, modelName: modelName)
+            return LLMClientFactory.createClient(for: configuration)
+        } catch {
+            print("OpenAI設定エラー: \(error.localizedDescription)")
             return nil
         }
-
-        let modelName = Config.OpenAiModelName().value
-        let configuration = LLMConfiguration(provider: .openai, apiKey: apiKey, modelName: modelName)
-        return LLMClientFactory.createClient(for: configuration)
     }
 
     private func createGeminiClient() -> LLMClient? {
@@ -42,29 +44,28 @@ class LLMClientManager {
         }
 
         let apiKey = Config.LLMApiKey().value
-        guard !apiKey.isEmpty else {
+        let modelName = Config.GeminiModelName().value
+
+        do {
+            let configuration = try LLMConfiguration(provider: .gemini, apiKey: apiKey, modelName: modelName)
+            return LLMClientFactory.createClient(for: configuration)
+        } catch {
+            print("Gemini設定エラー: \(error.localizedDescription)")
             return nil
         }
-
-        let modelName = Config.GeminiModelName().value
-        let configuration = LLMConfiguration(provider: .gemini, apiKey: apiKey, modelName: modelName)
-        return LLMClientFactory.createClient(for: configuration)
     }
 
     private func createCustomClient() -> LLMClient? {
         let endpoint = Config.CustomLLMEndpoint().value
-        guard !endpoint.isEmpty else {
-            return nil
-        }
-
-        // Custom endpoints use unified API key
         let apiKey = Config.LLMApiKey().value
-        guard !apiKey.isEmpty else {
+        let modelName = Config.OpenAiModelName().value
+
+        do {
+            let configuration = try LLMConfiguration(provider: .custom, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
+            return LLMClientFactory.createClient(for: configuration)
+        } catch {
+            print("カスタムLLM設定エラー: \(error.localizedDescription)")
             return nil
         }
-
-        let modelName = Config.OpenAiModelName().value
-        let configuration = LLMConfiguration(provider: .custom, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
-        return LLMClientFactory.createClient(for: configuration)
     }
 }

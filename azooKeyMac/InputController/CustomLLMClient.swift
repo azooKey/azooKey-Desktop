@@ -19,37 +19,7 @@ class CustomLLMClient: LLMClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Use OpenAI-compatible format by default
-        let body: [String: Any] = [
-            "model": request.modelName,
-            "messages": [
-                ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
-                ["role": "user", "content": """
-                    \(Prompt.getPromptText(for: request.target))
-
-                    `\(request.prompt)<\(request.target)>`
-                    """]
-            ],
-            "response_format": [
-                "type": "json_schema",
-                "json_schema": [
-                    "name": "PredictionResponse",
-                    "schema": [
-                        "type": "object",
-                        "properties": [
-                            "predictions": [
-                                "type": "array",
-                                "items": [
-                                    "type": "string",
-                                    "description": "Replacement text"
-                                ]
-                            ]
-                        ],
-                        "required": ["predictions"],
-                        "additionalProperties": false
-                    ]
-                ]
-            ]
-        ]
+        let body = request.toOpenAICompatibleJSON()
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
@@ -88,15 +58,12 @@ class CustomLLMClient: LLMClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // OpenAI-compatible format
-        let body: [String: Any] = [
-            "model": modelName,
-            "messages": [
-                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
-                ["role": "user", "content": prompt]
-            ],
-            "max_tokens": configuration.maxTokens,
-            "temperature": configuration.temperature
-        ]
+        let body = OpenAIRequest.createTextTransformJSON(
+            prompt: prompt,
+            modelName: modelName,
+            maxTokens: configuration.maxTokens,
+            temperature: configuration.temperature
+        )
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

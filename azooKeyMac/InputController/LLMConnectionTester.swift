@@ -8,7 +8,7 @@ enum LLMConnectionTestResult {
 struct LLMConnectionTester {
     static func testConnection(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) async -> LLMConnectionTestResult {
         do {
-            let configuration = createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
+            let configuration = try createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
 
             guard let client = LLMClientFactory.createClient(for: configuration) else {
                 return .failure("設定が正しくありません。APIキーとモデル名を確認してください。")
@@ -22,13 +22,15 @@ struct LLMConnectionTester {
 
         } catch let error as OpenAIError {
             return handleOpenAIError(error)
+        } catch let error as LLMConfigurationError {
+            return .failure("設定エラー: \(error.localizedDescription)")
         } catch {
             return .failure("接続エラー: \(error.localizedDescription)")
         }
     }
 
-    private static func createConfiguration(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String?) -> LLMConfiguration {
-        LLMConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
+    private static func createConfiguration(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String?) throws -> LLMConfiguration {
+        try LLMConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
     }
 
     private static func handleOpenAIError(_ error: OpenAIError) -> LLMConnectionTestResult {
