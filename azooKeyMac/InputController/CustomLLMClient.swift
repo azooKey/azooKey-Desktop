@@ -34,12 +34,12 @@ class CustomLLMClient: LLMClient {
         }
 
         // Try OpenAI format first
-        if let predictions = try? parseOpenAIFormat(data, logger: logger), !predictions.isEmpty {
+        if let predictions = try? LLMResponseParser.parseOpenAICompatibleResponse(data, logger: logger), !predictions.isEmpty {
             return predictions
         }
 
         // Try simple JSON array format
-        if let predictions = try? parseSimpleJSONArray(data, logger: logger), !predictions.isEmpty {
+        if let predictions = try? LLMResponseParser.parseSimpleJSONArray(data, logger: logger), !predictions.isEmpty {
             return predictions
         }
 
@@ -82,7 +82,7 @@ class CustomLLMClient: LLMClient {
         }
 
         // Try OpenAI format
-        if let text = try? parseOpenAITextResponse(data) {
+        if let text = try? LLMResponseParser.parseOpenAITextResponse(data) {
             return text
         }
 
@@ -91,72 +91,5 @@ class CustomLLMClient: LLMClient {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func parseOpenAIFormat(_ data: Data, logger: ((String) -> Void)?) throws -> [String] {
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]] else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        var allPredictions: [String] = []
-        for choice in choices {
-            guard let message = choice["message"] as? [String: Any],
-                  let contentString = message["content"] as? String else {
-                continue
-            }
-
-            logger?("Raw content string: \(contentString)")
-
-            guard let contentData = contentString.data(using: .utf8) else {
-                logger?("Failed to convert `content` string to data")
-                continue
-            }
-
-            do {
-                guard let parsedContent = try JSONSerialization.jsonObject(with: contentData) as? [String: [String]],
-                      let predictions = parsedContent["predictions"] else {
-                    logger?("Failed to parse `content` as expected JSON dictionary: \(contentString)")
-                    continue
-                }
-
-                logger?("Parsed predictions: \(predictions)")
-                allPredictions.append(contentsOf: predictions)
-            } catch {
-                logger?("Error parsing JSON from `content`: \(error.localizedDescription)")
-            }
-        }
-
-        return allPredictions
-    }
-
-    private func parseSimpleJSONArray(_ data: Data, logger: ((String) -> Void)?) throws -> [String] {
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-
-        if let predictions = jsonObject as? [String] {
-            logger?("Parsed simple JSON array: \(predictions)")
-            return predictions
-        }
-
-        if let jsonDict = jsonObject as? [String: Any],
-           let predictions = jsonDict["predictions"] as? [String] {
-            logger?("Parsed predictions from object: \(predictions)")
-            return predictions
-        }
-
-        throw OpenAIError.invalidResponseStructure(jsonObject)
-    }
-
-    private func parseOpenAITextResponse(_ data: Data) throws -> String {
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    // Parsing methods moved to LLMResponseParser
 }

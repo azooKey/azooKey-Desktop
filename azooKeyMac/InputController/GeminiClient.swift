@@ -9,11 +9,11 @@ class GeminiClient: LLMClient {
 
     func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)?) async throws -> [String] {
         // Use OpenAI-compatible endpoint
-        let endpoint = configuration.endpoint!
+        guard let endpoint = configuration.endpoint else {
+            throw OpenAIError.invalidURL
+        }
 
-        logger?("Gemini: Using endpoint: \(endpoint)")
-        logger?("Gemini: Using model: \(configuration.modelName)")
-        logger?("Gemini: API key present: \(!configuration.apiKey.isEmpty)")
+        // Only log essential information
 
         guard let url = URL(string: endpoint) else {
             throw OpenAIError.invalidURL
@@ -31,7 +31,7 @@ class GeminiClient: LLMClient {
         let body = modifiedRequest.toJSON()
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        logger?("Gemini: Request body prepared")
+        // Request body prepared
 
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
 
@@ -45,11 +45,13 @@ class GeminiClient: LLMClient {
         }
 
         // Parse using the same logic as OpenAI
-        return try parseOpenAICompatibleResponse(data, logger: logger)
+        return try LLMResponseParser.parseOpenAICompatibleResponse(data, logger: logger)
     }
 
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
-        let endpoint = configuration.endpoint!
+        guard let endpoint = configuration.endpoint else {
+            throw OpenAIError.invalidURL
+        }
 
         guard let url = URL(string: endpoint) else {
             throw OpenAIError.invalidURL
@@ -84,62 +86,8 @@ class GeminiClient: LLMClient {
         }
 
         // Parse OpenAI-compatible response
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try LLMResponseParser.parseOpenAITextResponse(data)
     }
 
-    private func parseOpenAICompatibleResponse(_ data: Data, logger: ((String) -> Void)?) throws -> [String] {
-        logger?("Received JSON response")
-
-        let jsonObject: Any
-        do {
-            jsonObject = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            logger?("Failed to parse JSON response")
-            throw OpenAIError.parseError("Failed to parse response")
-        }
-
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]] else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        var allPredictions: [String] = []
-        for choice in choices {
-            guard let message = choice["message"] as? [String: Any],
-                  let contentString = message["content"] as? String else {
-                continue
-            }
-
-            logger?("Raw content string: \(contentString)")
-
-            guard let contentData = contentString.data(using: .utf8) else {
-                logger?("Failed to convert `content` string to data")
-                continue
-            }
-
-            do {
-                guard let parsedContent = try JSONSerialization.jsonObject(with: contentData) as? [String: [String]],
-                      let predictions = parsedContent["predictions"] else {
-                    logger?("Failed to parse `content` as expected JSON dictionary: \(contentString)")
-                    continue
-                }
-
-                logger?("Parsed predictions: \(predictions)")
-                allPredictions.append(contentsOf: predictions)
-            } catch {
-                logger?("Error parsing JSON from `content`: \(error.localizedDescription)")
-            }
-        }
-
-        return allPredictions
-    }
+    // Parsing methods moved to LLMResponseParser
 }
