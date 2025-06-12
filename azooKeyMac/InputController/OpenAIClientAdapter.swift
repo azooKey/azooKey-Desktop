@@ -1,4 +1,5 @@
 import Foundation
+import OpenAI
 
 class OpenAIClientAdapter: LLMClient {
     private let configuration: LLMConfiguration

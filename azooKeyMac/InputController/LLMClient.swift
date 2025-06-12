@@ -67,9 +67,7 @@ enum LLMClientFactory {
         switch configuration.provider {
         case .openai:
             return OpenAIClientAdapter(configuration: configuration)
-        case .gemini:
-            return GeminiClient(configuration: configuration)
-        case .custom:
+        case .gemini, .custom:
             return CustomLLMClient(configuration: configuration)
         }
     }

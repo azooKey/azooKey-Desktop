@@ -1,4 +1,5 @@
 import Foundation
+import OpenAI
 
 struct Prompt {
     static let dictionary: [String: String] = [
@@ -179,48 +180,10 @@ struct Prompt {
 //    - prompt: 変換対象の前のテキスト
 //    - target: 変換対象のテキスト
 //    - modelName: モデル名
-//
-// - methods:
-//    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
 struct OpenAIRequest {
     let prompt: String
     let target: String
     var modelName: String
-
-    // リクエストをJSON形式に変換する関数
-    func toJSON() -> [String: Any] {
-        [
-            "model": modelName,
-            "messages": [
-                ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
-                ["role": "user", "content": """
-                    \(Prompt.getPromptText(for: target))
-
-                    `\(prompt)<\(target)>`
-                    """]
-            ],
-            "response_format": [
-                "type": "json_schema",
-                "json_schema": [
-                    "name": "PredictionResponse", // 必須のnameフィールド
-                    "schema": [ // 必須のschemaフィールド
-                        "type": "object",
-                        "properties": [
-                            "predictions": [
-                                "type": "array",
-                                "items": [
-                                    "type": "string",
-                                    "description": "Replacement text"
-                                ]
-                            ]
-                        ],
-                        "required": ["predictions"],
-                        "additionalProperties": false
-                    ]
-                ]
-            ]
-        ]
-    }
 }
 
 enum OpenAIError: LocalizedError {
@@ -261,129 +224,102 @@ enum OpenAIError: LocalizedError {
 enum OpenAIClient {
     // APIリクエストを送信する静的メソッド
     static func sendRequest(_ request: OpenAIRequest, apiKey: String, logger: ((String) -> Void)? = nil) async throws -> [String] {
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
-            throw OpenAIError.invalidURL
+        let openAI = OpenAI(apiToken: apiKey)
+
+        let query = ChatQuery(
+            messages: [
+                .system(.init(content: "You are an assistant that predicts the continuation of short text.")),
+                .user(.init(content: .string("""
+                    \(Prompt.getPromptText(for: request.target))
+
+                    `\(request.prompt)<\(request.target)>`
+                    """)))
+            ],
+            model: .init(request.modelName),
+            responseFormat: .jsonObject
+        )
+
+        do {
+            let result = try await openAI.chats(query: query)
+            return try parseOpenAIResponse(result, logger: logger)
+        } catch {
+            throw mapOpenAIError(error)
         }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = request.toJSON()
-        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        // 非同期でリクエストを送信
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        // レスポンスの検証
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
-        }
-
-        // レスポンスデータの解析
-        return try parseResponseData(data, logger: logger)
     }
 
-    // レスポンスデータのパースを行う静的メソッド
-    private static func parseResponseData(_ data: Data, logger: ((String) -> Void)? = nil) throws -> [String] {
-        logger?("Received JSON response")
-
-        let jsonObject: Any
-        do {
-            jsonObject = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            logger?("Failed to parse JSON response")
-            throw OpenAIError.parseError("Failed to parse response")
-        }
-
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]] else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
+    // MacPaw OpenAIライブラリのレスポンスを解析する静的メソッド
+    private static func parseOpenAIResponse(_ response: ChatResult, logger: ((String) -> Void)? = nil) throws -> [String] {
+        logger?("Received OpenAI response")
 
         var allPredictions: [String] = []
-        for choice in choices {
-            guard let message = choice["message"] as? [String: Any],
-                  let contentString = message["content"] as? String else {
+        for choice in response.choices {
+            guard let contentString = choice.message.content else {
                 continue
             }
 
             logger?("Raw content string: \(contentString)")
 
             guard let contentData = contentString.data(using: .utf8) else {
-                logger?("Failed to convert `content` string to data")
+                logger?("Failed to convert content string to data")
                 continue
             }
 
             do {
                 guard let parsedContent = try JSONSerialization.jsonObject(with: contentData) as? [String: [String]],
                       let predictions = parsedContent["predictions"] else {
-                    logger?("Failed to parse `content` as expected JSON dictionary: \(contentString)")
+                    logger?("Failed to parse content as expected JSON dictionary: \(contentString)")
                     continue
                 }
 
                 logger?("Parsed predictions: \(predictions)")
                 allPredictions.append(contentsOf: predictions)
             } catch {
-                logger?("Error parsing JSON from `content`: \(error.localizedDescription)")
+                logger?("Error parsing JSON from content: \(error.localizedDescription)")
             }
         }
 
         return allPredictions
     }
 
+    // MacPaw OpenAIライブラリのエラーをOpenAIErrorにマップする静的メソッド
+    private static func mapOpenAIError(_ error: Error) -> OpenAIError {
+        if let openAIError = error as? OpenAIError {
+            return openAIError
+        }
+
+        // URLエラーの場合
+        if error is URLError {
+            return .noServerResponse
+        }
+
+        // その他のエラーは解析エラーとして扱う
+        return .parseError(error.localizedDescription)
+    }
+
     // Simple text transformation method for AI Transform feature
     static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String) async throws -> String {
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
-            throw OpenAIError.invalidURL
-        }
+        let openAI = OpenAI(apiToken: apiKey)
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "model": modelName,
-            "messages": [
-                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
-                ["role": "user", "content": prompt]
+        let query = ChatQuery(
+            messages: [
+                .system(.init(content: "You are a helpful assistant that transforms text according to user instructions.")),
+                .user(.init(content: .string(prompt)))
             ],
-            "max_tokens": 150,
-            "temperature": 0.7
-        ]
+            model: .init(modelName),
+            maxTokens: 150,
+            temperature: 0.7
+        )
 
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        do {
+            let result = try await openAI.chats(query: query)
+            guard let firstChoice = result.choices.first,
+                  let content = firstChoice.message.content else {
+                throw OpenAIError.invalidResponseStructure(result)
+            }
 
-        // Send async request
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        // Validate response
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
+            return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            throw mapOpenAIError(error)
         }
-
-        guard httpResponse.statusCode == 200 else {
-            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
-        }
-
-        // Parse response data
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
