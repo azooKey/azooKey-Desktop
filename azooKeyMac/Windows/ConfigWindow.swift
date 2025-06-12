@@ -10,11 +10,10 @@ struct ConfigWindow: View {
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
-    @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
+    @ConfigState private var llmApiKey = Config.LLMApiKey()
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
     @ConfigState private var llmProvider = Config.LLMProvider()
     @ConfigState private var enableGeminiApiKey = Config.EnableGeminiApiKey()
-    @ConfigState private var geminiApiKey = Config.GeminiApiKey()
     @ConfigState private var geminiModelName = Config.GeminiModelName()
     @ConfigState private var customLLMEndpoint = Config.CustomLLMEndpoint()
     @ConfigState private var enableExternalLLM = Config.EnableExternalLLM()
@@ -26,8 +25,7 @@ struct ConfigWindow: View {
     @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
-    @State private var openAiApiKeyPopover = false
-    @State private var geminiApiKeyPopover = false
+    @State private var llmApiKeyPopover = false
     @State private var llmProviderHelpPopover = false
     @State private var externalLLMHelpPopover = false
     @State private var connectionTestResult: String = ""
@@ -55,11 +53,11 @@ struct ConfigWindow: View {
 
         switch llmProvider.value {
         case "openai":
-            return enableOpenAiApiKey.value && !openAiApiKey.value.isEmpty && !openAiModelName.value.isEmpty
+            return enableOpenAiApiKey.value && !llmApiKey.value.isEmpty && !openAiModelName.value.isEmpty
         case "gemini":
-            return enableGeminiApiKey.value && !geminiApiKey.value.isEmpty && !geminiModelName.value.isEmpty
+            return enableGeminiApiKey.value && !llmApiKey.value.isEmpty && !geminiModelName.value.isEmpty
         case "custom":
-            return !customLLMEndpoint.value.isEmpty && !openAiApiKey.value.isEmpty && !openAiModelName.value.isEmpty
+            return !customLLMEndpoint.value.isEmpty && !llmApiKey.value.isEmpty && !openAiModelName.value.isEmpty
         default:
             return false
         }
@@ -77,14 +75,14 @@ struct ConfigWindow: View {
 
             switch providerType {
             case .openai:
-                apiKey = openAiApiKey.value
+                apiKey = llmApiKey.value
                 modelName = openAiModelName.value
             case .gemini:
-                apiKey = geminiApiKey.value
+                apiKey = llmApiKey.value
                 modelName = geminiModelName.value
             case .custom:
                 endpoint = customLLMEndpoint.value
-                apiKey = openAiApiKey.value
+                apiKey = llmApiKey.value
                 modelName = openAiModelName.value
             }
 
@@ -209,34 +207,38 @@ struct ConfigWindow: View {
 
                     // LLM Settings (only shown when external LLM is enabled)
                     if enableExternalLLM.value {
-                        // OpenAI Settings
-                        if llmProvider.value == "openai" {
-                            Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
-                            HStack {
-                                SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
-                                    .disabled(!enableOpenAiApiKey.value)
-                                helpButton(
-                                    helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
-                                    isPresented: $openAiApiKeyPopover
-                                )
-                            }
-                            TextField("OpenAI Model Name", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
-                                .disabled(!enableOpenAiApiKey.value)
+                        // API Key (unified for all providers)
+                        HStack {
+                            SecureField("APIキー", text: $llmApiKey, prompt: {
+                                switch llmProvider.value {
+                                case "openai":
+                                    return Text("例: sk-xxxxxxxxxxx")
+                                case "gemini":
+                                    return Text("例: AIza...")
+                                default:
+                                    return Text("APIキーを入力")
+                                }
+                            }())
+                            helpButton(
+                                helpContent: {
+                                    switch llmProvider.value {
+                                    case "openai":
+                                        return "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。"
+                                    case "gemini":
+                                        return "Gemini APIキーはローカルのみで管理され、外部に公開されることはありません。Google AI Studioから取得できます。"
+                                    default:
+                                        return "APIキーはローカルのみで管理され、外部に公開されることはありません。"
+                                    }
+                                }(),
+                                isPresented: $llmApiKeyPopover
+                            )
                         }
 
-                        // Gemini Settings
-                        if llmProvider.value == "gemini" {
-                            Toggle("Gemini APIキーの利用", isOn: $enableGeminiApiKey)
-                            HStack {
-                                SecureField("Gemini API", text: $geminiApiKey, prompt: Text("例:AIza..."))
-                                    .disabled(!enableGeminiApiKey.value)
-                                helpButton(
-                                    helpContent: "Gemini APIキーはローカルのみで管理され、外部に公開されることはありません。Google AI Studioから取得できます。",
-                                    isPresented: $geminiApiKeyPopover
-                                )
-                            }
-                            TextField("Gemini Model Name", text: $geminiModelName, prompt: Text("例: gemini-1.5-flash"))
-                                .disabled(!enableGeminiApiKey.value)
+                        // Model Name Settings
+                        if llmProvider.value == "openai" {
+                            TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+                        } else if llmProvider.value == "gemini" {
+                            TextField("モデル名", text: $geminiModelName, prompt: Text("例: gemini-1.5-flash"))
                         }
 
                         // Custom Endpoint Settings (OpenAI API compatible)
@@ -247,7 +249,7 @@ struct ConfigWindow: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
 
-                            TextField("APIキー", text: $openAiApiKey, prompt: Text("例: sk-xxx... または AIza..."))
+                            TextField("APIキー", text: $llmApiKey, prompt: Text("例: sk-xxx... または AIza..."))
                             TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini または gemini-1.5-flash"))
 
                             Text("注意：Gemini互換エンドポイントの例")

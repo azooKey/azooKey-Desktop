@@ -86,8 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Keychainから設定値を非同期で読み込み
         Task {
-            await Config.OpenAiApiKey.loadFromKeychain()
-            await Config.GeminiApiKey.loadFromKeychain()
+            await Config.LLMApiKey.loadFromKeychain()
         }
 
         // Check if mainMenu exists, or create it

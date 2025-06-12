@@ -25,7 +25,7 @@ class LLMClientManager {
             return nil
         }
 
-        let apiKey = Config.OpenAiApiKey().value
+        let apiKey = Config.LLMApiKey().value
         guard !apiKey.isEmpty else {
             return nil
         }
@@ -41,7 +41,7 @@ class LLMClientManager {
             return nil
         }
 
-        let apiKey = Config.GeminiApiKey().value
+        let apiKey = Config.LLMApiKey().value
         guard !apiKey.isEmpty else {
             return nil
         }
@@ -57,8 +57,8 @@ class LLMClientManager {
             return nil
         }
 
-        // Custom endpoints use OpenAI API format
-        let apiKey = Config.OpenAiApiKey().value
+        // Custom endpoints use unified API key
+        let apiKey = Config.LLMApiKey().value
         guard !apiKey.isEmpty else {
             return nil
         }

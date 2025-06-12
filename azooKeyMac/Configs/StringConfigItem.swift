@@ -21,8 +21,9 @@ extension StringConfigItem {
 }
 
 extension Config {
-    struct OpenAiApiKey: StringConfigItem {
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiKey"
+    /// 統合されたLLM API Key（プロバイダーに応じて使用される）
+    struct LLMApiKey: StringConfigItem {
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.LLMApiKey"
 
         private static var cachedValue: String = ""
         private static var isLoaded: Bool = false
@@ -90,39 +91,6 @@ extension Config {
     /// カスタムLLMエンドポイントURL
     struct CustomLLMEndpoint: StringConfigItem {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.CustomLLMEndpoint"
-    }
-
-    /// Gemini APIキー
-    struct GeminiApiKey: StringConfigItem {
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.GeminiApiKey"
-
-        private static var cachedValue: String = ""
-        private static var isLoaded: Bool = false
-
-        // keychainで保存
-        var value: String {
-            get {
-                if !Self.isLoaded {
-                    Task {
-                        Self.cachedValue = await KeychainHelper.read(key: Self.key) ?? ""
-                        Self.isLoaded = true
-                    }
-                }
-                return Self.cachedValue
-            }
-            nonmutating set {
-                Self.cachedValue = newValue
-                Task {
-                    await KeychainHelper.save(key: Self.key, value: newValue)
-                }
-            }
-        }
-
-        // 初期化時にKeychainから値を読み込む
-        static func loadFromKeychain() async {
-            cachedValue = await KeychainHelper.read(key: key) ?? ""
-            isLoaded = true
-        }
     }
 
     /// Geminiモデル名

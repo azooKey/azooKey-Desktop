@@ -124,7 +124,9 @@ extension azooKeyMacInputController {
                         await MainActor.run {
                             self.segmentsManager.appendDebugMessage("showPromptInputWindow: Preview error: \(error)")
                         }
-                        callback("Error: \(error.localizedDescription)")
+                        let provider = Config.LLMProvider().value
+                        let providerName = LLMProviderType(from: provider).displayName
+                        callback("\(providerName) Error: \(error.localizedDescription)")
                     }
                 }
             },
