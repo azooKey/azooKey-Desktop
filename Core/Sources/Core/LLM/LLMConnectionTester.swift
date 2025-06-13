@@ -1,14 +1,15 @@
 import Foundation
 
-enum LLMConnectionTestResult {
+public enum LLMConnectionTestResult {
     case success(String)
     case failure(String)
 }
 
-struct LLMConnectionTester {
+public struct LLMConnectionTester {
     // エラーメッセージの最大長を定義
     private static let maxErrorMessageLength = 60
-    static func testConnection(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) async -> LLMConnectionTestResult {
+    
+    public static func testConnection(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) async -> LLMConnectionTestResult {
         do {
             let configuration = try createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
 
@@ -23,8 +24,8 @@ struct LLMConnectionTester {
             let truncatedResult = truncateMessage(result, maxLength: 30)
             return .success("接続成功: \(truncatedResult)")
 
-        } catch let error as OpenAIError {
-            return handleOpenAIError(error)
+        } catch let error as LLMError {
+            return handleLLMError(error)
         } catch let error as LLMConfigurationError {
             return handleConfigurationError(error)
         } catch {
@@ -36,7 +37,7 @@ struct LLMConnectionTester {
         try LLMConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
     }
 
-    private static func handleOpenAIError(_ error: OpenAIError) -> LLMConnectionTestResult {
+    private static func handleLLMError(_ error: LLMError) -> LLMConnectionTestResult {
         switch error {
         case .invalidURL:
             return .failure("無効なURL")

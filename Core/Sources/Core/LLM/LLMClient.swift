@@ -2,32 +2,32 @@ import Foundation
 
 /// Protocol defining the interface for LLM (Large Language Model) clients.
 /// Supports multiple providers including OpenAI, Google Gemini, and custom OpenAI-compatible APIs.
-protocol LLMClient {
+public protocol LLMClient {
     /// Sends a structured prediction request to the LLM service.
     /// - Parameters:
-    ///   - request: The OpenAI-formatted request containing prompt and target information
+    ///   - request: The LLM request containing prompt and target information
     ///   - logger: Optional logging function for debugging purposes
     /// - Returns: Array of prediction strings returned by the LLM
-    /// - Throws: OpenAIError if the request fails or response is invalid
-    func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)?) async throws -> [String]
+    /// - Throws: LLMError if the request fails or response is invalid
+    func sendRequest(_ request: LLMRequest, logger: ((String) -> Void)?) async throws -> [String]
 
     /// Sends a simple text transformation request to the LLM service.
     /// - Parameters:
     ///   - prompt: The text prompt to send to the LLM
     ///   - modelName: The model name to use (note: some implementations may override this with configuration)
     /// - Returns: Transformed text response from the LLM
-    /// - Throws: OpenAIError if the request fails or response is invalid
+    /// - Throws: LLMError if the request fails or response is invalid
     func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String
 }
 
-enum LLMConfigurationError: LocalizedError {
+public enum LLMConfigurationError: LocalizedError {
     case invalidAPIKey
     case invalidModelName
     case invalidEndpoint
     case invalidMaxTokens
     case invalidTemperature
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidAPIKey:
             return "APIキーが無効です"
@@ -44,19 +44,19 @@ enum LLMConfigurationError: LocalizedError {
 }
 
 /// Configuration structure for LLM clients containing all necessary parameters.
-struct LLMConfiguration {
+public struct LLMConfiguration {
     /// The LLM provider type (OpenAI, Gemini, or Custom)
-    let provider: LLMProviderType
+    public let provider: LLMProviderType
     /// API key for authentication
-    let apiKey: String
+    public let apiKey: String
     /// Model name to use for requests
-    let modelName: String
+    public let modelName: String
     /// Optional custom endpoint URL (used for custom providers and Gemini)
-    let endpoint: String?
+    public let endpoint: String?
     /// Maximum number of tokens to generate (default: 150)
-    let maxTokens: Int
+    public let maxTokens: Int
     /// Sampling temperature for response generation (0.0-2.0, default: 0.7)
-    let temperature: Double
+    public let temperature: Double
 
     /// Creates a new LLM configuration with validation.
     /// - Parameters:
@@ -67,7 +67,7 @@ struct LLMConfiguration {
     ///   - maxTokens: Maximum tokens to generate (must be > 0)
     ///   - temperature: Sampling temperature (must be 0.0-2.0)
     /// - Throws: LLMConfigurationError if any parameter is invalid
-    init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) throws {
+    public init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) throws {
         // APIキーの検証
         let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAPIKey.isEmpty else {
@@ -127,7 +127,7 @@ struct LLMConfiguration {
 }
 
 /// Enumeration of supported LLM provider types.
-enum LLMProviderType {
+public enum LLMProviderType {
     /// OpenAI provider (GPT models)
     case openai
     /// Google Gemini provider
@@ -142,7 +142,7 @@ enum LLMProviderType {
         static let custom = "custom"
     }
 
-    init(from string: String) {
+    public init(from string: String) {
         switch string.lowercased() {
         case Constants.openai:
             self = .openai
@@ -155,7 +155,7 @@ enum LLMProviderType {
         }
     }
 
-    var stringValue: String {
+    public var stringValue: String {
         switch self {
         case .openai:
             return Constants.openai
@@ -166,7 +166,7 @@ enum LLMProviderType {
         }
     }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .openai:
             return "OpenAI"
@@ -178,8 +178,8 @@ enum LLMProviderType {
     }
 }
 
-enum LLMClientFactory {
-    static func createClient(for configuration: LLMConfiguration) -> LLMClient? {
+public enum LLMClientFactory {
+    public static func createClient(for configuration: LLMConfiguration) -> LLMClient? {
         switch configuration.provider {
         case .openai:
             return OpenAIClientAdapter(configuration: configuration)

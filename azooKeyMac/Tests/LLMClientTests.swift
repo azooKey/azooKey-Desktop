@@ -1,4 +1,5 @@
 @testable import azooKeyMac
+import Core
 import XCTest
 
 class LLMClientTests: XCTestCase {

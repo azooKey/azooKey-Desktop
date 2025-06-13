@@ -1,16 +1,17 @@
 import Foundation
 
-final class OpenAICompatibleClient: LLMClient {
+/// Client for OpenAI-compatible APIs including Google Gemini and custom endpoints.
+public final class OpenAICompatibleClient: LLMClient {
     private let configuration: LLMConfiguration
 
-    init(configuration: LLMConfiguration) {
+    public init(configuration: LLMConfiguration) {
         self.configuration = configuration
     }
 
-    func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)?) async throws -> [String] {
+    public func sendRequest(_ request: LLMRequest, logger: ((String) -> Void)?) async throws -> [String] {
         guard let endpointString = configuration.endpoint,
               let url = URL(string: endpointString) else {
-            throw OpenAIError.invalidURL
+            throw LLMError.invalidURL
         }
 
         var urlRequest = URLRequest(url: url)
@@ -19,19 +20,19 @@ final class OpenAICompatibleClient: LLMClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Use OpenAI-compatible format by default
-        let body = request.toOpenAICompatibleJSON()
+        let body = request.toOpenAICompatibleJSON(promptFunction: LLMPrompts.getPromptText)
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
+            throw LLMError.noServerResponse
         }
 
         guard httpResponse.statusCode == 200 else {
             let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
             let truncatedBody = responseBody.count > 100 ? String(responseBody.prefix(97)) + "..." : responseBody
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
+            throw LLMError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
         }
 
         // Try OpenAI format first
@@ -44,13 +45,13 @@ final class OpenAICompatibleClient: LLMClient {
             return predictions
         }
 
-        throw OpenAIError.invalidResponseStructure("Unsupported response format")
+        throw LLMError.invalidResponseStructure("Unsupported response format")
     }
 
-    func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
+    public func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
         guard let endpointString = configuration.endpoint,
               let url = URL(string: endpointString) else {
-            throw OpenAIError.invalidURL
+            throw LLMError.invalidURL
         }
 
         var request = URLRequest(url: url)
@@ -59,9 +60,9 @@ final class OpenAICompatibleClient: LLMClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // OpenAI-compatible format
-        let body = OpenAIRequest.createTextTransformJSON(
+        let body = LLMRequest.createTextTransformJSON(
             prompt: prompt,
-            modelName: modelName,
+            modelName: configuration.modelName,  // Use configuration model name
             maxTokens: configuration.maxTokens,
             temperature: configuration.temperature
         )
@@ -71,13 +72,13 @@ final class OpenAICompatibleClient: LLMClient {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
+            throw LLMError.noServerResponse
         }
 
         guard httpResponse.statusCode == 200 else {
             let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
             let truncatedBody = responseBody.count > 100 ? String(responseBody.prefix(97)) + "..." : responseBody
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
+            throw LLMError.invalidResponseStatus(code: httpResponse.statusCode, body: truncatedBody)
         }
 
         // Try OpenAI format
@@ -87,10 +88,8 @@ final class OpenAICompatibleClient: LLMClient {
 
         // Try plain text response
         guard let text = String(bytes: data, encoding: .utf8) else {
-            throw OpenAIError.parseError("Failed to decode response as UTF-8")
+            throw LLMError.parseError("Failed to decode response as UTF-8")
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
-    // Parsing methods moved to LLMResponseParser
 }

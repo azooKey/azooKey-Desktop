@@ -522,7 +522,7 @@ extension azooKeyMacInputController {
             }
         }
 
-        let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
+        let request = LLMRequest(prompt: prompt, target: composingText, modelName: modelName)
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
         self.segmentsManager.appendDebugMessage("Using LLM Provider: \(provider), Model: \(modelName)")
 
