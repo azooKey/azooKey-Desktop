@@ -84,11 +84,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.server = IMKServer(name: Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String, bundleIdentifier: Bundle.main.bundleIdentifier)
         NSLog("tried connection")
 
-        // Keychainから設定値を非同期で読み込み
-        Task {
-            await Config.LLMApiKey.loadFromKeychain()
-        }
-
         // Check if mainMenu exists, or create it
         if NSApp.mainMenu == nil {
             NSApp.mainMenu = NSMenu()

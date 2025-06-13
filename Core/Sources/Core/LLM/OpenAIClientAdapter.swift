@@ -12,15 +12,17 @@ public final class OpenAIClientAdapter: LLMClient {
     public func sendRequest(_ request: LLMRequest, logger: ((String) -> Void)?) async throws -> [String] {
         let openAI = OpenAI(apiToken: configuration.apiKey)
 
-        let query = ChatQuery(
-            messages: [
-                .system(.init(content: "You are an assistant that predicts the continuation of short text.")),
-                .user(.init(content: """
-                    \(LLMPrompts.getPromptText(for: request.target))
+        let messages: [ChatQuery.ChatCompletionMessageParam] = [
+            .init(role: .system, content: "You are an assistant that predicts the continuation of short text.")!,
+            .init(role: .user, content: """
+                \(LLMPrompts.getPromptText(for: request.target))
 
-                    `\(request.prompt)<\(request.target)>`
-                    """))
-            ],
+                `\(request.prompt)<\(request.target)>`
+                """)!
+        ]
+        
+        let query = ChatQuery(
+            messages: messages,
             model: .gpt3_5Turbo
         )
 
@@ -60,7 +62,7 @@ public final class OpenAIClientAdapter: LLMClient {
         let openAI = OpenAI(apiToken: configuration.apiKey)
 
         let query = ChatQuery(
-            messages: [.user(.init(content: prompt))],
+            messages: [.init(role: .user, content: prompt)!],
             model: .gpt3_5Turbo,
             maxTokens: configuration.maxTokens,
             temperature: configuration.temperature

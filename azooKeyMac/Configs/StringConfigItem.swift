@@ -23,47 +23,7 @@ extension StringConfigItem {
 extension Config {
     /// 統合されたLLM API Key（プロバイダーに応じて使用される）
     struct LLMApiKey: StringConfigItem {
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.LLMApiKey"
-        // 旧OpenAI API Keyとの互換性のため
-        private static let legacyOpenAIKey: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiKey"
-
-        private static var cachedValue: String = ""
-        private static var isLoaded: Bool = false
-
-        // keychainで保存
-        var value: String {
-            get {
-                if !Self.isLoaded {
-                    Task {
-                        await Self.loadFromKeychain()
-                    }
-                }
-                return Self.cachedValue
-            }
-            nonmutating set {
-                Self.cachedValue = newValue
-                Task {
-                    await KeychainHelper.save(key: Self.key, value: newValue)
-                }
-            }
-        }
-
-        // 初期化時にKeychainから値を読み込む（マイグレーション処理含む）
-        static func loadFromKeychain() async {
-            // 新しいキーから読み込み
-            cachedValue = await KeychainHelper.read(key: key) ?? ""
-
-            // 新しいキーが空で、旧OpenAI Keyが存在する場合はマイグレーション
-            if cachedValue.isEmpty {
-                if let legacyValue = await KeychainHelper.read(key: legacyOpenAIKey), !legacyValue.isEmpty {
-                    cachedValue = legacyValue
-                    // 新しいキーに保存
-                    await KeychainHelper.save(key: key, value: legacyValue)
-                }
-            }
-
-            isLoaded = true
-        }
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiKey"
     }
 }
 

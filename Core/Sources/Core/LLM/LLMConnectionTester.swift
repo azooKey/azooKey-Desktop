@@ -1,6 +1,6 @@
 import Foundation
 
-public enum LLMConnectionTestResult {
+public enum LLMConnectionTestResult: Sendable {
     case success(String)
     case failure(String)
 }
