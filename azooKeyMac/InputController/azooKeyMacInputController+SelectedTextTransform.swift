@@ -239,7 +239,9 @@ extension azooKeyMacInputController {
                 }
             } catch {
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Error occurred: \(error)")
+                    let provider = Config.LLMProvider().value
+                    let providerName = LLMProviderType(from: provider).displayName
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: \(providerName) Error occurred: \(error)")
                 }
             }
         }

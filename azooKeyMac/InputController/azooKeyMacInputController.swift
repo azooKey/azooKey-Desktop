@@ -562,7 +562,7 @@ extension azooKeyMacInputController {
                     }
                 }
             } catch {
-                let provider = Config.LLMProvider().value  
+                let provider = Config.LLMProvider().value
                 let providerName = LLMProviderType(from: provider).displayName
                 self.segmentsManager.appendDebugMessage("\(providerName) APIリクエストエラー: \(error.localizedDescription)")
             }
