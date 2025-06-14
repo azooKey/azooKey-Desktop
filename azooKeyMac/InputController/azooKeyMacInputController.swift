@@ -562,7 +562,9 @@ extension azooKeyMacInputController {
                     }
                 }
             } catch {
-                self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(error.localizedDescription)")
+                let provider = Config.LLMProvider().value  
+                let providerName = LLMProviderType(from: provider).displayName
+                self.segmentsManager.appendDebugMessage("\(providerName) APIリクエストエラー: \(error.localizedDescription)")
             }
         }
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")
