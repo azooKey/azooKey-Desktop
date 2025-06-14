@@ -15,6 +15,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", from: "0.8.4", traits: ["Zenzai"]),
+        .package(url: "https://github.com/MacPaw/OpenAI", from: "0.3.0"),
     ],
     targets: [
         .executableTarget(
@@ -30,6 +31,7 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftUtils", package: "AzooKeyKanaKanjiConverter"),
                 .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter"),
+                .product(name: "OpenAI", package: "OpenAI"),
             ],
             plugins: [
                 .plugin(name: "GitInfoPlugin")
