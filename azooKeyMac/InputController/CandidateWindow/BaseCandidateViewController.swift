@@ -12,7 +12,7 @@ class CandidateTableCellView: NSTableCellView {
 
     override init(frame frameRect: NSRect) {
         self.candidateTextField = NSTextField(labelWithString: "")
-        self.candidateTextField.font = NSFont.systemFont(ofSize: 16)
+        self.candidateTextField.font = NSFont.systemFont(ofSize: 18)
         super.init(frame: frameRect)
         self.addSubview(self.candidateTextField)
 
@@ -36,7 +36,7 @@ class CandidateTableCellView: NSTableCellView {
 
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
-            candidateTextField.textColor = backgroundStyle == .emphasized ? .white : .textColor
+            candidateTextField.textColor = backgroundStyle == .emphasized ? .white : NSAppearance.currentDrawing().name == .aqua ? .init(white: 0.3, alpha: 1.0) : .textColor
         }
     }
 }
@@ -54,7 +54,7 @@ class BaseCandidateViewController: NSViewController {
         // Material View（背景）
         let materialView = NSVisualEffectView()
         materialView.blendingMode = .behindWindow
-        materialView.material = .underWindowBackground
+        materialView.material = .windowBackground
         materialView.state = .active
         materialView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -96,6 +96,7 @@ class BaseCandidateViewController: NSViewController {
         self.tableView.delegate = self
         self.tableView.dataSource = self
         self.tableView.selectionHighlightStyle = .regular
+        self.tableView.rowHeight = 28
 
         self.view = containerView
     }
@@ -181,7 +182,7 @@ class BaseCandidateViewController: NSViewController {
         return newWindowFrame
     }
 
-    func getMaxTextWidth(candidates: some Sequence<String>, font: NSFont = .systemFont(ofSize: 16)) -> CGFloat {
+    func getMaxTextWidth(candidates: some Sequence<String>, font: NSFont = .systemFont(ofSize: 18)) -> CGFloat {
         candidates.reduce(0) { maxWidth, candidate in
             let attributedString = NSAttributedString(
                 string: candidate,
