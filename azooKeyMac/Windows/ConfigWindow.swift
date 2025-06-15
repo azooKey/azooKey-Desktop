@@ -10,8 +10,12 @@ struct ConfigWindow: View {
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
-    @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
-    @ConfigState private var openAiModelName = Config.OpenAiModelName()
+    @ConfigState private var llmApiKey = Config.LLMApiKey()
+    @ConfigState private var llmModelName = Config.LLMModelName()
+    @ConfigState private var llmProvider = Config.LLMProvider()
+    @ConfigState private var enableGeminiApiKey = Config.EnableGeminiApiKey()
+    @ConfigState private var customLLMEndpoint = Config.CustomLLMEndpoint()
+    @ConfigState private var enableExternalLLM = Config.EnableExternalLLM()
     @ConfigState private var learning = Config.Learning()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
@@ -20,7 +24,12 @@ struct ConfigWindow: View {
     @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
-    @State private var openAiApiKeyPopover = false
+    @State private var llmApiKeyPopover = false
+    @State private var llmProviderHelpPopover = false
+    @State private var externalLLMHelpPopover = false
+    @State private var connectionTestResult: String = ""
+    @State private var isTestingConnection = false
+    @State private var showTestResult = false
 
     @ViewBuilder
     private func helpButton(helpContent: LocalizedStringKey, isPresented: Binding<Bool>) -> some View {
@@ -32,6 +41,71 @@ struct ConfigWindow: View {
             .buttonBorderShape(.circle)
             .popover(isPresented: isPresented) {
                 Text(helpContent).padding()
+            }
+        }
+    }
+
+    private func canTestConnection() -> Bool {
+        guard enableExternalLLM.value else {
+            return false
+        }
+
+        switch llmProvider.value {
+        case "openai":
+            return enableOpenAiApiKey.value && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
+        case "gemini":
+            return enableGeminiApiKey.value && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
+        case "custom":
+            return !customLLMEndpoint.value.isEmpty && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
+        default:
+            return false
+        }
+    }
+
+    func testConnection() {
+        isTestingConnection = true
+        showTestResult = false
+
+        Task {
+            let providerType = LLMProviderType(from: llmProvider.value)
+            var apiKey = ""
+            var modelName = ""
+            var endpoint: String?
+
+            switch providerType {
+            case .openai:
+                apiKey = llmApiKey.value
+                modelName = llmModelName.value
+            case .gemini:
+                apiKey = llmApiKey.value
+                modelName = llmModelName.value
+            case .custom:
+                endpoint = customLLMEndpoint.value
+                apiKey = llmApiKey.value
+                modelName = llmModelName.value
+            }
+
+            let result = await LLMConnectionTester.testConnection(
+                provider: providerType,
+                apiKey: apiKey,
+                modelName: modelName,
+                endpoint: endpoint
+            )
+
+            await MainActor.run {
+                switch result {
+                case .success(let message):
+                    connectionTestResult = "✅ \(message)"
+                case .failure(let error):
+                    connectionTestResult = "❌ \(error)"
+                }
+                isTestingConnection = false
+                showTestResult = true
+
+                // Hide result after 10 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                    showTestResult = false
+                }
             }
         }
     }
@@ -105,16 +179,114 @@ struct ConfigWindow: View {
                     }
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
-                    Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
+
+                    // External LLM Usage Toggle
                     HStack {
-                        SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
+                        Toggle("外部LLMを使用", isOn: $enableExternalLLM)
                         helpButton(
-                            helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
-                            isPresented: $openAiApiKeyPopover
+                            helpContent: "いい感じ変換機能で外部LLM（OpenAI、Gemini、カスタムエンドポイント）を使用するかどうかを設定します。無効にするとローカルのZenzaiエンジンのみが使用されます。",
+                            isPresented: $externalLLMHelpPopover
                         )
                     }
-                    TextField("OpenAI Model Name", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
-                        .disabled(!$enableOpenAiApiKey.wrappedValue)
+
+                    // LLM Provider Selection (only shown when external LLM is enabled)
+                    if enableExternalLLM.value {
+                        HStack {
+                            Picker("LLMプロバイダー", selection: $llmProvider) {
+                                Text("OpenAI").tag("openai")
+                                Text("Google Gemini").tag("gemini")
+                                Text("カスタム").tag("custom")
+                            }
+                            helpButton(
+                                helpContent: "いい感じ変換機能で使用するLLMプロバイダーを選択してください。\n• OpenAI: ChatGPT API\n• Google Gemini: Gemini API\n• カスタム: 独自のエンドポイント",
+                                isPresented: $llmProviderHelpPopover
+                            )
+                        }
+                    }
+
+                    // LLM Settings (only shown when external LLM is enabled)
+                    if enableExternalLLM.value {
+                        // API Key (unified for all providers)
+                        HStack {
+                            SecureField("APIキー", text: $llmApiKey, prompt: {
+                                switch llmProvider.value {
+                                case "openai":
+                                    return Text("例: sk-xxxxxxxxxxx")
+                                case "gemini":
+                                    return Text("例: AIza...")
+                                default:
+                                    return Text("APIキーを入力")
+                                }
+                            }())
+                            helpButton(
+                                helpContent: {
+                                    switch llmProvider.value {
+                                    case "openai":
+                                        return "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。"
+                                    case "gemini":
+                                        return "Gemini APIキーはローカルのみで管理され、外部に公開されることはありません。Google AI Studioから取得できます。"
+                                    default:
+                                        return "APIキーはローカルのみで管理され、外部に公開されることはありません。"
+                                    }
+                                }(),
+                                isPresented: $llmApiKeyPopover
+                            )
+                        }
+
+                        // Model Name Settings
+                        Group {
+                            let promptText: LocalizedStringKey = {
+                                switch llmProvider.value {
+                                case "openai": return "例: gpt-4o-mini"
+                                case "gemini": return "例: gemini-1.5-flash"
+                                case "custom": return "例: gpt-4o-mini または gemini-1.5-flash"
+                                default: return "モデル名を入力"
+                                }
+                            }()
+                            TextField("モデル名", text: $llmModelName, prompt: Text(promptText))
+                        }
+
+                        // Custom Endpoint Settings (OpenAI API compatible)
+                        if llmProvider.value == "custom" {
+                            TextField("カスタムエンドポイントURL", text: $customLLMEndpoint, prompt: Text("例: https://api.example.com/v1/chat/completions"))
+
+                            Text("API設定（OpenAI互換形式）")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            TextField("APIキー", text: $llmApiKey, prompt: Text("例: sk-xxx... または AIza..."))
+                            TextField("モデル名", text: $llmModelName, prompt: Text("例: gpt-4o-mini または gemini-1.5-flash"))
+
+                            Text("注意：Gemini互換エンドポイントの例")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .textSelection(.enabled)
+                        }
+
+                        // Connection Test Button
+                        HStack {
+                            Button(action: testConnection) {
+                                HStack {
+                                    if isTestingConnection {
+                                        ProgressView()
+                                            .scaleEffect(0.5)
+                                    }
+                                    Text(isTestingConnection ? "テスト中..." : "接続テスト")
+                                }
+                            }
+                            .disabled(isTestingConnection || !canTestConnection())
+
+                            if showTestResult && !connectionTestResult.isEmpty {
+                                Text(connectionTestResult)
+                                    .foregroundColor(connectionTestResult.contains("成功") ? .green : .red)
+                                    .font(.caption)
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
                     LabeledContent("Version") {
                         Text(PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version")
                             .monospaced()

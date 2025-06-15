@@ -501,17 +501,36 @@ extension azooKeyMacInputController {
 
         self.segmentsManager.appendDebugMessage("プロンプト取得成功: \(prompt) << \(composingText)")
 
-        let apiKey = Config.OpenAiApiKey().value
-        let modelName = Config.OpenAiModelName().value
-        let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
+        guard let llmClient = LLMClientManager.shared.createClient() else {
+            self.segmentsManager.appendDebugMessage("LLMクライアントが設定されていません")
+            return
+        }
+
+        let provider = Config.LLMProvider().value
+        let modelName: String
+        switch LLMProviderType(from: provider) {
+        case .openai:
+            modelName = Config.LLMModelName().value
+        case .gemini:
+            modelName = Config.LLMModelName().value
+        case .custom:
+            // For custom, use the appropriate model based on enabled API
+            if Config.EnableOpenAiApiKey().value {
+                modelName = Config.LLMModelName().value
+            } else {
+                modelName = Config.LLMModelName().value
+            }
+        }
+
+        let request = LLMRequest(prompt: prompt, target: composingText, modelName: modelName)
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
-        self.segmentsManager.appendDebugMessage("Using OpenAI Model: \(modelName)")
+        self.segmentsManager.appendDebugMessage("Using LLM Provider: \(provider), Model: \(modelName)")
 
         // 非同期タスクでリクエストを送信
         Task {
             do {
                 self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, logger: { [weak self] message in
+                let predictions = try await llmClient.sendRequest(request, logger: { [weak self] message in
                     self?.segmentsManager.appendDebugMessage(message)
                 })
                 self.segmentsManager.appendDebugMessage("APIレスポンス受信成功: \(predictions)")
@@ -543,7 +562,9 @@ extension azooKeyMacInputController {
                     }
                 }
             } catch {
-                self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(error.localizedDescription)")
+                let provider = Config.LLMProvider().value
+                let providerName = LLMProviderType(from: provider).displayName
+                self.segmentsManager.appendDebugMessage("\(providerName) APIリクエストエラー: \(error.localizedDescription)")
             }
         }
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")

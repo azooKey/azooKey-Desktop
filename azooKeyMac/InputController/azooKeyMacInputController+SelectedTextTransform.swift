@@ -124,7 +124,9 @@ extension azooKeyMacInputController {
                         await MainActor.run {
                             self.segmentsManager.appendDebugMessage("showPromptInputWindow: Preview error: \(error)")
                         }
-                        callback("Error: \(error.localizedDescription)")
+                        let provider = Config.LLMProvider().value
+                        let providerName = LLMProviderType(from: provider).displayName
+                        callback("\(providerName) Error: \(error.localizedDescription)")
                     }
                 }
             },
@@ -197,23 +199,35 @@ extension azooKeyMacInputController {
                 }
 
                 // Get API key from Config
-                let apiKey = Config.OpenAiApiKey().value
-                guard !apiKey.isEmpty else {
+                guard let llmClient = LLMClientManager.shared.createClient() else {
                     await MainActor.run {
-                        self.segmentsManager.appendDebugMessage("transformSelectedText: No OpenAI API key configured")
+                        self.segmentsManager.appendDebugMessage("transformSelectedText: LLMクライアントが設定されていません")
                     }
                     return
                 }
 
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: API key found, making request")
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: LLMクライアント準備完了、リクエスト送信中")
                 }
 
-                let modelName = Config.OpenAiModelName().value
-                let result = try await OpenAIClient.sendTextTransformRequest(
+                let provider = Config.LLMProvider().value
+                let modelName: String
+                switch LLMProviderType(from: provider) {
+                case .openai:
+                    modelName = Config.LLMModelName().value
+                case .gemini:
+                    modelName = Config.LLMModelName().value
+                case .custom:
+                    if Config.EnableOpenAiApiKey().value {
+                        modelName = Config.LLMModelName().value
+                    } else {
+                        modelName = Config.LLMModelName().value
+                    }
+                }
+
+                let result = try await llmClient.sendTextTransformRequest(
                     prompt: systemPrompt,
-                    modelName: modelName,
-                    apiKey: apiKey
+                    modelName: modelName
                 )
 
                 await MainActor.run {
@@ -225,7 +239,9 @@ extension azooKeyMacInputController {
                 }
             } catch {
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Error occurred: \(error)")
+                    let provider = Config.LLMProvider().value
+                    let providerName = LLMProviderType(from: provider).displayName
+                    self.segmentsManager.appendDebugMessage("transformSelectedText: \(providerName) Error occurred: \(error)")
                 }
             }
         }
@@ -363,24 +379,36 @@ extension azooKeyMacInputController {
 
         systemPrompt += "\n\nUser instructions: \(prompt)"
 
-        // Get API key from Config
-        let apiKey = Config.OpenAiApiKey().value
-        guard !apiKey.isEmpty else {
+        // Get LLM client
+        guard let llmClient = LLMClientManager.shared.createClient() else {
             await MainActor.run {
-                self.segmentsManager.appendDebugMessage("getTransformationPreview: No OpenAI API key configured")
+                self.segmentsManager.appendDebugMessage("getTransformationPreview: LLMクライアントが設定されていません")
             }
-            throw NSError(domain: "TransformationError", code: -2, userInfo: [NSLocalizedDescriptionKey: "OpenAI API key is missing. Please configure your API key in preferences."])
+            throw NSError(domain: "TransformationError", code: -2, userInfo: [NSLocalizedDescriptionKey: "LLMクライアントが設定されていません。設定でAPIキーを確認してください。"])
         }
 
         await MainActor.run {
-            self.segmentsManager.appendDebugMessage("getTransformationPreview: Sending preview request to API")
+            self.segmentsManager.appendDebugMessage("getTransformationPreview: LLMクライアント準備完了、プレビューリクエスト送信中")
         }
 
-        let modelName = Config.OpenAiModelName().value
-        let result = try await OpenAIClient.sendTextTransformRequest(
+        let provider = Config.LLMProvider().value
+        let modelName: String
+        switch LLMProviderType(from: provider) {
+        case .openai:
+            modelName = Config.LLMModelName().value
+        case .gemini:
+            modelName = Config.LLMModelName().value
+        case .custom:
+            if Config.EnableOpenAiApiKey().value {
+                modelName = Config.LLMModelName().value
+            } else {
+                modelName = Config.LLMModelName().value
+            }
+        }
+
+        let result = try await llmClient.sendTextTransformRequest(
             prompt: systemPrompt,
-            modelName: modelName,
-            apiKey: apiKey
+            modelName: modelName
         )
 
         await MainActor.run {
