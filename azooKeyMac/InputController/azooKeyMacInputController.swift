@@ -510,15 +510,15 @@ extension azooKeyMacInputController {
         let modelName: String
         switch LLMProviderType(from: provider) {
         case .openai:
-            modelName = Config.OpenAiModelName().value
+            modelName = Config.LLMModelName().value
         case .gemini:
-            modelName = Config.GeminiModelName().value
+            modelName = Config.LLMModelName().value
         case .custom:
             // For custom, use the appropriate model based on enabled API
             if Config.EnableOpenAiApiKey().value {
-                modelName = Config.OpenAiModelName().value
+                modelName = Config.LLMModelName().value
             } else {
-                modelName = Config.GeminiModelName().value
+                modelName = Config.LLMModelName().value
             }
         }
 

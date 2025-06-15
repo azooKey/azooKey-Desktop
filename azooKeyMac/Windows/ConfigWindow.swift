@@ -11,10 +11,9 @@ struct ConfigWindow: View {
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
     @ConfigState private var llmApiKey = Config.LLMApiKey()
-    @ConfigState private var openAiModelName = Config.OpenAiModelName()
+    @ConfigState private var llmModelName = Config.LLMModelName()
     @ConfigState private var llmProvider = Config.LLMProvider()
     @ConfigState private var enableGeminiApiKey = Config.EnableGeminiApiKey()
-    @ConfigState private var geminiModelName = Config.GeminiModelName()
     @ConfigState private var customLLMEndpoint = Config.CustomLLMEndpoint()
     @ConfigState private var enableExternalLLM = Config.EnableExternalLLM()
     @ConfigState private var learning = Config.Learning()
@@ -53,11 +52,11 @@ struct ConfigWindow: View {
 
         switch llmProvider.value {
         case "openai":
-            return enableOpenAiApiKey.value && !llmApiKey.value.isEmpty && !openAiModelName.value.isEmpty
+            return enableOpenAiApiKey.value && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
         case "gemini":
-            return enableGeminiApiKey.value && !llmApiKey.value.isEmpty && !geminiModelName.value.isEmpty
+            return enableGeminiApiKey.value && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
         case "custom":
-            return !customLLMEndpoint.value.isEmpty && !llmApiKey.value.isEmpty && !openAiModelName.value.isEmpty
+            return !customLLMEndpoint.value.isEmpty && !llmApiKey.value.isEmpty && !llmModelName.value.isEmpty
         default:
             return false
         }
@@ -76,14 +75,14 @@ struct ConfigWindow: View {
             switch providerType {
             case .openai:
                 apiKey = llmApiKey.value
-                modelName = openAiModelName.value
+                modelName = llmModelName.value
             case .gemini:
                 apiKey = llmApiKey.value
-                modelName = geminiModelName.value
+                modelName = llmModelName.value
             case .custom:
                 endpoint = customLLMEndpoint.value
                 apiKey = llmApiKey.value
-                modelName = openAiModelName.value
+                modelName = llmModelName.value
             }
 
             let result = await LLMConnectionTester.testConnection(
@@ -235,10 +234,16 @@ struct ConfigWindow: View {
                         }
 
                         // Model Name Settings
-                        if llmProvider.value == "openai" {
-                            TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
-                        } else if llmProvider.value == "gemini" {
-                            TextField("モデル名", text: $geminiModelName, prompt: Text("例: gemini-1.5-flash"))
+                        Group {
+                            let promptText: LocalizedStringKey = {
+                                switch llmProvider.value {
+                                case "openai": return "例: gpt-4o-mini"
+                                case "gemini": return "例: gemini-1.5-flash"
+                                case "custom": return "例: gpt-4o-mini または gemini-1.5-flash"
+                                default: return "モデル名を入力"
+                                }
+                            }()
+                            TextField("モデル名", text: $llmModelName, prompt: Text(promptText))
                         }
 
                         // Custom Endpoint Settings (OpenAI API compatible)
@@ -250,7 +255,7 @@ struct ConfigWindow: View {
                                 .foregroundColor(.secondary)
 
                             TextField("APIキー", text: $llmApiKey, prompt: Text("例: sk-xxx... または AIza..."))
-                            TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini または gemini-1.5-flash"))
+                            TextField("モデル名", text: $llmModelName, prompt: Text("例: gpt-4o-mini または gemini-1.5-flash"))
 
                             Text("注意：Gemini互換エンドポイントの例")
                                 .font(.caption)

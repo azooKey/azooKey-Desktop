@@ -214,14 +214,14 @@ extension azooKeyMacInputController {
                 let modelName: String
                 switch LLMProviderType(from: provider) {
                 case .openai:
-                    modelName = Config.OpenAiModelName().value
+                    modelName = Config.LLMModelName().value
                 case .gemini:
-                    modelName = Config.GeminiModelName().value
+                    modelName = Config.LLMModelName().value
                 case .custom:
                     if Config.EnableOpenAiApiKey().value {
-                        modelName = Config.OpenAiModelName().value
+                        modelName = Config.LLMModelName().value
                     } else {
-                        modelName = Config.GeminiModelName().value
+                        modelName = Config.LLMModelName().value
                     }
                 }
 
@@ -395,14 +395,14 @@ extension azooKeyMacInputController {
         let modelName: String
         switch LLMProviderType(from: provider) {
         case .openai:
-            modelName = Config.OpenAiModelName().value
+            modelName = Config.LLMModelName().value
         case .gemini:
-            modelName = Config.GeminiModelName().value
+            modelName = Config.LLMModelName().value
         case .custom:
             if Config.EnableOpenAiApiKey().value {
-                modelName = Config.OpenAiModelName().value
+                modelName = Config.LLMModelName().value
             } else {
-                modelName = Config.GeminiModelName().value
+                modelName = Config.LLMModelName().value
             }
         }
 

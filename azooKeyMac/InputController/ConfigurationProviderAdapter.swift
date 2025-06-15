@@ -2,7 +2,7 @@ import Core
 import Foundation
 
 /// Adapter that bridges the main app's Config system to Core's LLMClientManager.ConfigurationProvider
-struct ConfigurationProviderAdapter: LLMClientManager.ConfigurationProvider {
+struct ConfigurationProviderAdapter: Core.LLMClientManager.ConfigurationProvider {
     var llmProvider: String {
         Config.LLMProvider().value
     }
@@ -12,15 +12,15 @@ struct ConfigurationProviderAdapter: LLMClientManager.ConfigurationProvider {
     }
 
     var openAIModelName: String {
-        Config.OpenAiModelName().value
+        Config.LLMModelName().value
     }
 
     var geminiModelName: String {
-        Config.GeminiModelName().value
+        Config.LLMModelName().value
     }
 
     var customModelName: String {
-        ""  // No custom model name config item exists yet
+        Config.LLMModelName().value
     }
 
     var customEndpoint: String {

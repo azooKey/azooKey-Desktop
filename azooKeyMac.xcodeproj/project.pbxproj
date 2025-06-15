@@ -20,7 +20,6 @@
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
 		55A9C54B2BA847A1007F6F02 /* main@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 55A9C54A2BA847A1007F6F02 /* main@2x.tiff */; };
-		E98172F62DFAD6AB008DAE33 /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = E98172AF2DFAD35D008DAE34 /* OpenAI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,8 +75,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E98172F62DFAD6AB008DAE33 /* OpenAI in Frameworks */,
-				554A26602DB37657003C5CFB /* Core in Frameworks */,
+					554A26602DB37657003C5CFB /* Core in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,7 +177,6 @@
 			name = azooKeyMac;
 			packageProductDependencies = (
 				554A265F2DB37657003C5CFB /* Core */,
-				E98172AF2DFAD35D008DAE34 /* OpenAI */,
 			);
 			productName = azooKeyMac;
 			productReference = 1A41E61426E745D9009B65D7 /* azooKeyMac.app */;
@@ -261,7 +258,6 @@
 			mainGroup = 1A41E60B26E745D9009B65D7;
 			packageReferences = (
 				554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */,
-				E98172AE2DFAD35D008DAE33 /* XCRemoteSwiftPackageReference "OpenAI" */,
 			);
 			productRefGroup = 1A41E61526E745D9009B65D7 /* Products */;
 			projectDirPath = "";
@@ -694,14 +690,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		E98172AE2DFAD35D008DAE33 /* XCRemoteSwiftPackageReference "OpenAI" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/MacPaw/OpenAI";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.4.3;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -713,11 +701,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */;
 			productName = Core;
-		};
-		E98172AF2DFAD35D008DAE34 /* OpenAI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E98172AE2DFAD35D008DAE33 /* XCRemoteSwiftPackageReference "OpenAI" */;
-			productName = OpenAI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
