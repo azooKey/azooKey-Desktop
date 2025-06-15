@@ -134,43 +134,16 @@ public struct LLMConfiguration {
 }
 
 /// Enumeration of supported LLM provider types.
-public enum LLMProviderType {
+public enum LLMProviderType: String, CaseIterable {
     /// OpenAI provider (GPT models)
-    case openai
+    case openai = "openai"
     /// Google Gemini provider
-    case gemini
+    case gemini = "gemini"
     /// Custom OpenAI-compatible provider
-    case custom
-
-    // 定数を定義
-    private enum Constants {
-        static let openai = "openai"
-        static let gemini = "gemini"
-        static let custom = "custom"
-    }
+    case custom = "custom"
 
     public init(from string: String) {
-        switch string.lowercased() {
-        case Constants.openai:
-            self = .openai
-        case Constants.gemini:
-            self = .gemini
-        case Constants.custom:
-            self = .custom
-        default:
-            self = .openai
-        }
-    }
-
-    public var stringValue: String {
-        switch self {
-        case .openai:
-            return Constants.openai
-        case .gemini:
-            return Constants.gemini
-        case .custom:
-            return Constants.custom
-        }
+        self = LLMProviderType(rawValue: string.lowercased()) ?? .openai
     }
 
     public var displayName: String {
