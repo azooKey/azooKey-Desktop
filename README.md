@@ -18,6 +18,9 @@ macOS 14とmacOS 15で動作確認しています。macOS 13でも利用でき�
 - 「設定」>「キーボード」>「入力ソース」を編集>「+」ボタン>「日本語」>azooKeyを追加>完了
 - メニューバーアイコンからazooKeyを選択
 
+### アップデート
+azooKey on macOS は[**Sparkle**](https://sparkle-project.org/)を利用しており、起動後に自動で新しいバージョンがないか確認します。また、メニューバーの **azooKey** メニューから「Check for updates…」を選択することで手動で更新確認も行えます。
+
 ### Install with Homebrew
 または、Homebrewを用いてインストールすることもできます。
 
@@ -99,7 +102,7 @@ git submodule update --init
 * Git LFSが導入されていない環境では、重みファイルがローカル環境に落とせていない場合があります。`azooKey-Desktop/azooKeyMac/Resources/zenz-v3-small-gguf/ggml-model-Q5_K_M.gguf`が70MB程度のファイルとなっているかを確認してください
 
 ### pkgファイルの作成
-`pkgbuild.sh`によって配布用のdmgファイルを作成できます。`build/azooKeyMac.app` としてDeveloper IDで署名済みの.appを配置してください。
+`pkgbuild.sh`によって配布用のdmgファイルを作成できます。`build/azooKeyMac.app` としてDeveloper IDで署名済みの.appを配置してください。このスクリプトはSparkleの `sign_update` と `generate_appcast` を用いて署名付き`appcast.xml`を生成するため、ダウンロードURLや鍵情報を適宜書き換えて利用してください。
 
 ### TODO
 * 予測変換を表示する

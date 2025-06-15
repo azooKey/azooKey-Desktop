@@ -15,8 +15,9 @@
 		551434E72D576B6600A9B5CA /* lm_r_xbx.marisa in Resources */ = {isa = PBXBuildFile; fileRef = 551434E22D576B6600A9B5CA /* lm_r_xbx.marisa */; };
 		551434E82D576B6600A9B5CA /* lm_c_abc.marisa in Resources */ = {isa = PBXBuildFile; fileRef = 551434E12D576B6600A9B5CA /* lm_c_abc.marisa */; };
 		551434EA2D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf in Resources */ = {isa = PBXBuildFile; fileRef = 551434E92D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf */; };
-		554A26602DB37657003C5CFB /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 554A265F2DB37657003C5CFB /* Core */; };
-		556C52FB2BAAAF7E00EB343F /* en.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52F92BAAAF7D00EB343F /* en.tiff */; };
+               554A26602DB37657003C5CFB /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 554A265F2DB37657003C5CFB /* Core */; };
+               D65052AD2E634F6C00AABCDF /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D65052AC2E634F6C00AABCDF /* Sparkle */; };
+               556C52FB2BAAAF7E00EB343F /* en.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52F92BAAAF7D00EB343F /* en.tiff */; };
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
 		55A9C54B2BA847A1007F6F02 /* main@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 55A9C54A2BA847A1007F6F02 /* main@2x.tiff */; };
@@ -75,7 +76,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				554A26602DB37657003C5CFB /* Core in Frameworks */,
+                               554A26602DB37657003C5CFB /* Core in Frameworks */,
+                               D65052AD2E634F6C00AABCDF /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,7 +178,8 @@
 			);
 			name = azooKeyMac;
 			packageProductDependencies = (
-				554A265F2DB37657003C5CFB /* Core */,
+                               554A265F2DB37657003C5CFB /* Core */,
+                               D65052AC2E634F6C00AABCDF /* Sparkle */,
 			);
 			productName = azooKeyMac;
 			productReference = 1A41E61426E745D9009B65D7 /* azooKeyMac.app */;
@@ -257,7 +260,8 @@
 			);
 			mainGroup = 1A41E60B26E745D9009B65D7;
 			packageReferences = (
-				554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */,
+                               554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */,
+                               D65052AB2E634F6C00AABCDF /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 1A41E61526E745D9009B65D7 /* Products */;
 			projectDirPath = "";
@@ -689,16 +693,32 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+               D65052AB2E634F6C00AABCDF /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+                       isa = XCRemoteSwiftPackageReference;
+                       repositoryURL = "https://github.com/sparkle-project/Sparkle";
+                       requirement = {
+                               kind = upToNextMajorVersion;
+                               minimumVersion = 2.7.0;
+                       };
+               };
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		554A265F2DB37657003C5CFB /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Core;
 		};
-		554A26612DB3765F003C5CFB /* Core */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */;
-			productName = Core;
-		};
+                554A26612DB3765F003C5CFB /* Core */ = {
+                        isa = XCSwiftPackageProductDependency;
+                        package = 554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */;
+                        productName = Core;
+                };
+               D65052AC2E634F6C00AABCDF /* Sparkle */ = {
+                       isa = XCSwiftPackageProductDependency;
+                       package = D65052AB2E634F6C00AABCDF /* XCRemoteSwiftPackageReference "Sparkle" */;
+                       productName = Sparkle;
+               };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1A41E60C26E745D9009B65D7 /* Project object */;

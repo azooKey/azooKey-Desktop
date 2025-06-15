@@ -12,6 +12,7 @@ extension azooKeyMacInputController {
         self.appMenu.addItem(NSMenuItem.separator())
         self.appMenu.addItem(NSMenuItem(title: "詳細設定を開く", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
+        self.appMenu.addItem(NSMenuItem(title: "Check for updates...", action: #selector(self.checkForUpdates(_:)), keyEquivalent: ""))
     }
 
     @objc private func toggleZenzai(_ sender: Any) {
@@ -47,6 +48,10 @@ extension azooKeyMacInputController {
 
     @objc func openConfigWindow(_ sender: Any) {
         (NSApplication.shared.delegate as? AppDelegate)!.openConfigWindow()
+    }
+
+    @objc func checkForUpdates(_ sender: Any) {
+        (NSApplication.shared.delegate as? AppDelegate)?.checkForUpdates()
     }
 
     // MARK: - Application Support Directory

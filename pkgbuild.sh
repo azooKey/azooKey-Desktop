@@ -82,3 +82,27 @@ xcrun notarytool submit azooKey-release-signed.pkg --keychain-profile "Notarytoo
 
 # Staple
 xcrun stapler staple azooKey-release-signed.pkg
+
+# Build Sparkle utilities if needed
+SPARKLE_PATH=Sparkle
+if [ ! -d "$SPARKLE_PATH" ]; then
+  git clone --depth 1 https://github.com/sparkle-project/Sparkle "$SPARKLE_PATH"
+fi
+if [ ! -f "$SPARKLE_PATH"/build/Build/Products/Release/sign_update ]; then
+  xcodebuild -project "$SPARKLE_PATH"/Sparkle.xcodeproj -scheme sign_update -configuration Release -derivedDataPath "$SPARKLE_PATH"/build build
+fi
+if [ ! -f "$SPARKLE_PATH"/build/Build/Products/Release/generate_appcast ]; then
+  xcodebuild -project "$SPARKLE_PATH"/Sparkle.xcodeproj -scheme generate_appcast -configuration Release -derivedDataPath "$SPARKLE_PATH"/build build
+fi
+SIGN_UPDATE_TOOL="$SPARKLE_PATH"/build/Build/Products/Release/sign_update
+GENERATE_APPCAST_TOOL="$SPARKLE_PATH"/build/Build/Products/Release/generate_appcast
+
+# Sign the pkg for Sparkle
+if [ -x "$SIGN_UPDATE_TOOL" ]; then
+  "$SIGN_UPDATE_TOOL" azooKey-release-signed.pkg > azooKey-release-signed.pkg.signature
+fi
+
+# Generate appcast feed
+if [ -x "$GENERATE_APPCAST_TOOL" ]; then
+  "$GENERATE_APPCAST_TOOL" --download-url-prefix "https://example.com/releases" -o appcast.xml azooKey-release-signed.pkg
+fi
