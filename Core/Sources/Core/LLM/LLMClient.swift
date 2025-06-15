@@ -136,11 +136,11 @@ public struct LLMConfiguration {
 /// Enumeration of supported LLM provider types.
 public enum LLMProviderType: String, CaseIterable {
     /// OpenAI provider (GPT models)
-    case openai = "openai"
+    case openai
     /// Google Gemini provider
-    case gemini = "gemini"
+    case gemini
     /// Custom OpenAI-compatible provider
-    case custom = "custom"
+    case custom
 
     public init(from string: String) {
         self = LLMProviderType(rawValue: string.lowercased()) ?? .openai

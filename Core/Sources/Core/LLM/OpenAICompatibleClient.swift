@@ -91,6 +91,6 @@ public final class OpenAICompatibleClient: LLMClient {
         guard let text = String(bytes: data, encoding: .utf8) else {
             throw LLMError.parseError("Failed to decode response as UTF-8")
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text
     }
 }

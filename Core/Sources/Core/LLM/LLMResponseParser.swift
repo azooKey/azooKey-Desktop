@@ -76,7 +76,7 @@ public enum LLMResponseParser {
             throw LLMError.invalidResponseStructure("Invalid message structure in first choice")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return content
     }
 
     // Parse simple JSON array format (legacy support)
