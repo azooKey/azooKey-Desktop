@@ -2,7 +2,7 @@ import Core
 import Testing
 
 struct LLMProviderTypeTests {
-    
+
     @Test func testFromString() {
         #expect(LLMProviderType(from: "openai") == .openai)
         #expect(LLMProviderType(from: "gemini") == .gemini)
@@ -19,7 +19,7 @@ struct LLMProviderTypeTests {
 }
 
 struct LLMConfigurationTests {
-    
+
     @Test func testDefaultEndpoint() throws {
         let openaiConfig = try LLMConfiguration(provider: .openai, apiKey: "test", modelName: "gpt-4")
         #expect(openaiConfig.endpoint == nil)
@@ -27,13 +27,18 @@ struct LLMConfigurationTests {
         let geminiConfig = try LLMConfiguration(provider: .gemini, apiKey: "test", modelName: "gemini-1.5-flash")
         #expect(geminiConfig.endpoint == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
 
-        let customConfig = try LLMConfiguration(provider: .custom, apiKey: "test", modelName: "model", endpoint: "https://custom.api.com")
+        let customConfig = try LLMConfiguration(
+            provider: .custom,
+            apiKey: "test",
+            modelName: "model",
+            endpoint: "https://custom.api.com"
+        )
         #expect(customConfig.endpoint == "https://custom.api.com")
     }
 }
 
 struct LLMClientFactoryTests {
-    
+
     @Test func testClientCreation() throws {
         let openaiConfig = try LLMConfiguration(provider: .openai, apiKey: "test", modelName: "gpt-4")
         let openaiClient = LLMClientFactory.createClient(for: openaiConfig)

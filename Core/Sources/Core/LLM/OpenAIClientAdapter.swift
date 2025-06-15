@@ -20,7 +20,7 @@ public final class OpenAIClientAdapter: LLMClient {
                 `\(request.prompt)<\(request.target)>`
                 """)!
         ]
-        
+
         let query = ChatQuery(
             messages: messages,
             model: .gpt3_5Turbo
@@ -28,27 +28,27 @@ public final class OpenAIClientAdapter: LLMClient {
 
         do {
             let result = try await openAI.chats(query: query)
-            
+
             guard let content = result.choices.first?.message.content else {
                 throw LLMError.invalidResponseStructure("No content in response")
             }
-            
+
             logger?("Response: \(content)")
-            
+
             // Try to parse as JSON for predictions
             if let data = content.data(using: String.Encoding.utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let predictions = json["predictions"] as? [String] {
                 return predictions
             }
-            
+
             // Fallback: Split by newlines and clean up
             let lines = content.components(separatedBy: CharacterSet.newlines)
                 .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            
+
             return lines.isEmpty ? [content] : lines
-            
+
         } catch {
             // Convert any error to LLMError
             if let description = (error as? LocalizedError)?.errorDescription {
@@ -70,11 +70,11 @@ public final class OpenAIClientAdapter: LLMClient {
 
         do {
             let result = try await openAI.chats(query: query)
-            
+
             guard let content = result.choices.first?.message.content else {
                 throw LLMError.invalidResponseStructure("No content in response")
             }
-            
+
             return content
         } catch {
             // Convert any error to LLMError

@@ -111,7 +111,8 @@ public struct LLMPrompts {
     public static let defaultPrompt = """
     If the text in <> is a language name (e.g., <えいご>, <ふらんすご>, <すぺいんご>, <ちゅうごくご>, <かんこくご>, etc.),
     translate the preceding text into that language with 3-5 different variations.
-    Otherwise, generate 3-5 alternative expressions of the text in <> that maintain its core meaning, following the sentence preceding <>.
+    Otherwise, generate 3-5 alternative expressions of the text in <> that maintain its core meaning,
+    following the sentence preceding <>.
     considering:
     - Different word choices
     - Varying formality levels

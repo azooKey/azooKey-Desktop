@@ -36,7 +36,8 @@ public final class OpenAICompatibleClient: LLMClient {
         }
 
         // Try OpenAI format first
-        if let predictions = try? LLMResponseParser.parseOpenAICompatibleResponse(data, logger: logger), !predictions.isEmpty {
+        if let predictions = try? LLMResponseParser.parseOpenAICompatibleResponse(data, logger: logger),
+           !predictions.isEmpty {
             return predictions
         }
 

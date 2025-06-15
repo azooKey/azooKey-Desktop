@@ -67,7 +67,14 @@ public struct LLMConfiguration {
     ///   - maxTokens: Maximum tokens to generate (must be > 0)
     ///   - temperature: Sampling temperature (must be 0.0-2.0)
     /// - Throws: LLMConfigurationError if any parameter is invalid
-    public init(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil, maxTokens: Int = 150, temperature: Double = 0.7) throws {
+    public init(
+        provider: LLMProviderType,
+        apiKey: String,
+        modelName: String,
+        endpoint: String? = nil,
+        maxTokens: Int = 150,
+        temperature: Double = 0.7
+    ) throws {
         // APIキーの検証
         let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAPIKey.isEmpty else {

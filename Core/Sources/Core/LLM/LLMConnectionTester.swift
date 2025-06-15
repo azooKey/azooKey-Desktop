@@ -8,10 +8,20 @@ public enum LLMConnectionTestResult: Sendable {
 public struct LLMConnectionTester {
     // エラーメッセージの最大長を定義
     private static let maxErrorMessageLength = 60
-    
-    public static func testConnection(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String? = nil) async -> LLMConnectionTestResult {
+
+    public static func testConnection(
+        provider: LLMProviderType,
+        apiKey: String,
+        modelName: String,
+        endpoint: String? = nil
+    ) async -> LLMConnectionTestResult {
         do {
-            let configuration = try createConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
+            let configuration = try createConfiguration(
+                provider: provider,
+                apiKey: apiKey,
+                modelName: modelName,
+                endpoint: endpoint
+            )
 
             guard let client = LLMClientFactory.createClient(for: configuration) else {
                 return .failure("設定が正しくありません。APIキーとモデル名を確認してください。")
@@ -33,7 +43,12 @@ public struct LLMConnectionTester {
         }
     }
 
-    private static func createConfiguration(provider: LLMProviderType, apiKey: String, modelName: String, endpoint: String?) throws -> LLMConfiguration {
+    private static func createConfiguration(
+        provider: LLMProviderType,
+        apiKey: String,
+        modelName: String,
+        endpoint: String?
+    ) throws -> LLMConfiguration {
         try LLMConfiguration(provider: provider, apiKey: apiKey, modelName: modelName, endpoint: endpoint)
     }
 
