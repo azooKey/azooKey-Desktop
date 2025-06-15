@@ -91,5 +91,14 @@
 	</array>
 	<key>tsInputMethodIconFileKey</key>
 	<string>main.tiff</string>
+        <key>SUEnableAutomaticChecks</key>
+        <true/>
+        <key>SUFeedURL</key>
+        <string>https://example.com/appcast.xml</string>
+        <key>SUPublicEDKey</key>
+        <string>replace-with-public-key</string>
+        <key>SUEnableInstallerLauncherService</key>
+        <true/>
 </dict>
 </plist>
+

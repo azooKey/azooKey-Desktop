@@ -9,6 +9,7 @@ import Cocoa
 import InputMethodKit
 import KanaKanjiConverterModuleWithDefaultDictionary
 import SwiftUI
+import Sparkle
 
 // Necessary to launch this app
 class NSManualApplication: NSApplication {
@@ -33,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var configWindowController: NSWindowController?
     var userDictionaryEditorWindowController: NSWindowController?
     @MainActor var kanaKanjiConverter = KanaKanjiConverter()
+    let updateController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     private static func buildSwiftUIWindow(
         _ view: some View,
@@ -76,6 +78,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             userDictionaryEditorWindow.makeKeyAndOrderFront(nil)
         } else {
             (self.userDictionaryEditorWindow, self.userDictionaryEditorWindowController) = Self.buildSwiftUIWindow(UserDictionaryEditorWindow(), title: "設定")
+        }
+    }
+
+    func checkForUpdates() {
+        if self.updateController.updater.canCheckForUpdates {
+            self.updateController.updater.checkForUpdates()
         }
     }
 
