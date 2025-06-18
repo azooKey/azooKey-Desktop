@@ -506,25 +506,11 @@ extension azooKeyMacInputController {
             return
         }
 
-        let provider = Config.LLMProvider().value
-        let modelName: String
-        switch LLMProviderType(from: provider) {
-        case .openai:
-            modelName = Config.LLMModelName().value
-        case .gemini:
-            modelName = Config.LLMModelName().value
-        case .custom:
-            // For custom, use the appropriate model based on enabled API
-            if Config.EnableOpenAiApiKey().value {
-                modelName = Config.LLMModelName().value
-            } else {
-                modelName = Config.LLMModelName().value
-            }
-        }
+        let modelName = Config.LLMModelName().value
 
         let request = LLMRequest(prompt: prompt, target: composingText, modelName: modelName)
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
-        self.segmentsManager.appendDebugMessage("Using LLM Provider: \(provider), Model: \(modelName)")
+        self.segmentsManager.appendDebugMessage("Using LLM Model: \(modelName)")
 
         // 非同期タスクでリクエストを送信
         Task {

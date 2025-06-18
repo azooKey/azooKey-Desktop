@@ -28,20 +28,8 @@ public final class LLMClientManager {
             return nil
         }
 
-        let modelName: String
-        let endpoint: String?
-
-        switch providerType {
-        case .openai:
-            modelName = configProvider.openAIModelName
-            endpoint = nil
-        case .gemini:
-            modelName = configProvider.geminiModelName
-            endpoint = nil  // Will use default endpoint from LLMConfiguration
-        case .custom:
-            modelName = configProvider.customModelName
-            endpoint = configProvider.customEndpoint
-        }
+        let modelName = configProvider.openAIModelName  // All return the same value currently
+        let endpoint: String? = providerType == .custom ? configProvider.customEndpoint : nil
 
         guard !modelName.isEmpty else {
             return nil

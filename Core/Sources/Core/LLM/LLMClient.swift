@@ -161,9 +161,9 @@ public enum LLMProviderType: String, CaseIterable {
 public enum LLMClientFactory {
     public static func createClient(for configuration: LLMConfiguration) -> LLMClient? {
         switch configuration.provider {
-        case .openai:
+        case .openai, .gemini:
             return OpenAIClientAdapter(configuration: configuration)
-        case .gemini, .custom:
+        case .custom:
             return OpenAICompatibleClient(configuration: configuration)
         }
     }

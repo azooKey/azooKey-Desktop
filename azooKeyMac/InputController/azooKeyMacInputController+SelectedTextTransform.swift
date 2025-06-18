@@ -210,20 +210,7 @@ extension azooKeyMacInputController {
                     self.segmentsManager.appendDebugMessage("transformSelectedText: LLMクライアント準備完了、リクエスト送信中")
                 }
 
-                let provider = Config.LLMProvider().value
-                let modelName: String
-                switch LLMProviderType(from: provider) {
-                case .openai:
-                    modelName = Config.LLMModelName().value
-                case .gemini:
-                    modelName = Config.LLMModelName().value
-                case .custom:
-                    if Config.EnableOpenAiApiKey().value {
-                        modelName = Config.LLMModelName().value
-                    } else {
-                        modelName = Config.LLMModelName().value
-                    }
-                }
+                let modelName = Config.LLMModelName().value
 
                 let result = try await llmClient.sendTextTransformRequest(
                     prompt: systemPrompt,
@@ -391,20 +378,7 @@ extension azooKeyMacInputController {
             self.segmentsManager.appendDebugMessage("getTransformationPreview: LLMクライアント準備完了、プレビューリクエスト送信中")
         }
 
-        let provider = Config.LLMProvider().value
-        let modelName: String
-        switch LLMProviderType(from: provider) {
-        case .openai:
-            modelName = Config.LLMModelName().value
-        case .gemini:
-            modelName = Config.LLMModelName().value
-        case .custom:
-            if Config.EnableOpenAiApiKey().value {
-                modelName = Config.LLMModelName().value
-            } else {
-                modelName = Config.LLMModelName().value
-            }
-        }
+        let modelName = Config.LLMModelName().value
 
         let result = try await llmClient.sendTextTransformRequest(
             prompt: systemPrompt,
