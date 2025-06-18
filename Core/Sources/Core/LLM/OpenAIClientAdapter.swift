@@ -77,29 +77,4 @@ public final class OpenAIClientAdapter: LLMClient {
         }
     }
 
-    public func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String {
-
-        let query = ChatQuery(
-            messages: [.init(role: .user, content: prompt)!],
-            model: configuration.modelName,
-            maxTokens: configuration.maxTokens,
-            temperature: configuration.temperature
-        )
-
-        do {
-            let result = try await openAI.chats(query: query)
-
-            guard let content = result.choices.first?.message.content else {
-                throw LLMError.invalidResponseStructure("No content in response")
-            }
-
-            return content
-        } catch {
-            // Convert any error to LLMError
-            if let description = (error as? LocalizedError)?.errorDescription {
-                throw LLMError.parseError(description)
-            }
-            throw LLMError.parseError(error.localizedDescription)
-        }
-    }
 }

@@ -52,22 +52,6 @@ public struct LLMRequest {
         ]
     }
 
-    /// Creates JSON structure for text transformation requests
-    public static func createTextTransformJSON(
-        prompt: String,
-        modelName: String,
-        maxTokens: Int = 150,
-        temperature: Double = 0.7
-    ) -> [String: Any] {
-        [
-            "model": modelName,
-            "messages": [
-                ["role": "user", "content": prompt]
-            ],
-            "max_tokens": maxTokens,
-            "temperature": temperature
-        ]
-    }
 }
 
 public enum LLMError: LocalizedError {

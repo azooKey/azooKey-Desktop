@@ -53,32 +53,6 @@ public enum LLMResponseParser {
         return allPredictions
     }
 
-    // Parse OpenAI-compatible text completion response
-    public static func parseOpenAITextResponse(_ data: Data) throws -> String {
-        let jsonObject: Any
-        do {
-            jsonObject = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            throw LLMError.parseError("Failed to parse JSON response: \(error.localizedDescription)")
-        }
-
-        guard let jsonDict = jsonObject as? [String: Any] else {
-            throw LLMError.invalidResponseStructure("Expected JSON object")
-        }
-
-        guard let choices = jsonDict["choices"] as? [[String: Any]], !choices.isEmpty else {
-            throw LLMError.invalidResponseStructure("Missing or empty 'choices' field")
-        }
-
-        guard let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw LLMError.invalidResponseStructure("Invalid message structure in first choice")
-        }
-
-        return content
-    }
-
     // Parse simple JSON array format (legacy support)
     public static func parseSimpleJSONArray(_ data: Data, logger: ((String) -> Void)?) throws -> [String] {
         let jsonObject: Any

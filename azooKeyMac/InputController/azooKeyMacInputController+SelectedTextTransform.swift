@@ -212,10 +212,10 @@ extension azooKeyMacInputController {
 
                 let modelName = Config.LLMModelName().value
 
-                let result = try await llmClient.sendTextTransformRequest(
-                    prompt: systemPrompt,
-                    modelName: modelName
-                )
+                // Use sendRequest instead of deprecated sendTextTransformRequest
+                let request = LLMRequest(prompt: systemPrompt, target: selectedText, modelName: modelName)
+                let results = try await llmClient.sendRequest(request, logger: nil)
+                let result = results.first ?? ""
 
                 await MainActor.run {
                     self.segmentsManager.appendDebugMessage("transformSelectedText: API request completed, result: \(result)")
@@ -380,10 +380,10 @@ extension azooKeyMacInputController {
 
         let modelName = Config.LLMModelName().value
 
-        let result = try await llmClient.sendTextTransformRequest(
-            prompt: systemPrompt,
-            modelName: modelName
-        )
+        // Use sendRequest instead of deprecated sendTextTransformRequest
+        let request = LLMRequest(prompt: systemPrompt, target: selectedText, modelName: modelName)
+        let results = try await llmClient.sendRequest(request, logger: nil)
+        let result = results.first ?? ""
 
         await MainActor.run {
             self.segmentsManager.appendDebugMessage("getTransformationPreview: Preview result: '\(result)'")

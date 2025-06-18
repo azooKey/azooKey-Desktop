@@ -27,11 +27,12 @@ public struct LLMConnectionTester {
                 return .failure("設定が正しくありません。APIキーとモデル名を確認してください。")
             }
 
-            // Simple test prompt
-            let testPrompt = "Hello"
-            let result = try await client.sendTextTransformRequest(prompt: testPrompt, modelName: modelName)
+            // Simple test request using actual sendRequest method
+            let testRequest = LLMRequest(prompt: "テスト", target: "こんにちは", modelName: modelName)
+            let results = try await client.sendRequest(testRequest, logger: nil)
 
-            let truncatedResult = truncateMessage(result, maxLength: 30)
+            let firstResult = results.first ?? "応答なし"
+            let truncatedResult = truncateMessage(firstResult, maxLength: 30)
             return .success("接続成功: \(truncatedResult)")
 
         } catch let error as LLMError {

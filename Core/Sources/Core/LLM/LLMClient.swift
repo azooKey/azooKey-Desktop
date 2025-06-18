@@ -11,13 +11,6 @@ public protocol LLMClient {
     /// - Throws: LLMError if the request fails or response is invalid
     func sendRequest(_ request: LLMRequest, logger: ((String) -> Void)?) async throws -> [String]
 
-    /// Sends a simple text transformation request to the LLM service.
-    /// - Parameters:
-    ///   - prompt: The text prompt to send to the LLM
-    ///   - modelName: The model name to use (note: some implementations may override this with configuration)
-    /// - Returns: Transformed text response from the LLM
-    /// - Throws: LLMError if the request fails or response is invalid
-    func sendTextTransformRequest(prompt: String, modelName: String) async throws -> String
 }
 
 public enum LLMConfigurationError: LocalizedError {
