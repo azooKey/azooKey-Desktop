@@ -21,7 +21,8 @@ extension StringConfigItem {
 }
 
 extension Config {
-    struct OpenAiApiKey: StringConfigItem {
+    /// 統合されたLLM API Key（プロバイダーに応じて使用される）
+    struct LLMApiKey: StringConfigItem {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiKey"
 
         private static var cachedValue: String = ""
@@ -61,14 +62,43 @@ extension Config {
 }
 
 extension Config {
-    /// OpenAIモデル名
-    struct OpenAiModelName: StringConfigItem {
+    /// LLMモデル名（プロバイダーに応じて使用される）
+    struct LLMModelName: StringConfigItem {
         static var `default`: String = "gpt-4o-mini"
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
+
+        var value: String {
+            get {
+                UserDefaults.standard.string(forKey: Self.key) ?? Self.default
+            }
+            nonmutating set {
+                UserDefaults.standard.set(newValue, forKey: Self.key)
+            }
+        }
     }
 
     /// プロンプト履歴（JSON形式で保存）
     struct PromptHistory: StringConfigItem {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
+    }
+
+    /// LLMプロバイダー（openai, gemini, custom）
+    struct LLMProvider: StringConfigItem {
+        static var `default`: String = "openai"
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.LLMProvider"
+
+        var value: String {
+            get {
+                UserDefaults.standard.string(forKey: Self.key) ?? Self.default
+            }
+            nonmutating set {
+                UserDefaults.standard.set(newValue, forKey: Self.key)
+            }
+        }
+    }
+
+    /// カスタムLLMエンドポイントURL（OpenAI API互換）
+    struct CustomLLMEndpoint: StringConfigItem {
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.CustomLLMEndpoint"
     }
 }
