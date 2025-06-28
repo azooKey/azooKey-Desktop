@@ -10,6 +10,8 @@ extension azooKeyMacInputController {
         self.appMenu.addItem(self.zenzaiToggleMenuItem)
         self.appMenu.addItem(self.liveConversionToggleMenuItem)
         self.appMenu.addItem(NSMenuItem.separator())
+        let callXPCMenuItem = NSMenuItem(title: "Converter Processと通信", action: #selector(self.callConverterProcess(_:)), keyEquivalent: "")
+        self.appMenu.addItem(callXPCMenuItem)
         self.appMenu.addItem(NSMenuItem(title: "詳細設定を開く", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
     }
@@ -56,6 +58,16 @@ extension azooKeyMacInputController {
             try FileManager.default.createDirectory(at: self.segmentsManager.azooKeyMemoryDir, withIntermediateDirectories: true)
         } catch {
             self.segmentsManager.appendDebugMessage("\(#line): \(error.localizedDescription)")
+        }
+    }
+
+    @objc func callConverterProcess(_ sender: Any) {
+        self.callXPCExample(firstNumber: 42, secondNumber: 58) { result in
+            if let result = result {
+                self.segmentsManager.appendDebugMessage("XPC result: \(result)")
+            } else {
+                self.segmentsManager.appendDebugMessage("XPC call failed")
+            }
         }
     }
 }

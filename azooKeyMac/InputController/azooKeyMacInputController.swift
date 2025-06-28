@@ -73,7 +73,57 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.candidatesViewController.delegate = self
         self.replaceSuggestionsViewController.delegate = self
         self.segmentsManager.delegate = self
+        // Setup XPC connection before calling super.init
+        self.setupXPCConnection()
         self.setupMenu()
+    }
+
+    // MARK: - XPC Connection to ConverterXPC
+
+    private var xpcConnection: NSXPCConnection?
+
+    func setupXPCConnection() {
+        self.segmentsManager.appendDebugMessage("\(#function): Setting up XPC connection to ConverterServer")
+        let connection = NSXPCConnection(
+            machServiceName: "dev.ensan.inputmethod.azooKeyMac.ConverterServer",
+            options: []
+        )
+        connection.remoteObjectInterface = NSXPCInterface(with: ConverterXPCProtocol.self)
+        connection.resume()
+        self.xpcConnection = connection
+    }
+
+    /// Performs a sample call to ConverterServer.
+    /// If the connection is missing or errors out, it re‑establishes the connection and retries once.
+    func callXPCExample(
+        firstNumber: Int,
+        secondNumber: Int,
+        retry: Bool = true,
+        completion: @escaping (Int?) -> Void
+    ) {
+        self.segmentsManager.appendDebugMessage("\(#function), called")
+        // 1) Ensure we have (at least) an attempted connection.
+        if xpcConnection == nil {
+            self.segmentsManager.appendDebugMessage("XPC connection not found. Establishing…")
+            self.setupXPCConnection()
+        }
+
+        // 2) Try to obtain the proxy and make the remote call.
+        guard let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
+            guard let self else {
+                return
+            }
+            self.segmentsManager.appendDebugMessage("XPC error: \(error.localizedDescription)")
+            completion(nil)
+        }) as? ConverterXPCProtocol else {
+            self.segmentsManager.appendDebugMessage("XPC proxy not available.")
+            completion(nil)
+            return
+        }
+        // 3) Perform the remote calculation.
+        proxy.performCalculation(firstNumber: firstNumber, secondNumber: secondNumber) { result in
+            completion(result)
+        }
     }
 
     @MainActor
