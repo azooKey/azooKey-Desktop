@@ -260,7 +260,6 @@ enum OpenAIError: LocalizedError {
 // OpenAI APIクライアント
 enum OpenAIClient {
     private static let xpcClient = OpenAIXPCClient()
-    
     // APIリクエストを送信する静的メソッド
     static func sendRequest(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String? = nil, logger: ((String) -> Void)? = nil) async throws -> [String] {
         let configEndpoint = Config.OpenAiApiEndpoint().value
@@ -272,14 +271,57 @@ enum OpenAIClient {
             Config.OpenAiApiEndpoint.default
         }
 
-        return try await xpcClient.sendRequest(
-            prompt: request.prompt,
-            mode: request.target,
-            systemPrompt: "You are an assistant that predicts the continuation of short text.",
-            model: request.modelName,
-            apiKey: apiKey,
-            endpoint: endpoint
-        )
+        // Try XPC first, fallback to direct implementation
+        do {
+            return try await xpcClient.sendRequest(
+                prompt: request.prompt,
+                mode: request.target,
+                systemPrompt: "You are an assistant that predicts the continuation of short text.",
+                model: request.modelName,
+                apiKey: apiKey,
+                endpoint: endpoint
+            )
+        } catch {
+            logger?("XPC service unavailable, falling back to direct implementation: \(error)")
+            return try await sendRequestDirect(request, apiKey: apiKey, apiEndpoint: apiEndpoint, logger: logger)
+        }
+    }
+
+    // Direct implementation as fallback
+    private static func sendRequestDirect(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String? = nil, logger: ((String) -> Void)? = nil) async throws -> [String] {
+        let configEndpoint = Config.OpenAiApiEndpoint().value
+        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
+            apiEndpoint
+        } else if !configEndpoint.isEmpty {
+            configEndpoint
+        } else {
+            Config.OpenAiApiEndpoint.default
+        }
+
+        guard let url = URL(string: endpoint) else {
+            throw OpenAIError.invalidURL
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = request.toJSON()
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIError.noServerResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+        }
+
+        return try parseResponseData(data, logger: logger)
     }
 
     // レスポンスデータのパースを行う静的メソッド
@@ -341,14 +383,74 @@ enum OpenAIClient {
             Config.OpenAiApiEndpoint.default
         }
 
-        return try await xpcClient.sendTextTransformRequest(
-            text: "",
-            prompt: prompt,
-            context: nil,
-            model: modelName,
-            apiKey: apiKey,
-            endpoint: endpoint
-        )
+        // Try XPC first, fallback to direct implementation
+        do {
+            return try await xpcClient.sendTextTransformRequest(
+                text: "",
+                prompt: prompt,
+                context: nil,
+                model: modelName,
+                apiKey: apiKey,
+                endpoint: endpoint
+            )
+        } catch {
+            return try await sendTextTransformRequestDirect(prompt: prompt, modelName: modelName, apiKey: apiKey, apiEndpoint: apiEndpoint)
+        }
+    }
+
+    // Direct implementation as fallback
+    private static func sendTextTransformRequestDirect(prompt: String, modelName: String, apiKey: String, apiEndpoint: String? = nil) async throws -> String {
+        let configEndpoint = Config.OpenAiApiEndpoint().value
+        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
+            apiEndpoint
+        } else if !configEndpoint.isEmpty {
+            configEndpoint
+        } else {
+            Config.OpenAiApiEndpoint.default
+        }
+
+        guard let url = URL(string: endpoint) else {
+            throw OpenAIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions."],
+                ["role": "user", "content": prompt]
+            ],
+            "max_tokens": 150,
+            "temperature": 0.7
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIError.noServerResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+        }
+
+        let jsonObject = try JSONSerialization.jsonObject(with: data)
+        guard let jsonDict = jsonObject as? [String: Any],
+              let choices = jsonDict["choices"] as? [[String: Any]],
+              let firstChoice = choices.first,
+              let message = firstChoice["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw OpenAIError.invalidResponseStructure(jsonObject)
+        }
+
+        return content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
     }
 }
 

@@ -5,6 +5,7 @@
 
 import Foundation
 
+// swiftlint:disable function_parameter_count
 @objc protocol OpenAIServiceProtocol {
     func sendRequest(
         prompt: String,
@@ -15,7 +16,7 @@ import Foundation
         endpoint: String?,
         with reply: @escaping (String?, Error?) -> Void
     )
-    
+
     func sendTextTransformRequest(
         text: String,
         prompt: String,
@@ -26,35 +27,37 @@ import Foundation
         with reply: @escaping (String?, Error?) -> Void
     )
 }
+// swiftlint:enable function_parameter_count
 
 class OpenAIXPCClient {
     private var connection: NSXPCConnection?
-    
+
     init() {
         setupConnection()
     }
-    
+
     deinit {
         connection?.invalidate()
     }
-    
+
     private func setupConnection() {
         connection = NSXPCConnection(serviceName: "com.azooKey.azooKeyMac.OpenAIService")
         connection?.remoteObjectInterface = NSXPCInterface(with: OpenAIServiceProtocol.self)
-        
+
         connection?.interruptionHandler = { [weak self] in
             print("XPC connection interrupted")
             self?.connection = nil
         }
-        
+
         connection?.invalidationHandler = { [weak self] in
             print("XPC connection invalidated")
             self?.connection = nil
         }
-        
+
         connection?.resume()
     }
-    
+
+    // swiftlint:disable function_parameter_count
     func sendRequest(
         prompt: String,
         mode: String,
@@ -63,14 +66,14 @@ class OpenAIXPCClient {
         apiKey: String,
         endpoint: String?
     ) async throws -> [String] {
-        return try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
             guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
                 continuation.resume(throwing: error)
             }) as? OpenAIServiceProtocol else {
                 continuation.resume(throwing: NSError(domain: "OpenAIXPCClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to connect to XPC service"]))
                 return
             }
-            
+
             service.sendRequest(
                 prompt: prompt,
                 mode: mode,
@@ -91,7 +94,7 @@ class OpenAIXPCClient {
             }
         }
     }
-    
+
     func sendTextTransformRequest(
         text: String,
         prompt: String,
@@ -100,14 +103,14 @@ class OpenAIXPCClient {
         apiKey: String,
         endpoint: String?
     ) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
             guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
                 continuation.resume(throwing: error)
             }) as? OpenAIServiceProtocol else {
                 continuation.resume(throwing: NSError(domain: "OpenAIXPCClient", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to connect to XPC service"]))
                 return
             }
-            
+
             service.sendTextTransformRequest(
                 text: text,
                 prompt: prompt,
@@ -126,4 +129,5 @@ class OpenAIXPCClient {
             }
         }
     }
+    // swiftlint:enable function_parameter_count
 }

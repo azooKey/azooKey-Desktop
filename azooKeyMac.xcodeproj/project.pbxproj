@@ -20,6 +20,7 @@
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
 		55A9C54B2BA847A1007F6F02 /* main@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 55A9C54A2BA847A1007F6F02 /* main@2x.tiff */; };
+		E97E2F362E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,7 +38,28 @@
 			remoteGlobalIDString = 1A41E61326E745D9009B65D7;
 			remoteInfo = azooKeyMac;
 		};
+		E97E2F342E1CD06100A9AC2A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A41E60C26E745D9009B65D7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E97E2F292E1CD06100A9AC2A;
+			remoteInfo = azooKeyMacOpenAIService;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E97E2F3B2E1CD06100A9AC2A /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				E97E2F362E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1A41E61426E745D9009B65D7 /* azooKeyMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = azooKeyMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -58,7 +80,18 @@
 		55A27D012BAAADDB00512DCD /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		55A9C54A2BA847A1007F6F02 /* main@2x.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = "main@2x.tiff"; sourceTree = "<group>"; };
 		55D3B7632DB36BDE00044FD1 /* Core */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Core; sourceTree = "<group>"; };
+		E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = azooKeyMacOpenAIService.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E97E2F372E1CD06100A9AC2A /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E97E2F292E1CD06100A9AC2A /* azooKeyMacOpenAIService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		55CE06C72CB01F000002DAF1 /* InputController */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = InputController; sourceTree = "<group>"; };
@@ -68,6 +101,7 @@
 		55CE06ED2CB01F160002DAF1 /* azooKeyMacTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacTests; sourceTree = "<group>"; };
 		55CE06F12CB01F160002DAF1 /* azooKeyMacUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacUITests; sourceTree = "<group>"; };
 		55CE06F52CB01F180002DAF1 /* Preview Content */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "Preview Content"; sourceTree = "<group>"; };
+		E97E2F2B2E1CD06100A9AC2A /* azooKeyMacOpenAIService */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (E97E2F372E1CD06100A9AC2A /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacOpenAIService; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +127,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E97E2F272E1CD06100A9AC2A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +144,7 @@
 				1A41E61626E745D9009B65D7 /* azooKeyMac */,
 				55CE06ED2CB01F160002DAF1 /* azooKeyMacTests */,
 				55CE06F12CB01F160002DAF1 /* azooKeyMacUITests */,
+				E97E2F2B2E1CD06100A9AC2A /* azooKeyMacOpenAIService */,
 				1A41E61526E745D9009B65D7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -113,6 +155,7 @@
 				1A41E61426E745D9009B65D7 /* azooKeyMac.app */,
 				1A41E62426E745DD009B65D7 /* azooKeyMacTests.xctest */,
 				1A41E62E26E745DD009B65D7 /* azooKeyMacUITests.xctest */,
+				E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -161,11 +204,13 @@
 				1A41E61026E745D9009B65D7 /* Sources */,
 				1A41E61126E745D9009B65D7 /* Frameworks */,
 				1A41E61226E745D9009B65D7 /* Resources */,
+				E97E2F3B2E1CD06100A9AC2A /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				554A26622DB3765F003C5CFB /* PBXTargetDependency */,
+				E97E2F352E1CD06100A9AC2A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				55CE06C72CB01F000002DAF1 /* InputController */,
@@ -224,6 +269,28 @@
 			productReference = 1A41E62E26E745DD009B65D7 /* azooKeyMacUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		E97E2F292E1CD06100A9AC2A /* azooKeyMacOpenAIService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E97E2F382E1CD06100A9AC2A /* Build configuration list for PBXNativeTarget "azooKeyMacOpenAIService" */;
+			buildPhases = (
+				E97E2F262E1CD06100A9AC2A /* Sources */,
+				E97E2F272E1CD06100A9AC2A /* Frameworks */,
+				E97E2F282E1CD06100A9AC2A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E97E2F2B2E1CD06100A9AC2A /* azooKeyMacOpenAIService */,
+			);
+			name = azooKeyMacOpenAIService;
+			packageProductDependencies = (
+			);
+			productName = azooKeyMacOpenAIService;
+			productReference = E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -231,7 +298,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1300;
+				LastSwiftUpdateCheck = 1640;
 				LastUpgradeCheck = 1530;
 				TargetAttributes = {
 					1A41E61326E745D9009B65D7 = {
@@ -244,6 +311,9 @@
 					1A41E62D26E745DD009B65D7 = {
 						CreatedOnToolsVersion = 13.0;
 						TestTargetID = 1A41E61326E745D9009B65D7;
+					};
+					E97E2F292E1CD06100A9AC2A = {
+						CreatedOnToolsVersion = 16.4;
 					};
 				};
 			};
@@ -266,6 +336,7 @@
 				1A41E61326E745D9009B65D7 /* azooKeyMac */,
 				1A41E62326E745DD009B65D7 /* azooKeyMacTests */,
 				1A41E62D26E745DD009B65D7 /* azooKeyMacUITests */,
+				E97E2F292E1CD06100A9AC2A /* azooKeyMacOpenAIService */,
 			);
 		};
 /* End PBXProject section */
@@ -303,6 +374,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E97E2F282E1CD06100A9AC2A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -328,6 +406,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E97E2F262E1CD06100A9AC2A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -344,6 +429,11 @@
 		554A26622DB3765F003C5CFB /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = 554A26612DB3765F003C5CFB /* Core */;
+		};
+		E97E2F352E1CD06100A9AC2A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E97E2F292E1CD06100A9AC2A /* azooKeyMacOpenAIService */;
+			targetProxy = E97E2F342E1CD06100A9AC2A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -641,6 +731,63 @@
 			};
 			name = Release;
 		};
+		E97E2F392E1CD06100A9AC2A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9S3UXHYP65;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = azooKeyMacOpenAIService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = azooKeyMacOpenAIService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.azooKey-debug.azooKeyMac.OpenAIService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E97E2F3A2E1CD06100A9AC2A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9S3UXHYP65;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = azooKeyMacOpenAIService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = azooKeyMacOpenAIService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.azooKey-debug.azooKeyMac.OpenAIService";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -676,6 +823,15 @@
 			buildConfigurations = (
 				1A41E63F26E745DD009B65D7 /* Debug */,
 				1A41E64026E745DD009B65D7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E97E2F382E1CD06100A9AC2A /* Build configuration list for PBXNativeTarget "azooKeyMacOpenAIService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E97E2F392E1CD06100A9AC2A /* Debug */,
+				E97E2F3A2E1CD06100A9AC2A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

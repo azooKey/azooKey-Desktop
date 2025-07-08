@@ -5,6 +5,7 @@
 
 import Foundation
 
+// swiftlint:disable function_parameter_count
 @objc protocol OpenAIServiceProtocol {
     func sendRequest(
         prompt: String,
@@ -26,3 +27,4 @@ import Foundation
         with reply: @escaping (String?, Error?) -> Void
     )
 }
+// swiftlint:enable function_parameter_count

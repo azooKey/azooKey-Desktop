@@ -7,8 +7,8 @@ import Foundation
 
 class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        let exportedObject = OpenAIService()
         newConnection.exportedInterface = NSXPCInterface(with: OpenAIServiceProtocol.self)
+        let exportedObject = OpenAIService()
         newConnection.exportedObject = exportedObject
         newConnection.resume()
         return true
