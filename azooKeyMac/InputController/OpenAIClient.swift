@@ -310,8 +310,10 @@ enum OpenAIClient {
         let body = request.toJSON()
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        // 非同期でリクエストを送信
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
 
+        // レスポンスの検証
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenAIError.noServerResponse
         }
@@ -321,6 +323,7 @@ enum OpenAIClient {
             throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
         }
 
+        // レスポンスデータの解析
         return try parseResponseData(data, logger: logger)
     }
 
@@ -430,8 +433,10 @@ enum OpenAIClient {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        // Send async request
         let (data, response) = try await URLSession.shared.data(for: request)
 
+        // Validate response
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenAIError.noServerResponse
         }
@@ -441,6 +446,7 @@ enum OpenAIClient {
             throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
         }
 
+        // Parse response data
         let jsonObject = try JSONSerialization.jsonObject(with: data)
         guard let jsonDict = jsonObject as? [String: Any],
               let choices = jsonDict["choices"] as? [[String: Any]],
@@ -450,7 +456,7 @@ enum OpenAIClient {
             throw OpenAIError.invalidResponseStructure(jsonObject)
         }
 
-        return content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
