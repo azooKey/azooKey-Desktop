@@ -35,10 +35,10 @@ fi
 # Check if xcpretty is installed
 if command -v xcpretty &> /dev/null
 then
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive | xcpretty
+    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates | xcpretty
 else
     echo "xcpretty could not be found. Proceeding without xcpretty."
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive
+    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates
 fi
 
 if [ "$DRY_RUN" = true ]; then
