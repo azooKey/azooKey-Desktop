@@ -56,11 +56,16 @@ rm ${EXPORT_PATH}/ExportOptions.plist
 # Use this script to create a plist package for distribution
 # pkgbuild --analyze --root ./build/ pkg.plist
 
-# Create a temporary package
+# Copy LaunchAgent plist to app Resources
+mkdir -p "${EXPORT_PATH}/azooKeyMac.app/Contents/Resources"
+cp com.azooKey.azooKeyMac.OpenAIService.plist "${EXPORT_PATH}/azooKeyMac.app/Contents/Resources/"
+
+# Create a temporary package with postinstall script
 pkgbuild --root ${EXPORT_PATH} \
          --component-plist pkg.plist --identifier dev.ensan.inputmethod.azooKeyMac \
          --version 0 \
          --install-location /Library/Input\ Methods \
+         --scripts . \
          azooKey-tmp.pkg
 
 # Create a distribution file

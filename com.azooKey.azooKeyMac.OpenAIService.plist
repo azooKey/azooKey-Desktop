@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.azooKey.azooKeyMac.OpenAIService</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Library/Input Methods/azooKeyMac.app/Contents/XPCServices/azooKeyMacOpenAIService.xpc/Contents/MacOS/azooKeyMacOpenAIService</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>com.azooKey.azooKeyMac.OpenAIService</key>
+		<true/>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>

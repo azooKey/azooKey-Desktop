@@ -50,5 +50,19 @@ if [ "$DRY_RUN" = true ]; then
 else
     sudo rm -rf /Library/Input\ Methods/azooKeyMac.app
     sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/
+    
+    # Install LaunchAgent for XPC service
+    LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+    mkdir -p "$LAUNCH_AGENTS_DIR"
+    
+    # Unload if already loaded
+    launchctl unload "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist" 2>/dev/null || true
+    
+    # Copy LaunchAgent plist
+    cp com.azooKey.azooKeyMac.OpenAIService.plist "$LAUNCH_AGENTS_DIR/"
+    
+    # Load LaunchAgent
+    launchctl load "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist"
+    
     pkill azooKeyMac
 fi

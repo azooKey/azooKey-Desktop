@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# postinstall script for azooKeyMac installer
+
+# Install LaunchAgent for XPC service
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+mkdir -p "$LAUNCH_AGENTS_DIR"
+
+# Unload if already loaded
+launchctl unload "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist" 2>/dev/null || true
+
+# Copy LaunchAgent plist from the installed app
+PLIST_SOURCE="/Library/Input Methods/azooKeyMac.app/Contents/Resources/com.azooKey.azooKeyMac.OpenAIService.plist"
+if [ -f "$PLIST_SOURCE" ]; then
+    cp "$PLIST_SOURCE" "$LAUNCH_AGENTS_DIR/"
+    
+    # Load LaunchAgent
+    launchctl load "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist"
+fi
+
+exit 0
