@@ -412,7 +412,7 @@ final class SegmentsManager {
             } else {
                 return .hidden
             }
-        case .deadKeyComposition(let deadKeyChar):
+        case .deadKeyComposition(_):
             return .hidden
         }
     }
@@ -505,7 +505,7 @@ final class SegmentsManager {
         switch inputState {
         case .none:
             return MarkedText(text: [], selectionRange: .notFound)
-        case .deadKeyComposition(let deadKeyChar):
+        case .deadKeyComposition(_):
             return MarkedText(text: [.init(content: self.composingText.convertTarget, focus: .focused)], selectionRange: .notFound)
         case .composing:
             let text = if self.lastOperation == .delete {
