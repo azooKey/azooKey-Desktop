@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.azooKey.azooKeyMac.OpenAIService</string>
+	<string>dev.ensan.inputmethod.azooKeyMac.OpenAIService</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Library/Input Methods/azooKeyMac.app/Contents/XPCServices/azooKeyMacOpenAIService.xpc/Contents/MacOS/azooKeyMacOpenAIService</string>
 	</array>
 	<key>MachServices</key>
 	<dict>
-		<key>com.azooKey.azooKeyMac.OpenAIService</key>
+		<key>dev.ensan.inputmethod.azooKeyMac.OpenAIService</key>
 		<true/>
 	</dict>
 	<key>KeepAlive</key>

@@ -56,13 +56,13 @@ else
     mkdir -p "$LAUNCH_AGENTS_DIR"
     
     # Unload if already loaded
-    launchctl unload "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist" 2>/dev/null || true
+    launchctl unload "$LAUNCH_AGENTS_DIR/dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist" 2>/dev/null || true
     
     # Copy LaunchAgent plist
-    cp com.azooKey.azooKeyMac.OpenAIService.plist "$LAUNCH_AGENTS_DIR/"
+    cp dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist "$LAUNCH_AGENTS_DIR/"
     
     # Load LaunchAgent
-    launchctl load "$LAUNCH_AGENTS_DIR/com.azooKey.azooKeyMac.OpenAIService.plist"
+    launchctl load "$LAUNCH_AGENTS_DIR/dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist"
     
     pkill azooKeyMac
 fi

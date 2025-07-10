@@ -41,7 +41,7 @@ class OpenAIXPCClient {
     }
 
     private func setupConnection() {
-        connection = NSXPCConnection(serviceName: "com.azooKey.azooKeyMac.OpenAIService")
+        connection = NSXPCConnection(serviceName: "dev.ensan.inputmethod.azooKeyMac.OpenAIService")
         connection?.remoteObjectInterface = NSXPCInterface(with: OpenAIServiceProtocol.self)
 
         connection?.interruptionHandler = { [weak self] in
