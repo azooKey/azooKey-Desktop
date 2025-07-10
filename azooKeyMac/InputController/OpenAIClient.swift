@@ -259,8 +259,36 @@ enum OpenAIError: LocalizedError {
 
 // OpenAI APIクライアント
 enum OpenAIClient {
+    private static let xpcClient = OpenAIXPCClient()
     // APIリクエストを送信する静的メソッド
     static func sendRequest(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String? = nil, logger: ((String) -> Void)? = nil) async throws -> [String] {
+        let configEndpoint = Config.OpenAiApiEndpoint().value
+        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
+            apiEndpoint
+        } else if !configEndpoint.isEmpty {
+            configEndpoint
+        } else {
+            Config.OpenAiApiEndpoint.default
+        }
+
+        // Try XPC first, fallback to direct implementation
+        do {
+            return try await xpcClient.sendRequest(
+                prompt: request.prompt,
+                mode: request.target,
+                systemPrompt: "You are an assistant that predicts the continuation of short text.",
+                model: request.modelName,
+                apiKey: apiKey,
+                endpoint: endpoint
+            )
+        } catch {
+            logger?("XPC service unavailable, falling back to direct implementation: \(error)")
+            return try await sendRequestDirect(request, apiKey: apiKey, apiEndpoint: apiEndpoint, logger: logger)
+        }
+    }
+
+    // Direct implementation as fallback
+    private static func sendRequestDirect(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String? = nil, logger: ((String) -> Void)? = nil) async throws -> [String] {
         let configEndpoint = Config.OpenAiApiEndpoint().value
         let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
             apiEndpoint
@@ -349,6 +377,32 @@ enum OpenAIClient {
 
     // Simple text transformation method for AI Transform feature
     static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String, apiEndpoint: String? = nil) async throws -> String {
+        let configEndpoint = Config.OpenAiApiEndpoint().value
+        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
+            apiEndpoint
+        } else if !configEndpoint.isEmpty {
+            configEndpoint
+        } else {
+            Config.OpenAiApiEndpoint.default
+        }
+
+        // Try XPC first, fallback to direct implementation
+        do {
+            return try await xpcClient.sendTextTransformRequest(
+                text: "",
+                prompt: prompt,
+                context: nil,
+                model: modelName,
+                apiKey: apiKey,
+                endpoint: endpoint
+            )
+        } catch {
+            return try await sendTextTransformRequestDirect(prompt: prompt, modelName: modelName, apiKey: apiKey, apiEndpoint: apiEndpoint)
+        }
+    }
+
+    // Direct implementation as fallback
+    private static func sendTextTransformRequestDirect(prompt: String, modelName: String, apiKey: String, apiEndpoint: String? = nil) async throws -> String {
         let configEndpoint = Config.OpenAiApiEndpoint().value
         let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
             apiEndpoint
