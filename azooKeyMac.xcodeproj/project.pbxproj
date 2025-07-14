@@ -21,6 +21,7 @@
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
 		55A9C54B2BA847A1007F6F02 /* main@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 55A9C54A2BA847A1007F6F02 /* main@2x.tiff */; };
 		E97E2F362E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E9F51DD42E24BD97009888E6 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 554A265F2DB37657003C5CFB /* Core */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -131,6 +132,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9F51DD42E24BD97009888E6 /* Core in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,6 +288,7 @@
 			);
 			name = azooKeyMacOpenAIService;
 			packageProductDependencies = (
+				554A265F2DB37657003C5CFB /* Core */,
 			);
 			productName = azooKeyMacOpenAIService;
 			productReference = E97E2F2A2E1CD06100A9AC2A /* azooKeyMacOpenAIService.xpc */;
