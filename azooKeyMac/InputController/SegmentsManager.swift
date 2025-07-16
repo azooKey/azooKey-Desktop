@@ -82,7 +82,7 @@ final class SegmentsManager {
             Candidate(
                 text: string.replacingOccurrences(of: "\n", with: "\\n"),
                 value: 0,
-                correspondingCount: 0,
+                composingCount: .surfaceCount(0),
                 lastMid: 0,
                 data: []
             ),
@@ -206,7 +206,7 @@ final class SegmentsManager {
         // 現在選ばれているprefix candidateが存在する場合、まずそれに合わせてカーソルを移動する
         if let selectionIndex, let candidates, candidates.indices.contains(selectionIndex) {
             var afterComposingText = self.composingText
-            afterComposingText.prefixComplete(correspondingCount: candidates[selectionIndex].correspondingCount)
+            afterComposingText.prefixComplete(composingCount: candidates[selectionIndex].composingCount)
             let prefixCount = self.composingText.convertTarget.count - afterComposingText.convertTarget.count
             _ = self.composingText.moveCursorFromCursorPosition(count: -self.composingText.convertTargetCursorPosition + prefixCount)
         }
@@ -258,7 +258,7 @@ final class SegmentsManager {
     private var candidates: [Candidate]? {
         if let rawCandidates {
             if !self.didExperienceSegmentEdition {
-                if rawCandidates.firstClauseResults.lazy.map({$0.correspondingCount}).max() == rawCandidates.mainResults.lazy.map({$0.correspondingCount}).max() {
+                if rawCandidates.firstClauseResults.contains(where: { $0.composingCount == .surfaceCount(self.composingText.convertTarget.count) || $0.composingCount == .inputCount(self.composingText.input.count) }) {
                     // firstClauseCandidateがmainResultsと同じサイズの場合は、何もしない方が良い
                     return rawCandidates.mainResults
                 } else {
@@ -335,7 +335,7 @@ final class SegmentsManager {
     @MainActor func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
         self.kanaKanjiConverter.setCompletedData(candidate)
         self.kanaKanjiConverter.updateLearningData(candidate)
-        self.composingText.prefixComplete(correspondingCount: candidate.correspondingCount)
+        self.composingText.prefixComplete(composingCount: candidate.composingCount)
 
         if !self.composingText.isEmpty {
             // カーソルを右端に移動する
@@ -463,7 +463,7 @@ final class SegmentsManager {
             Candidate(
                 text: candidateText,
                 value: 0,
-                correspondingCount: composingText.input.count,
+                composingCount: .inputCount(composingText.input.count),
                 lastMid: 0,
                 data: [DicdataElement(
                     word: candidateText,
@@ -522,7 +522,7 @@ final class SegmentsManager {
             }
             return MarkedText(text: [.init(content: text, focus: .none)], selectionRange: .notFound)
         case .previewing:
-            if let fullCandidate = self.rawCandidates?.mainResults.first, fullCandidate.correspondingCount == self.composingText.input.count {
+            if let fullCandidate = self.rawCandidates?.mainResults.first, fullCandidate.composingCount == .inputCount(self.composingText.input.count) || fullCandidate.composingCount == .surfaceCount(self.composingText.convertTarget.count) {
                 return MarkedText(text: [.init(content: fullCandidate.text, focus: .none)], selectionRange: .notFound)
             } else {
                 return MarkedText(text: [.init(content: self.composingText.convertTarget, focus: .none)], selectionRange: .notFound)
@@ -531,7 +531,7 @@ final class SegmentsManager {
             if let candidates, !candidates.isEmpty {
                 self.selectionIndex = min(self.selectionIndex ?? 0, candidates.count - 1)
                 var afterComposingText = self.composingText
-                afterComposingText.prefixComplete(correspondingCount: candidates[self.selectionIndex!].correspondingCount)
+                afterComposingText.prefixComplete(composingCount: candidates[self.selectionIndex!].composingCount)
                 return MarkedText(
                     text: [
                         .init(content: candidates[self.selectionIndex!].text, focus: .focused),

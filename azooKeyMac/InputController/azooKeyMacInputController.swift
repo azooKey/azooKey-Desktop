@@ -545,7 +545,7 @@ extension azooKeyMacInputController {
                     Candidate(
                         text: text,
                         value: PValue(0),
-                        correspondingCount: text.count,
+                        composingCount: .surfaceCount(composingText.count),
                         lastMid: 0,
                         data: [],
                         actions: [],
