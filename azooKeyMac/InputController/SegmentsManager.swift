@@ -258,7 +258,7 @@ final class SegmentsManager {
     private var candidates: [Candidate]? {
         if let rawCandidates {
             if !self.didExperienceSegmentEdition {
-                if rawCandidates.firstClauseResults.contains(where: { $0.composingCount == .surfaceCount(self.composingText.convertTarget.count) || $0.composingCount == .inputCount(self.composingText.input.count) }) {
+                if rawCandidates.firstClauseResults.contains(where: { self.composingText.isWholeComposingText(composingCount: $0.composingCount) }) {
                     // firstClauseCandidateがmainResultsと同じサイズの場合は、何もしない方が良い
                     return rawCandidates.mainResults
                 } else {
@@ -522,7 +522,8 @@ final class SegmentsManager {
             }
             return MarkedText(text: [.init(content: text, focus: .none)], selectionRange: .notFound)
         case .previewing:
-            if let fullCandidate = self.rawCandidates?.mainResults.first, fullCandidate.composingCount == .inputCount(self.composingText.input.count) || fullCandidate.composingCount == .surfaceCount(self.composingText.convertTarget.count) {
+            if let fullCandidate = self.rawCandidates?.mainResults.first,
+               self.composingText.isWholeComposingText(composingCount: fullCandidate.composingCount) {
                 return MarkedText(text: [.init(content: fullCandidate.text, focus: .none)], selectionRange: .notFound)
             } else {
                 return MarkedText(text: [.init(content: self.composingText.convertTarget, focus: .none)], selectionRange: .notFound)
@@ -562,4 +563,12 @@ final class SegmentsManager {
 
 protocol SegmentManagerDelegate: AnyObject {
     func getLeftSideContext(maxCount: Int) -> String?
+}
+
+private extension ComposingText {
+    func isWholeComposingText(composingCount: ComposingCount) -> Bool {
+        var c = self
+        c.prefixComplete(composingCount: composingCount)
+        return c.isEmpty
+    }
 }
