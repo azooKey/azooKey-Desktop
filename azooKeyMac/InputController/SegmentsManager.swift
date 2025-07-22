@@ -480,7 +480,7 @@ final class SegmentsManager {
 
     @MainActor
     func getModifiedRomanCandidate(_ transform: (String) -> String) -> Candidate {
-        let inputString = self.composingText.input.map(\.character).joined()
+        let inputString = String(self.composingText.input.map(\.character))
         let candidateText = transform(inputString)
         let candidate = Candidate(
             text: candidateText,

@@ -257,7 +257,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             })
         case .submitFullWidthRomanCandidate:
             self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
-                $0.applyingTransform(.halfwidthToFullwidth, reverse: false)!
+                $0.applyingTransform(.fullwidthToHalfwidth, reverse: true)!
             })
         case .submitHalfWidthRomanCandidate:
             self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
