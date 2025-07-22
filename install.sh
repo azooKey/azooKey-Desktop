@@ -35,10 +35,10 @@ fi
 # Check if xcpretty is installed
 if command -v xcpretty &> /dev/null
 then
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive | xcpretty
+    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates | xcpretty
 else
     echo "xcpretty could not be found. Proceeding without xcpretty."
-    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive
+    xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac clean archive -archivePath build/archive.xcarchive -allowProvisioningUpdates
 fi
 
 if [ "$DRY_RUN" = true ]; then
@@ -50,5 +50,19 @@ if [ "$DRY_RUN" = true ]; then
 else
     sudo rm -rf /Library/Input\ Methods/azooKeyMac.app
     sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/
+    
+    # Install LaunchAgent for XPC service
+    LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+    mkdir -p "$LAUNCH_AGENTS_DIR"
+    
+    # Unload if already loaded
+    launchctl unload "$LAUNCH_AGENTS_DIR/dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist" 2>/dev/null || true
+    
+    # Copy LaunchAgent plist
+    cp dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist "$LAUNCH_AGENTS_DIR/"
+    
+    # Load LaunchAgent
+    launchctl load "$LAUNCH_AGENTS_DIR/dev.ensan.inputmethod.azooKeyMac.OpenAIService.plist"
+    
     pkill azooKeyMac
 fi
