@@ -47,6 +47,8 @@ public enum ClientAction {
     case submitKatakanaCandidate
     case submitHiraganaCandidate
     case submitHankakuKatakanaCandidate
+    case submitFullWidthRomanCandidate
+    case submitHalfWidthRomanCandidate
 
     // PredictiveSuggestion
     case requestPredictiveSuggestion

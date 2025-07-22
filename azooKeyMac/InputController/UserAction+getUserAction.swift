@@ -180,6 +180,10 @@ extension UserAction {
             return .function(.seven)
         case 100: // F8
             return .function(.eight)
+        case 101: // F9
+            return .function(.nine)
+        case 109: // F10
+            return .function(.ten)
         case 102: // Lang2/kVK_JIS_Eisu
             return .英数
         case 104: // Lang1/kVK_JIS_Kana

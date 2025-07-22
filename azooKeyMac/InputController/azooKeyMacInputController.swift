@@ -255,6 +255,14 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             self.submitCandidate(self.segmentsManager.getModifiedRubyCandidate {
                 $0.toKatakana().applyingTransform(.fullwidthToHalfwidth, reverse: false)!
             })
+        case .submitFullWidthRomanCandidate:
+            self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
+                $0.applyingTransform(.halfwidthToFullwidth, reverse: false)!
+            })
+        case .submitHalfWidthRomanCandidate:
+            self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
+                $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+            })
         case .enableDebugWindow:
             self.segmentsManager.requestDebugWindowMode(enabled: true)
         case .disableDebugWindow:

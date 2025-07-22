@@ -479,6 +479,26 @@ final class SegmentsManager {
     }
 
     @MainActor
+    func getModifiedRomanCandidate(_ transform: (String) -> String) -> Candidate {
+        let inputString = self.composingText.input.map(\.character).joined()
+        let candidateText = transform(inputString)
+        let candidate = Candidate(
+            text: candidateText,
+            value: 0,
+            composingCount: .inputCount(composingText.input.count),
+            lastMid: 0,
+            data: [DicdataElement(
+                word: candidateText,
+                ruby: inputString,
+                cid: CIDData.固有名詞.cid,
+                mid: MIDData.一般.mid,
+                value: 0
+            )]
+        )
+        return candidate
+    }
+
+    @MainActor
     func commitMarkedText(inputState: InputState) -> String {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}

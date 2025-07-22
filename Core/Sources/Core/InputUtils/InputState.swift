@@ -145,6 +145,10 @@ public enum InputState: Sendable, Hashable {
                     return (.submitKatakanaCandidate, .transition(.none))
                 case .eight:
                     return (.submitHankakuKatakanaCandidate, .transition(.none))
+                case .nine:
+                    return (.submitFullWidthRomanCandidate, .transition(.none))
+                case .ten:
+                    return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
             case .かな:
                 return (.consume, .fallthrough)
@@ -194,6 +198,10 @@ public enum InputState: Sendable, Hashable {
                     return (.submitKatakanaCandidate, .transition(.none))
                 case .eight:
                     return (.submitHankakuKatakanaCandidate, .transition(.none))
+                case .nine:
+                    return (.submitFullWidthRomanCandidate, .transition(.none))
+                case .ten:
+                    return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
             case .かな:
                 return (.consume, .fallthrough)
@@ -265,6 +273,10 @@ public enum InputState: Sendable, Hashable {
                     return (.submitKatakanaCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .selecting))
                 case .eight:
                     return (.submitHankakuKatakanaCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .selecting))
+                case .nine:
+                    return (.submitFullWidthRomanCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .selecting))
+                case .ten:
+                    return (.submitHalfWidthRomanCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .selecting))
                 }
             case .number(let num):
                 switch num {

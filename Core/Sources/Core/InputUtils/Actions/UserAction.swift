@@ -22,7 +22,7 @@ public enum UserAction {
     }
 
     public enum Function: Sendable, Equatable, Hashable {
-        case six, seven, eight
+        case six, seven, eight, nine, ten
     }
 
     public enum Number: Sendable, Equatable, Hashable {
