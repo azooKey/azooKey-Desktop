@@ -93,6 +93,14 @@ extension UserAction {
             } else {
                 return .unknown
             }
+        case 0x25: // Control + l
+            if event.modifierFlags.contains(.control) {
+                return .function(.nine)
+            } else if let text = event.characters, isPrintable(text) {
+                return .input(keyMap(text))
+            } else {
+                return .unknown
+            }
         case 0x26: // Control + j
             if event.modifierFlags.contains(.control) {
                 return .function(.six)
@@ -104,6 +112,14 @@ extension UserAction {
         case 0x28: // Control + k
             if event.modifierFlags.contains(.control) {
                 return .function(.seven)
+            } else if let text = event.characters, isPrintable(text) {
+                return .input(keyMap(text))
+            } else {
+                return .unknown
+            }
+        case 0x27: // Control + :
+            if event.modifierFlags.contains(.control) {
+                return .function(.ten)
             } else if let text = event.characters, isPrintable(text) {
                 return .input(keyMap(text))
             } else {
