@@ -160,7 +160,7 @@ struct ConfigWindow: View {
                     Divider()
                     Picker("入力方式", selection: $inputStyle) {
                         Text("デフォルト").tag(Config.InputStyle.Value.default)
-                        Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
+                        Text("AZIK（β版）").tag(Config.InputStyle.Value.defaultAZIK)
                     }
                     Divider()
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
