@@ -198,6 +198,15 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
     }
 
+    private var inputStyle: InputStyle {
+        switch Config.InputStyle().value {
+        case .default:
+            .roman2kana
+        case .defaultAZIK:
+            .mapped(id: .defaultAZIK)
+        }
+    }
+
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor func handleClientAction(_ clientAction: ClientAction, clientActionCallback: ClientActionCallback, client: IMKTextInput) -> Bool {
@@ -212,7 +221,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .enterCandidateSelectionMode:
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -223,12 +232,12 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .commitMarkedTextAndAppendToMarkedText(let string):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
         case .submitSelectedCandidate:
             self.submitSelectedCandidate()
         case .submitSelectedCandidateAndAppendToMarkedText(let string):
             self.submitSelectedCandidate()
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: .roman2kana)
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
         case .submitSelectedCandidateAndEnterFirstCandidatePreviewMode:
             self.submitSelectedCandidate()
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
@@ -282,7 +291,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         // PredictiveSuggestion
         case .requestPredictiveSuggestion:
             // 「つづき」を直接入力し、コンテキストを渡す
-            self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: .roman2kana)
+            self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: self.inputStyle)
             self.requestReplaceSuggestion()
         // ReplaceSuggestion
         case .requestReplaceSuggestion:
