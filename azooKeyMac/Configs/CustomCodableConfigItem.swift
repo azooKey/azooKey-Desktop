@@ -131,3 +131,14 @@ extension Config {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
     }
 }
+
+extension Config {
+    struct InputStyle: CustomCodableConfigItem {
+        enum Value: String, Codable, Equatable, Hashable {
+            case `default`
+            case defaultAZIK
+        }
+        static var `default`: Value = .default
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"
+    }
+}

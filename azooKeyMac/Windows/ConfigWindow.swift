@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
+    @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var typeCommaAndPeriod = Config.TypeCommaAndPeriod()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
@@ -155,6 +156,11 @@ struct ConfigWindow: View {
                             .labelsHidden()
                             .disabled(!zenzai.value)
                         helpButton(helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。", isPresented: $zenzaiInferenceLimitHelpPopover)
+                    }
+                    Divider()
+                    Picker("入力方式", selection: $inputStyle) {
+                        Text("デフォルト").tag(Config.InputStyle.Value.default)
+                        Text("AZIK（β版）").tag(Config.InputStyle.Value.defaultAZIK)
                     }
                     Divider()
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
