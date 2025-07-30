@@ -192,6 +192,20 @@ final class SegmentsManager {
         self.selectionIndex = nil
     }
 
+    /// 変換キーを押したタイミングで入力の区切りを示す
+    @MainActor
+    func insertCompositionSeparator(inputStyle: InputStyle, skipUpdate: Bool = false) {
+        guard self.composingText.input.last?.piece != .endOfText else {
+            // すでに末尾がendOfTextの場合は何もしない
+            return
+        }
+        self.composingText.insertAtCursorPosition([.init(piece: .endOfText, inputStyle: inputStyle)])
+        self.lastOperation = .insert
+        if !skipUpdate {
+            self.updateRawCandidate()
+        }
+    }
+
     @MainActor
     func insertAtCursorPosition(_ string: String, inputStyle: InputStyle) {
         self.composingText.insertAtCursorPosition(string, inputStyle: inputStyle)
@@ -480,7 +494,12 @@ final class SegmentsManager {
 
     @MainActor
     func getModifiedRomanCandidate(_ transform: (String) -> String) -> Candidate {
-        let inputString = String(self.composingText.input.map(\.character))
+        let inputString = String(self.composingText.input.compactMap {
+            switch $0.piece {
+            case .endOfText: nil
+            case .character(let c): c
+            }
+        })
         let candidateText = transform(inputString)
         let candidate = Candidate(
             text: candidateText,

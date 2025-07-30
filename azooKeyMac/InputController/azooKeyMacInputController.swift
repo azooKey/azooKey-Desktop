@@ -217,8 +217,10 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .hideCandidateWindow:
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
         case .enterFirstCandidatePreviewMode:
+            self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: false)
             self.segmentsManager.requestSetCandidateWindowState(visible: false)
         case .enterCandidateSelectionMode:
+            self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: true)
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
             self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
