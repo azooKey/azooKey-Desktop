@@ -1,5 +1,5 @@
-import Testing
 import Core
+import Testing
 
 @Test func testh2z() async throws {
     // 半角文字→全角文字

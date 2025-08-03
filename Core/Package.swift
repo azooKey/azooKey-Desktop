@@ -11,14 +11,14 @@ let package = Package(
         .library(
             name: "Core",
             targets: ["Core"]
-        ),
+        )
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", branch: "b3ddfb236a998c85ce407744b49dec8f31d94ad5", traits: ["Zenzai"]),
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", branch: "b3ddfb236a998c85ce407744b49dec8f31d94ad5", traits: ["Zenzai"])
     ],
     targets: [
         .executableTarget(
-            name: "git-info-generator",
+            name: "git-info-generator"
         ),
         .plugin(
             name: "GitInfoPlugin",
@@ -29,15 +29,15 @@ let package = Package(
             name: "Core",
             dependencies: [
                 .product(name: "SwiftUtils", package: "AzooKeyKanaKanjiConverter"),
-                .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter"),
+                .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter")
             ],
             plugins: [
                 .plugin(name: "GitInfoPlugin")
-            ],
+            ]
         ),
         .testTarget(
             name: "CoreTests",
             dependencies: ["Core"]
-        ),
+        )
     ]
 )

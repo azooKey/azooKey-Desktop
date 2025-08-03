@@ -34,3 +34,4 @@ opt_in_rules:
 
 included:
   - azooKeyMac
+  - Core

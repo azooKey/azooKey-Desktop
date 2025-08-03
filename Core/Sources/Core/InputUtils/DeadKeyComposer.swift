@@ -38,7 +38,7 @@ public struct DeadKeyComposer {
         // Tilde (˜)
         .init(deadKey: "˜", combiningChar: "a", lowercasedResult: "ã", uppercasedResult: "Ã"),
         .init(deadKey: "˜", combiningChar: "n", lowercasedResult: "ñ", uppercasedResult: "Ñ"),
-        .init(deadKey: "˜", combiningChar: "o", lowercasedResult: "õ", uppercasedResult: "Õ"),
+        .init(deadKey: "˜", combiningChar: "o", lowercasedResult: "õ", uppercasedResult: "Õ")
     ]
 
     public struct DeadKeyInfo: Sendable {
