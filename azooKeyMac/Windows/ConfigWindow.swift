@@ -167,6 +167,8 @@ struct ConfigWindow: View {
                     Divider()
                     Picker("入力方式", selection: $inputStyle) {
                         Text("デフォルト").tag(Config.InputStyle.Value.default)
+                        Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
+                        Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
                         Text("AZIK（β版）").tag(Config.InputStyle.Value.defaultAZIK)
                     }
                     Divider()

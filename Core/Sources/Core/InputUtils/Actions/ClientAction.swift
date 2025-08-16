@@ -1,4 +1,5 @@
 import InputMethodKit
+import KanaKanjiConverterModule
 
 public enum ClientAction {
     case `consume`
@@ -6,6 +7,7 @@ public enum ClientAction {
     case showCandidateWindow
     case hideCandidateWindow
     case appendToMarkedText(String)
+    case appendPieceToMarkedText(InputPiece)
 
     /// Marked Textを経由せずにインサートするコマンド。InputStateがnoneの場合のみ有効
     case insertWithoutMarkedText(String)
@@ -34,6 +36,7 @@ public enum ClientAction {
     /// 現在選ばれている候補を確定して、さらに追加で入力する
     ///  - note:`commitMarkedTextAndAppendToMarkedText`はMarkedText全体を一度に確定するが、`submitSelectedCandidateAndAppendToMarkedText`の場合は部分的に確定されることがあるという違いがある
     case submitSelectedCandidateAndAppendToMarkedText(String)
+    case submitSelectedCandidateAndAppendPieceToMarkedText(InputPiece)
     case submitSelectedCandidateAndEnterFirstCandidatePreviewMode
 
     /// デバッグウィンドウを表示するコマンド

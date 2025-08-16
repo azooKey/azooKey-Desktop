@@ -149,6 +149,8 @@ extension Config {
         enum Value: String, Codable, Equatable, Hashable {
             case `default`
             case defaultAZIK
+            case defaultKanaJIS
+            case defaultKanaUS
         }
         static var `default`: Value = .default
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"

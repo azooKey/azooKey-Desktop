@@ -219,6 +219,15 @@ final class SegmentsManager {
     }
 
     @MainActor
+    func insertAtCursorPosition(piece: InputPiece, inputStyle: InputStyle) {
+        self.composingText.insertAtCursorPosition([.init(piece: piece, inputStyle: inputStyle)])
+        self.lastOperation = .insert
+        // ライブ変換がオフの場合は変換候補ウィンドウを出したい
+        self.shouldShowCandidateWindow = !self.liveConversionEnabled
+        self.updateRawCandidate()
+    }
+
+    @MainActor
     func editSegment(count: Int) {
         // 現在選ばれているprefix candidateが存在する場合、まずそれに合わせてカーソルを移動する
         if let selectionIndex, let candidates, candidates.indices.contains(selectionIndex) {
@@ -508,6 +517,7 @@ final class SegmentsManager {
             switch $0.piece {
             case .compositionSeparator: nil
             case .character(let c): c
+            case .key(intention: let c, modifiers: _): c
             }
         })
         let candidateText = transform(inputString)

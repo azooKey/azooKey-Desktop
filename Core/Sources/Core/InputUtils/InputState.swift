@@ -73,7 +73,7 @@ public enum InputState: Sendable, Hashable {
             case .number(let number):
                 switch inputLanguage {
                 case .japanese:
-                    return (.appendToMarkedText(number.inputString), .transition(.composing))
+                    return (.appendPieceToMarkedText(number.inputPiece), .transition(.composing))
                 case .english:
                     return (.insertWithoutMarkedText(number.inputString), .fallthrough)
                 }
@@ -124,7 +124,7 @@ public enum InputState: Sendable, Hashable {
             case .input(let string):
                 return (.appendToMarkedText(string), .fallthrough)
             case .number(let number):
-                return (.appendToMarkedText(number.inputString), .fallthrough)
+                return (.appendPieceToMarkedText(number.inputPiece), .fallthrough)
             case .backspace:
                 return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
             case .enter:
@@ -181,7 +181,7 @@ public enum InputState: Sendable, Hashable {
             case .input(let string):
                 return (.commitMarkedTextAndAppendToMarkedText(string), .transition(.composing))
             case .number(let number):
-                return (.appendToMarkedText(number.inputString), .transition(.composing))
+                return (.appendPieceToMarkedText(number.inputPiece), .transition(.composing))
             case .backspace:
                 return (.removeLastMarkedText, .transition(.composing))
             case .enter:
@@ -282,8 +282,8 @@ public enum InputState: Sendable, Hashable {
                 switch num {
                 case .one, .two, .three, .four, .five, .six, .seven, .eight, .nine:
                     return (.selectNumberCandidate(num.intValue), .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
-                case .zero:
-                    return (.submitSelectedCandidateAndAppendToMarkedText(num.inputString), .transition(.composing))
+                case .zero, .shiftZero:
+                    return (.submitSelectedCandidateAndAppendPieceToMarkedText(num.inputPiece), .transition(.composing))
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))

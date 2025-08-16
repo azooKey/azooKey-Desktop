@@ -236,6 +236,9 @@ extension UserAction {
                     29: .zero
                 ][event.keyCode]!
                 return .number(number)
+            } else if event.keyCode == 29 && event.modifierFlags.contains(.shift) && event.characters == "0" {
+                // JISキーボードにおいてShift+0の場合は特別な処理になる
+                return .number(.shiftZero)
             } else {
                 // go default
                 fallthrough
