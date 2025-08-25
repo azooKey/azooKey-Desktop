@@ -182,7 +182,13 @@ private struct Prompt {
 //
 // - methods:
 //    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
-struct OpenAIRequest {
+public struct OpenAIRequest {
+    public init(prompt: String, target: String, modelName: String) {
+        self.prompt = prompt
+        self.target = target
+        self.modelName = modelName
+    }
+
     let prompt: String
     let target: String
     let modelName: String
@@ -223,14 +229,14 @@ struct OpenAIRequest {
     }
 }
 
-enum OpenAIError: LocalizedError {
+public enum OpenAIError: LocalizedError, @unchecked Sendable {
     case invalidURL
     case noServerResponse
     case invalidResponseStatus(code: Int, body: String)
     case parseError(String)
     case invalidResponseStructure(Any)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Could not connect to OpenAI service. Please check your internet connection."
@@ -258,19 +264,10 @@ enum OpenAIError: LocalizedError {
 }
 
 // OpenAI APIクライアント
-enum OpenAIClient {
+public enum OpenAIClient {
     // APIリクエストを送信する静的メソッド
-    static func sendRequest(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String? = nil, logger: ((String) -> Void)? = nil) async throws -> [String] {
-        let configEndpoint = Config.OpenAiApiEndpoint().value
-        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
-            apiEndpoint
-        } else if !configEndpoint.isEmpty {
-            configEndpoint
-        } else {
-            Config.OpenAiApiEndpoint.default
-        }
-
-        guard let url = URL(string: endpoint) else {
+    public static func sendRequest(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String, logger: ((String) -> Void)? = nil) async throws -> [String] {
+        guard let url = URL(string: apiEndpoint) else {
             throw OpenAIError.invalidURL
         }
 
@@ -348,17 +345,8 @@ enum OpenAIClient {
     }
 
     // Simple text transformation method for AI Transform feature
-    static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String, apiEndpoint: String? = nil) async throws -> String {
-        let configEndpoint = Config.OpenAiApiEndpoint().value
-        let endpoint = if let apiEndpoint = apiEndpoint, !apiEndpoint.isEmpty {
-            apiEndpoint
-        } else if !configEndpoint.isEmpty {
-            configEndpoint
-        } else {
-            Config.OpenAiApiEndpoint.default
-        }
-
-        guard let url = URL(string: endpoint) else {
+    public static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String, apiEndpoint: String) async throws -> String {
+        guard let url = URL(string: apiEndpoint) else {
             throw OpenAIError.invalidURL
         }
 

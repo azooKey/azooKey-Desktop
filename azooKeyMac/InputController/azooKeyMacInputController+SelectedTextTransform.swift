@@ -21,6 +21,14 @@ extension azooKeyMacInputController {
         let after: String
     }
 
+    private var endpoint: String {
+        if Config.OpenAiApiEndpoint().value.isEmpty {
+            Config.OpenAiApiEndpoint.default
+        } else {
+            Config.OpenAiApiEndpoint().value
+        }
+    }
+
     @MainActor
     func getContextAroundSelection(client: IMKTextInput, selectedRange: NSRange, contextLength: Int = Constants.defaultContextLength) -> TextContext {
         // Get the selected text
@@ -214,7 +222,7 @@ extension azooKeyMacInputController {
                     prompt: systemPrompt,
                     modelName: modelName,
                     apiKey: apiKey,
-                    apiEndpoint: Config.OpenAiApiEndpoint().value
+                    apiEndpoint: self.endpoint
                 )
 
                 await MainActor.run {
@@ -382,7 +390,7 @@ extension azooKeyMacInputController {
             prompt: systemPrompt,
             modelName: modelName,
             apiKey: apiKey,
-            apiEndpoint: Config.OpenAiApiEndpoint().value
+            apiEndpoint: self.endpoint
         )
 
         await MainActor.run {
