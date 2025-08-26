@@ -74,7 +74,8 @@ extension Config {
 
         var value: String {
             get {
-                UserDefaults.standard.string(forKey: Self.key) ?? Self.default
+                let stored = UserDefaults.standard.string(forKey: Self.key) ?? ""
+                return stored.isEmpty ? Self.default : stored
             }
             nonmutating set {
                 UserDefaults.standard.set(newValue, forKey: Self.key)

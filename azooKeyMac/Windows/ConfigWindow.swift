@@ -75,15 +75,10 @@ struct ConfigWindow: View {
                 target: "",
                 modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value
             )
-            let endpoint = if !openAiApiEndpoint.value.isEmpty {
-                openAiApiEndpoint.value
-            } else {
-                Config.OpenAiApiEndpoint.default
-            }
             _ = try await OpenAIClient.sendRequest(
                 testRequest,
                 apiKey: openAiApiKey.value,
-                apiEndpoint: endpoint
+                apiEndpoint: openAiApiEndpoint.value
             )
 
             connectionTestResult = "接続成功"
