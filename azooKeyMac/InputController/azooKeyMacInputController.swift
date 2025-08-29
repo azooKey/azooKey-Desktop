@@ -208,6 +208,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             .mapped(id: .defaultKanaUS)
         case .defaultKanaJIS:
             .mapped(id: .defaultKanaJIS)
+        case .custom:
+            CustomInputTableStore.exists() ? .mapped(id: .custom(CustomInputTableStore.fileURL)) : .roman2kana
         }
     }
 
