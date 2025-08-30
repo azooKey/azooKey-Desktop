@@ -2,6 +2,8 @@ import Foundation
 import KanaKanjiConverterModule
 
 enum CustomInputTableStore {
+    /// The identifier used when registering the custom input table.
+    static let tableName: String = "azooKeyMac.customRomajiTable"
     private static let appSupportSubdir = "azooKeyMac"
     private static let directoryName = "CustomInputTable"
     private static let fileName = "custom_input_table.tsv"
@@ -36,6 +38,15 @@ enum CustomInputTableStore {
             return nil
         }
         return try? InputStyleManager.loadTable(from: fileURL)
+    }
+
+    /// Load and register the custom input table if it exists.
+    /// Safe to call multiple times; later calls override previous registration.
+    static func registerIfExists() {
+        guard exists(), let table = try? InputStyleManager.loadTable(from: fileURL) else {
+            return
+        }
+        InputStyleManager.registerInputStyle(table: table, for: tableName)
     }
 
     static func exists() -> Bool {

@@ -81,6 +81,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         super.activateServer(sender)
         // アプリケーションサポートのディレクトリを準備しておく
         self.prepareApplicationSupportDirectory()
+        // Register custom input table (if available) for `.tableName` usage
+        CustomInputTableStore.registerIfExists()
         self.updateZenzaiToggleMenuItem(newValue: self.zenzaiEnabled)
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.segmentsManager.activate()
@@ -209,7 +211,11 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .defaultKanaJIS:
             .mapped(id: .defaultDesktopKanaJIS)
         case .custom:
-            CustomInputTableStore.exists() ? .mapped(id: .custom(CustomInputTableStore.fileURL)) : .mapped(id: .defaultDesktopRomanToKana)
+            if CustomInputTableStore.exists() {
+                .mapped(id: .tableName(CustomInputTableStore.tableName))
+            } else {
+                .mapped(id: .defaultDesktopRomanToKana)
+            }
         }
     }
 

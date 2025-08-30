@@ -288,6 +288,8 @@ struct ConfigWindow: View {
             RomajiTableEditorWindow(base: CustomInputTableStore.loadTable()) { exported in
                 do {
                     _ = try CustomInputTableStore.save(exported: exported)
+                    // Re-register the custom input style so it is immediately available
+                    CustomInputTableStore.registerIfExists()
                 } catch {
                     print("Failed to save custom input table:", error)
                 }

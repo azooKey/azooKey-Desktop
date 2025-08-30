@@ -40,8 +40,8 @@ struct RomajiTableEditorWindow: View {
     private let onSave: ((String) -> Void)
 
     @State private var mappings: [InputTableLine] = []
-    @State private var newRomaji: String = ""
-    @State private var newKana: String = ""
+    @State private var newKey: String = ""
+    @State private var newValue: String = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var searchText = ""
@@ -64,7 +64,6 @@ struct RomajiTableEditorWindow: View {
     var body: some View {
         VStack(spacing: 16) {
             headerView
-            Divider()
             mappingInputView
             Divider()
             searchView
@@ -96,7 +95,6 @@ struct RomajiTableEditorWindow: View {
         case azik
         case kanaJIS
         case kanaUS
-        case empty
 
         var title: String {
             switch self {
@@ -104,7 +102,6 @@ struct RomajiTableEditorWindow: View {
             case .azik: "AZIK（β版）"
             case .kanaJIS: "かな入力（JIS）"
             case .kanaUS: "かな入力（US）"
-            case .empty: "Empty"
             }
         }
     }
@@ -143,20 +140,23 @@ struct RomajiTableEditorWindow: View {
                 .font(.headline)
 
             HStack {
-                TextField("ローマ字（例：ca）", text: $newRomaji)
+                TextField("ローマ字（例：ca）", text: $newKey)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 150)
 
                 Image(systemName: "arrow.forward")
 
-                TextField("ひらがな（例：か）", text: $newKana)
+                TextField("ひらがな（例：か）", text: $newValue)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 150)
+                    .onSubmit {
+                        self.addMapping()
+                    }
 
                 Button("追加") {
                     addMapping()
                 }
-                .disabled(newRomaji.isEmpty)
+                .disabled(newKey.isEmpty)
 
                 Spacer()
             }
@@ -226,12 +226,12 @@ struct RomajiTableEditorWindow: View {
                 .frame(width: 200, alignment: .leading)
 
             Spacer()
-
             Button("削除", systemImage: "xmark.circle", role: .destructive) {
                 removeMapping(mapping)
             }
             .buttonStyle(.borderless)
             .labelStyle(.iconOnly)
+            .padding(.horizontal)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -276,18 +276,18 @@ struct RomajiTableEditorWindow: View {
     }
 
     private func addMapping() {
-        let trimmedRomaji = newRomaji.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedKana = newKana.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let checkResult = InputStyleManager.checkFormat(content: "\(trimmedRomaji)\t\(trimmedKana)")
+        let checkResult = InputStyleManager.checkFormat(content: "\(trimmedKey)\t\(trimmedValue)")
         switch checkResult {
         case .fullyValid:
             // マッピングを追加
-            let newMapping = InputTableLine(key: trimmedRomaji, value: trimmedKana)
-            self.mappings.append(newMapping)
+            let newMapping = InputTableLine(key: trimmedKey, value: trimmedValue)
+            self.mappings.insert(newMapping, at: 0)
             // フィールドをクリア
-            self.newRomaji = ""
-            self.newKana = ""
+            self.newKey = ""
+            self.newValue = ""
         case .invalidLines(let errors):
             self.alertMessage = errors.map {
                 "\($0)"
@@ -320,18 +320,15 @@ struct RomajiTableEditorWindow: View {
 
     private func applyPreset(_ preset: BasePreset) {
         switch preset {
-        case .empty:
-            self.mappings = []
         case .default:
-            self.mappings = Self.tableToLines(InputTable.defaultRomanToKana)
+            self.mappings = Self.tableToLines(InputTable.defaultDesktopRomanToKana)
         case .azik:
-            self.mappings = Self.tableToLines(InputTable.defaultAZIK)
+            self.mappings = Self.tableToLines(InputTable.defaultDesktopAZIK)
         case .kanaJIS:
-            self.mappings = Self.tableToLines(InputTable.defaultKanaJIS)
+            self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaJIS)
         case .kanaUS:
-            self.mappings = Self.tableToLines(InputTable.defaultKanaUS)
+            self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaUS)
         }
-        self.mappings.sort { $0.key < $1.key }
     }
 
     private static func parse(exported: String) -> [InputTableLine] {
@@ -365,7 +362,7 @@ struct RomajiTableEditorWindow: View {
                     showAlert("有効なマッピングが見つかりませんでした。")
                     return
                 }
-                self.mappings = parsed.sorted { $0.key < $1.key }
+                self.mappings = parsed
             } catch {
                 showAlert("読み込みに失敗しました: \(error.localizedDescription)")
             }
