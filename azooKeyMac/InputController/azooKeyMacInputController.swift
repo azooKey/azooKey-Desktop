@@ -203,18 +203,18 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     private var inputStyle: InputStyle {
         switch Config.InputStyle().value {
         case .default:
-            .mapped(id: .defaultDesktopRomanToKana)
+            .mapped(id: .defaultRomanToKana)
         case .defaultAZIK:
-            .mapped(id: .defaultDesktopAZIK)
+            .mapped(id: .defaultAZIK)
         case .defaultKanaUS:
-            .mapped(id: .defaultDesktopKanaUS)
+            .mapped(id: .defaultKanaUS)
         case .defaultKanaJIS:
-            .mapped(id: .defaultDesktopKanaJIS)
+            .mapped(id: .defaultKanaJIS)
         case .custom:
             if CustomInputTableStore.exists() {
                 .mapped(id: .tableName(CustomInputTableStore.tableName))
             } else {
-                .mapped(id: .defaultDesktopRomanToKana)
+                .mapped(id: .defaultRomanToKana)
             }
         }
     }
@@ -236,8 +236,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
             self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
-        case .appendPieceToMarkedText(let piece):
-            self.segmentsManager.insertAtCursorPosition(piece: piece, inputStyle: self.inputStyle)
+        case .appendPieceToMarkedText(let pieces):
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -249,10 +249,10 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
-        case .commitMarkedTextAndAppendPieceToMarkedText(let piece):
+        case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(piece: piece, inputStyle: self.inputStyle)
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
         case .submitSelectedCandidate:
             self.submitSelectedCandidate()
         case .removeLastMarkedText:

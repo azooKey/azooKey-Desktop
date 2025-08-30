@@ -322,13 +322,13 @@ struct RomajiTableEditorWindow: View {
     private func applyPreset(_ preset: BasePreset) {
         switch preset {
         case .default:
-            self.mappings = Self.tableToLines(InputTable.defaultDesktopRomanToKana)
+            self.mappings = Self.tableToLines(InputTable.defaultRomanToKana)
         case .kanaJIS:
-            self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaJIS)
+            self.mappings = Self.tableToLines(InputTable.defaultKanaJIS)
         case .kanaUS:
-            self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaUS)
+            self.mappings = Self.tableToLines(InputTable.defaultKanaUS)
         case .azik:
-            self.mappings = Self.tableToLines(InputTable.defaultDesktopAZIK)
+            self.mappings = Self.tableToLines(InputTable.defaultAZIK)
         }
     }
 

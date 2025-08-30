@@ -1,4 +1,5 @@
 import InputMethodKit
+import KanaKanjiConverterModule
 
 public enum InputState: Sendable, Hashable {
     case none
@@ -60,9 +61,10 @@ public enum InputState: Sendable, Hashable {
             case .input(let string):
                 switch inputLanguage {
                 case .japanese:
-                    return (.appendToMarkedText(string), .transition(.composing))
+                    return (.appendPieceToMarkedText(string), .transition(.composing))
                 case .english:
-                    return (.insertWithoutMarkedText(string), .fallthrough)
+                    // 連結する
+                    return (.insertWithoutMarkedText(inputPiecesToString(string)), .fallthrough)
                 }
             case .deadKey(let deadKeyChar):
                 if inputLanguage == .english {
@@ -73,7 +75,7 @@ public enum InputState: Sendable, Hashable {
             case .number(let number):
                 switch inputLanguage {
                 case .japanese:
-                    return (.appendPieceToMarkedText(number.inputPiece), .transition(.composing))
+                    return (.appendPieceToMarkedText([number.inputPiece]), .transition(.composing))
                 case .english:
                     return (.insertWithoutMarkedText(number.inputString), .fallthrough)
                 }
@@ -99,6 +101,7 @@ public enum InputState: Sendable, Hashable {
         case .deadKeyComposition(let deadKeyChar):
             switch userAction {
             case .input(let string):
+                let string = self.inputPiecesToString(string)
                 if let result = DeadKeyComposer.combine(deadKey: deadKeyChar, with: string, shift: event.modifierFlags.contains(.shift)) {
                     return (.commitMarkedTextAndReplaceWith(result), .transition(.none))
                 } else {
@@ -122,9 +125,9 @@ public enum InputState: Sendable, Hashable {
         case .composing:
             switch userAction {
             case .input(let string):
-                return (.appendToMarkedText(string), .fallthrough)
+                return (.appendPieceToMarkedText(string), .fallthrough)
             case .number(let number):
-                return (.appendPieceToMarkedText(number.inputPiece), .fallthrough)
+                return (.appendPieceToMarkedText([number.inputPiece]), .fallthrough)
             case .backspace:
                 return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
             case .enter:
@@ -179,9 +182,9 @@ public enum InputState: Sendable, Hashable {
         case .previewing:
             switch userAction {
             case .input(let string):
-                return (.commitMarkedTextAndAppendToMarkedText(string), .transition(.composing))
+                return (.commitMarkedTextAndAppendPieceToMarkedText(string), .transition(.composing))
             case .number(let number):
-                return (.commitMarkedTextAndAppendPieceToMarkedText(number.inputPiece), .transition(.composing))
+                return (.commitMarkedTextAndAppendPieceToMarkedText([number.inputPiece]), .transition(.composing))
             case .backspace:
                 return (.removeLastMarkedText, .transition(.composing))
             case .enter:
@@ -226,12 +229,13 @@ public enum InputState: Sendable, Hashable {
         case .selecting:
             switch userAction {
             case .input(let string):
-                if string == "d" && enableDebugWindow {
+                let s = self.inputPiecesToString(string)
+                if s == "d" && enableDebugWindow {
                     return (.enableDebugWindow, .fallthrough)
-                } else if string == "D" && enableDebugWindow {
+                } else if s == "D" && enableDebugWindow {
                     return (.disableDebugWindow, .fallthrough)
                 }
-                return (.commitMarkedTextAndAppendToMarkedText(string), .transition(.composing))
+                return (.commitMarkedTextAndAppendPieceToMarkedText(string), .transition(.composing))
             case .enter:
                 return (.submitSelectedCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
             case .backspace:
@@ -283,7 +287,7 @@ public enum InputState: Sendable, Hashable {
                 case .one, .two, .three, .four, .five, .six, .seven, .eight, .nine:
                     return (.selectNumberCandidate(num.intValue), .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
                 case .zero, .shiftZero:
-                    return (.commitMarkedTextAndAppendPieceToMarkedText(num.inputPiece), .transition(.composing))
+                    return (.commitMarkedTextAndAppendPieceToMarkedText([num.inputPiece]), .transition(.composing))
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
@@ -300,7 +304,7 @@ public enum InputState: Sendable, Hashable {
             switch userAction {
             // 入力があったらcomposingに戻る
             case .input(let string):
-                return (.appendToMarkedText(string), .transition(.composing))
+                return (.appendPieceToMarkedText(string), .transition(.composing))
             case .space:
                 return (.selectNextReplaceSuggestionCandidate, .fallthrough)
             case .navigation(let direction):
@@ -323,5 +327,15 @@ public enum InputState: Sendable, Hashable {
                 return (.fallthrough, .fallthrough)
             }
         }
+    }
+
+    private func inputPiecesToString(_ inputPieces: [InputPiece]) -> String {
+        String(inputPieces.compactMap {
+            switch $0 {
+            case .character(let c): c
+            case .key(intention: let cint, input: let cinp, modifiers: _): cint ?? cinp
+            case .compositionSeparator: nil
+            }
+        })
     }
 }
