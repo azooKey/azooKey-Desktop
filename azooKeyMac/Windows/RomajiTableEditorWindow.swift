@@ -1,6 +1,8 @@
+import AppKit
 import Core
 import KanaKanjiConverterModule
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RomajiTableEditorWindow: View {
     struct InputTableLine: Sendable, Equatable, Hashable {
@@ -140,6 +142,9 @@ struct RomajiTableEditorWindow: View {
                 Button("すべてクリア") {
                     clearAllMappings()
                 }
+                Button("ファイルに書き出し") {
+                    exportToFile()
+                }
                 Spacer()
             }
         }
@@ -175,7 +180,7 @@ struct RomajiTableEditorWindow: View {
     @ViewBuilder
     private var searchView: some View {
         HStack {
-            TextField("検索...", text: $searchText)
+            TextField("フィルター...", text: $searchText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
 
             Text("マッピング数: \(mappings.count)")
@@ -189,16 +194,35 @@ struct RomajiTableEditorWindow: View {
             Text("現在のマッピング")
                 .font(.headline)
 
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(filteredMappings, id: \.self) { mapping in
-                        mappingRow(for: mapping)
+            if mappings.isEmpty {
+                VStack(spacing: 12) {
+                    Text("マッピングが空です。ベースを読み込むかファイルから読み込んでください。")
+                        .foregroundColor(.secondary)
+                    HStack {
+                        Button("ベースを読み込む") {
+                            showingBasePicker = true
+                        }
+                        Button("ファイルから読み込む") {
+                            importFromFile()
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, minHeight: 200)
+                .padding()
+                .background(Color.gray.opacity(0.05))
+                .cornerRadius(8)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(filteredMappings, id: \.self) { mapping in
+                            mappingRow(for: mapping)
+                        }
+                    }
+                }
+                .frame(height: 300)
+                .background(Color.gray.opacity(0.05))
+                .cornerRadius(8)
             }
-            .frame(height: 300)
-            .background(Color.gray.opacity(0.05))
-            .cornerRadius(8)
         }
     }
 
@@ -302,6 +326,7 @@ struct RomajiTableEditorWindow: View {
         case .kanaUS:
             self.mappings = Self.tableToLines(InputTable.defaultKanaUS)
         }
+        self.mappings.sort { $0.key < $1.key }
     }
 
     private static func parse(exported: String) -> [InputTableLine] {
@@ -309,9 +334,53 @@ struct RomajiTableEditorWindow: View {
             .components(separatedBy: "\n")
             .compactMap { line -> InputTableLine? in
                 let pair = line.components(separatedBy: "\t")
-                guard pair.count == 2 else { return nil }
+                guard pair.count == 2 else {
+                    return nil
+                }
                 return .init(key: pair[0], value: pair[1])
             }
+    }
+
+    private func importFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.title = "TSVファイルを選択"
+
+        let handler: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else {
+                return
+            }
+            do {
+                let text = try String(contentsOf: url, encoding: .utf8)
+                let parsed = Self.parse(exported: text)
+                if parsed.isEmpty {
+                    showAlert("有効なマッピングが見つかりませんでした。")
+                    return
+                }
+                self.mappings = parsed.sorted { $0.key < $1.key }
+            } catch {
+                showAlert("読み込みに失敗しました: \(error.localizedDescription)")
+            }
+        }
+
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: handler)
+        } else {
+            panel.begin(completionHandler: handler)
+        }
+    }
+
+    private func exportToFile() {
+        let exported = mappings.map { "\($0.key)\t\($0.value)" }.joined(separator: "\n")
+        do {
+            let url = try CustomInputTableStore.save(exported: exported)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            showAlert("書き出しに失敗しました: \(error.localizedDescription)")
+        }
     }
 }
 
