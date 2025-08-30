@@ -56,8 +56,7 @@ struct RomajiTableEditorWindow: View {
         }
 
         return mappings.filter { mapping in
-            mapping.key.localizedCaseInsensitiveContains(searchText) ||
-                mapping.value.localizedCaseInsensitiveContains(searchText)
+            mapping.key.localizedCaseInsensitiveContains(searchText) || mapping.value.localizedCaseInsensitiveContains(searchText)
         }
     }
 
@@ -84,7 +83,7 @@ struct RomajiTableEditorWindow: View {
             basePickerView
         }
         .alert("エラー", isPresented: $showingAlert) {
-            Button("OK") { }
+            Button("OK") {}
         } message: {
             Text(alertMessage)
         }
@@ -92,16 +91,16 @@ struct RomajiTableEditorWindow: View {
 
     private enum BasePreset: CaseIterable, Hashable {
         case `default`
-        case azik
         case kanaJIS
         case kanaUS
+        case azik
 
         var title: String {
             switch self {
             case .default: "デフォルト"
-            case .azik: "AZIK（β版）"
             case .kanaJIS: "かな入力（JIS）"
             case .kanaUS: "かな入力（US）"
+            case .azik: "AZIK"
             }
         }
     }
@@ -119,7 +118,9 @@ struct RomajiTableEditorWindow: View {
             }
             HStack {
                 Spacer()
-                Button("キャンセル") { showingBasePicker = false }
+                Button("キャンセル", role: .cancel) {
+                    showingBasePicker = false
+                }
             }
         }
         .padding()
@@ -128,7 +129,7 @@ struct RomajiTableEditorWindow: View {
 
     @ViewBuilder
     private var headerView: some View {
-        Text("カスタムローマ字テーブル")
+        Text("カスタム入力テーブル")
             .font(.title)
             .bold()
     }
@@ -154,7 +155,7 @@ struct RomajiTableEditorWindow: View {
                     }
 
                 Button("追加") {
-                    addMapping()
+                    self.addMapping()
                 }
                 .disabled(newKey.isEmpty)
 
@@ -322,12 +323,12 @@ struct RomajiTableEditorWindow: View {
         switch preset {
         case .default:
             self.mappings = Self.tableToLines(InputTable.defaultDesktopRomanToKana)
-        case .azik:
-            self.mappings = Self.tableToLines(InputTable.defaultDesktopAZIK)
         case .kanaJIS:
             self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaJIS)
         case .kanaUS:
             self.mappings = Self.tableToLines(InputTable.defaultDesktopKanaUS)
+        case .azik:
+            self.mappings = Self.tableToLines(InputTable.defaultDesktopAZIK)
         }
     }
 
