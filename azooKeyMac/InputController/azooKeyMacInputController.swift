@@ -201,13 +201,13 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     private var inputStyle: InputStyle {
         switch Config.InputStyle().value {
         case .default:
-            .mapped(id: .defaultDesktopRomanToKana)
+            .roman2kana
         case .defaultAZIK:
-            .mapped(id: .defaultDesktopAZIK)
+            .mapped(id: .defaultAZIK)
         case .defaultKanaUS:
-            .mapped(id: .defaultDesktopKanaUS)
+            .mapped(id: .defaultKanaUS)
         case .defaultKanaJIS:
-            .mapped(id: .defaultDesktopKanaJIS)
+            .mapped(id: .defaultKanaJIS)
         }
     }
 
