@@ -1,22 +1,36 @@
 import Cocoa
 import Core
+import KanaKanjiConverterModule
 
 extension UserAction {
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     static func getUserAction(event: NSEvent, inputLanguage: InputLanguage) -> UserAction {
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
-        let keyMap: (String) -> String = switch inputLanguage {
-        case .english: { $0 }
+        let keyMap: (String) -> [InputPiece] = switch inputLanguage {
+        case .english: { string in string.map { .character($0) } }
         case .japanese:
             if Config.TypeCommaAndPeriod().value {
-                {
-                    KeyMap.h2zMap($0)
-                        .replacingOccurrences(of: "、", with: "，")
-                        .replacingOccurrences(of: "。", with: "．")
+                { string in
+                    string.map {
+                        let intention: Character? = switch $0 {
+                        case ",": "，"
+                        case ".": "．"
+                        default: KeyMap.h2zMap($0)
+                        }
+                        return .key(
+                            intention: intention,
+                            input: $0,
+                            modifiers: []
+                        )
+                    }
                 }
             } else {
-                KeyMap.h2zMap
+                { string in
+                    string.map {
+                        .key(intention: KeyMap.h2zMap($0), input: $0, modifiers: [])
+                    }
+                }
             }
         }
         // Diacritic processing
@@ -25,7 +39,7 @@ extension UserAction {
                 if event.modifierFlags.contains(.shift) {
                     // Shift + Option: insert diacritical mark only
                     if let directChar = event.characters {
-                        return .input(directChar)
+                        return .input(directChar.map(InputPiece.character))
                     } else {
                         return .unknown
                     }
@@ -213,11 +227,11 @@ extension UserAction {
         case 126: // Up
             return .navigation(.up)
         case 0x4B: // Numpad Slash
-            return .input("/")
+            return .input([.character("/")])
         case 0x5F: // Numpad Comma
-            return .input(",")
+            return .input([.character(",")])
         case 0x41: // Numpad Period
-            return .input(".")
+            return .input([.character(".")])
         case 0x73, 0x77, 0x74, 0x79, 0x75, 0x47:
             // Numpadでそれぞれ「入力先頭にカーソルを移動」「入力末尾にカーソルを移動」「変換候補欄を1ページ戻る」「変換候補欄を1ページ進む」「順方向削除」「入力全消し（より強いエスケープ）」に対応するが、サポート外の動作として明示的に無効化
             return .unknown

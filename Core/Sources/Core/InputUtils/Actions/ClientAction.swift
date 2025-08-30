@@ -7,7 +7,7 @@ public enum ClientAction {
     case showCandidateWindow
     case hideCandidateWindow
     case appendToMarkedText(String)
-    case appendPieceToMarkedText(InputPiece)
+    case appendPieceToMarkedText([InputPiece])
 
     /// Marked Textを経由せずにインサートするコマンド。InputStateがnoneの場合のみ有効
     case insertWithoutMarkedText(String)
@@ -32,7 +32,7 @@ public enum ClientAction {
 
     /// MarkedTextを確定して、さらに追加で入力する
     case commitMarkedTextAndAppendToMarkedText(String)
-    case commitMarkedTextAndAppendPieceToMarkedText(InputPiece)
+    case commitMarkedTextAndAppendPieceToMarkedText([InputPiece])
 
     /// デバッグウィンドウを表示するコマンド
     case enableDebugWindow

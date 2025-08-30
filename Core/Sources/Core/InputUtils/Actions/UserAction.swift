@@ -1,6 +1,6 @@
 import KanaKanjiConverterModule
 public enum UserAction {
-    case input(String)
+    case input([InputPiece])
     case backspace
     case enter
     case space(prefersFullWidthWhenInput: Bool)
@@ -56,7 +56,7 @@ public enum UserAction {
             case .eight: .character("8")
             case .nine: .character("9")
             case .zero: .character("0")
-            case .shiftZero: .key(intention: "0", modifiers: [.shift])
+            case .shiftZero: .key(intention: "0", input: "0", modifiers: [.shift])
             }
         }
 

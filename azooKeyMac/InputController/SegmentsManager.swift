@@ -219,8 +219,8 @@ final class SegmentsManager {
     }
 
     @MainActor
-    func insertAtCursorPosition(piece: InputPiece, inputStyle: InputStyle) {
-        self.composingText.insertAtCursorPosition([.init(piece: piece, inputStyle: inputStyle)])
+    func insertAtCursorPosition(pieces: [InputPiece], inputStyle: InputStyle) {
+        self.composingText.insertAtCursorPosition(pieces.map { .init(piece: $0, inputStyle: inputStyle) })
         self.lastOperation = .insert
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
@@ -517,7 +517,7 @@ final class SegmentsManager {
             switch $0.piece {
             case .compositionSeparator: nil
             case .character(let c): c
-            case .key(intention: let c, modifiers: _): c
+            case .key(intention: _, input: let input, modifiers: _): input
             }
         })
         let candidateText = transform(inputString)
