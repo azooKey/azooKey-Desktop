@@ -6,19 +6,13 @@ extension UserAction {
     // swiftlint:disable:next cyclomatic_complexity
     static func getUserAction(event: NSEvent, inputLanguage: InputLanguage) -> UserAction {
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
-        let keyMap: (String) -> String = switch inputLanguage {
-        case .english: { $0 }
-        case .japanese:
-            if Config.TypeCommaAndPeriod().value {
-                {
-                    KeyMap.h2zMap($0)
-                        .replacingOccurrences(of: "、", with: "，")
-                        .replacingOccurrences(of: "。", with: "．")
-                }
-            } else {
-                KeyMap.h2zMap
-            }
+        // この置換はInputTable側で処理するべきかもしれない。
+        let preprocess: (String) -> String = if case .japanese = inputLanguage, Config.TypeCommaAndPeriod().value {
+            { $0.replacingOccurrences(of: ",", with: "，").replacingOccurrences(of: ".", with: "．") }
+        } else {
+            { $0 }
         }
+
         // Diacritic processing
         if event.modifierFlags.contains(.option) && event.modifierFlags.isDisjoint(with: [.command, .control]) {
             if let deadKeyInfo = DeadKeyComposer.deadKeyList[event.keyCode] {
@@ -41,7 +35,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .backspace
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -49,7 +43,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .navigation(.up)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -57,7 +51,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .enter
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -65,7 +59,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .navigation(.down)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -73,7 +67,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .navigation(.right)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -81,7 +75,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .editSegment(-1)  // Shift segment cursor left
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -89,7 +83,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .editSegment(1)  // Shift segment cursor right
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -97,7 +91,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .function(.nine)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -105,7 +99,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .function(.six)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -113,7 +107,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .function(.seven)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -121,7 +115,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .function(.ten)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -129,7 +123,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .function(.eight)
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -137,7 +131,7 @@ extension UserAction {
             if event.modifierFlags.contains(.control) {
                 return .suggest
             } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
@@ -164,31 +158,31 @@ extension UserAction {
         case 93: // Yen
             switch (Config.TypeBackSlash().value, event.modifierFlags.contains(.shift), event.modifierFlags.contains(.option)) {
             case (_, true, _):
-                return .input(keyMap("|"))
+                return .input(preprocess("|"))
             case (true, false, false), (false, false, true):
-                return .input(keyMap("\\"))
+                return .input(preprocess("\\"))
             case (true, false, true), (false, false, false):
-                return .input(keyMap("¥"))
+                return .input(preprocess("¥"))
             }
         case 43: // Comma
             if event.modifierFlags.contains(.shift) {
                 if let text = event.characters, isPrintable(text) {
-                    return .input(keyMap(text))
+                    return .input(preprocess(text))
                 } else {
                     return .unknown
                 }
             } else {
-                return .input(keyMap(","))
+                return .input(preprocess(","))
             }
         case 47: // Period
             if event.modifierFlags.contains(.shift) {
                 if let text = event.characters, isPrintable(text) {
-                    return .input(keyMap(text))
+                    return .input(preprocess(text))
                 } else {
                     return .unknown
                 }
             } else {
-                return .input(keyMap("."))
+                return .input(preprocess("."))
             }
         case 97: // F6
             return .function(.six)
@@ -245,7 +239,7 @@ extension UserAction {
             }
         default:
             if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                return .input(preprocess(text))
             } else {
                 return .unknown
             }
