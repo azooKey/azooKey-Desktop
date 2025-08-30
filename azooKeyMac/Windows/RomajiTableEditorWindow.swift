@@ -279,6 +279,11 @@ struct RomajiTableEditorWindow: View {
     private func addMapping() {
         let trimmedKey = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else {
+            self.alertMessage = "キーは必須です。"
+            self.showingAlert = true
+            return
+        }
 
         let checkResult = InputStyleManager.checkFormat(content: "\(trimmedKey)\t\(trimmedValue)")
         switch checkResult {
