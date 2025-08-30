@@ -47,6 +47,7 @@ struct RomajiTableEditorWindow: View {
     @State private var searchText = ""
     @State private var showingBasePicker = false
     @State private var shouldOpenBasePickerOnAppear = false
+    @State private var showComplexFunctionalityPopover = false
     @Environment(\.dismiss) private var dismiss
 
     private var filteredMappings: [InputTableLine] {
@@ -130,24 +131,9 @@ struct RomajiTableEditorWindow: View {
 
     @ViewBuilder
     private var headerView: some View {
-        VStack {
-            Text("カスタムローマ字テーブル")
-                .font(.title)
-                .bold()
-
-            HStack {
-                Button("初期値に戻す") {
-                    loadMappings()
-                }
-                Button("すべてクリア") {
-                    clearAllMappings()
-                }
-                Button("ファイルに書き出し") {
-                    exportToFile()
-                }
-                Spacer()
-            }
-        }
+        Text("カスタムローマ字テーブル")
+            .font(.title)
+            .bold()
     }
 
     @ViewBuilder
@@ -256,7 +242,7 @@ struct RomajiTableEditorWindow: View {
     @ViewBuilder
     private var footerView: some View {
         HStack {
-            Button("キャンセル") {
+            Button("キャンセル", role: .cancel) {
                 dismiss()
             }
 
@@ -267,6 +253,25 @@ struct RomajiTableEditorWindow: View {
                 dismiss()
             }
             .buttonStyle(.borderedProminent)
+            Button("その他", systemImage: "ellipsis") {
+                self.showComplexFunctionalityPopover = true
+            }
+            .labelStyle(.iconOnly)
+            .popover(isPresented: $showComplexFunctionalityPopover) {
+                VStack(alignment: .leading) {
+                    Button("初期値に戻す", role: .destructive) {
+                        loadMappings()
+                    }
+                    Button("すべてクリア", role: .destructive) {
+                        clearAllMappings()
+                    }
+                    Divider()
+                    Button("ファイルに書き出し") {
+                        exportToFile()
+                    }
+                }
+                .padding()
+            }
         }
     }
 
