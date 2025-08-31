@@ -59,6 +59,14 @@ extension UserAction {
             } else {
                 return .unknown
             }
+        case 0x33: // Control + backspace
+            if event.modifierFlags.contains(.control) {
+                return .backspace
+            } else if let text = event.characters, isPrintable(text) {
+                return .input(keyMap(text))
+            } else {
+                return .unknown
+            }
         case 0x23: // Control + p
             if event.modifierFlags.contains(.control) {
                 return .navigation(.up)
