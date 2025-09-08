@@ -119,7 +119,9 @@ public enum InputState: Sendable, Hashable {
                 return (.insertWithoutMarkedText(diacritic + "\n"), .transition(.none))
             case .tab:
                 return (.insertWithoutMarkedText(diacritic + "\t"), .transition(.none))
-            case .unknown, .number, .space, .英数, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
+            case .forget:
+                return (.consume, .fallthrough)
+            case .unknown, .number, .space, .英数, .navigation, .editSegment, .suggest, .transformSelectedText:
                 return (.insertWithoutMarkedText(diacritic), .transition(.none))
             }
         case .composing:
@@ -176,7 +178,9 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
-            case .forget, .unknown, .tab, .transformSelectedText, .deadKey:
+            case .forget:
+                return (.consume, .fallthrough)
+            case .unknown, .tab, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .previewing:
@@ -223,7 +227,9 @@ public enum InputState: Sendable, Hashable {
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
-            case .unknown, .suggest, .tab, .forget, .transformSelectedText, .deadKey:
+            case .forget:
+                return (.consume, .fallthrough)
+            case .unknown, .suggest, .tab, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .selecting:
@@ -323,6 +329,8 @@ public enum InputState: Sendable, Hashable {
                 return (.hideReplaceSuggestionWindow, .transition(.composing))
             case .英数:
                 return (.submitReplaceSuggestionCandidate, .transition(.none))
+            case .forget:
+                return (.consume, .fallthrough)
             default:
                 return (.fallthrough, .fallthrough)
             }
