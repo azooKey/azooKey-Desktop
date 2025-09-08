@@ -165,7 +165,7 @@ extension UserAction {
             }
         case 51: // Delete
             if event.modifierFlags.contains(.control) {
-                return .forget
+                return .backspace
             } else {
                 return .backspace
             }
