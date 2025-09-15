@@ -109,6 +109,8 @@ public enum InputState: Sendable, Hashable {
                 }
             case .deadKey(let newDiacritic):
                 return (.insertWithoutMarkedText(diacritic), .transition(.attachDiacritic(newDiacritic)))
+            case .number(let number):
+                return (.insertWithoutMarkedText(diacritic + number.inputString), .transition(.none))
             case .backspace, .escape:
                 return (.stopComposition, .transition(.none))
             case .かな:
@@ -119,7 +121,7 @@ public enum InputState: Sendable, Hashable {
                 return (.insertWithoutMarkedText(diacritic + "\n"), .transition(.none))
             case .tab:
                 return (.insertWithoutMarkedText(diacritic + "\t"), .transition(.none))
-            case .unknown, .number, .space, .英数, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
+            case .unknown, .space, .英数, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
                 return (.insertWithoutMarkedText(diacritic), .transition(.none))
             }
         case .composing:
