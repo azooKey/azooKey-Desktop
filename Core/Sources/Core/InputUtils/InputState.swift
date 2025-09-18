@@ -155,7 +155,7 @@ public enum InputState: Sendable, Hashable {
                 case .ten:
                     return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
-            case .かな:
+            case .かな .forget:
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
@@ -178,8 +178,6 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
-            case .forget:
-                return (.consume, .fallthrough)
             case .unknown, .tab, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
@@ -210,7 +208,7 @@ public enum InputState: Sendable, Hashable {
                 case .ten:
                     return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
-            case .かな:
+            case .かな .forget:
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
@@ -227,8 +225,6 @@ public enum InputState: Sendable, Hashable {
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
-            case .forget:
-                return (.consume, .fallthrough)
             case .unknown, .suggest, .tab, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
