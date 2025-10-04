@@ -151,7 +151,6 @@ extension Config {
             case defaultAZIK
             case defaultKanaJIS
             case defaultKanaUS
-            case custom
         }
         static var `default`: Value = .default
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"

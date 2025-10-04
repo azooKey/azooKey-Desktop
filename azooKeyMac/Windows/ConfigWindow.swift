@@ -25,7 +25,6 @@ struct ConfigWindow: View {
     @State private var zenzaiInferenceLimitHelpPopover = false
     @State private var openAiApiKeyPopover = false
     @State private var connectionTestInProgress = false
-    @State private var showingRomajiTableEditor = false
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
 
@@ -169,13 +168,7 @@ struct ConfigWindow: View {
                         Text("デフォルト").tag(Config.InputStyle.Value.default)
                         Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
                         Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
-                        Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
-                        Text("カスタム").tag(Config.InputStyle.Value.custom)
-                    }
-                    if inputStyle.value == .custom {
-                        Button("カスタム入力テーブルを編集") {
-                            showingRomajiTableEditor = true
-                        }
+                        Text("AZIK（β版）").tag(Config.InputStyle.Value.defaultAZIK)
                     }
                     Divider()
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
@@ -284,17 +277,6 @@ struct ConfigWindow: View {
         }
         .fixedSize()
         .frame(width: 500)
-        .sheet(isPresented: $showingRomajiTableEditor) {
-            RomajiTableEditorWindow(base: CustomInputTableStore.loadTable()) { exported in
-                do {
-                    _ = try CustomInputTableStore.save(exported: exported)
-                    // Re-register the custom input style so it is immediately available
-                    CustomInputTableStore.registerIfExists()
-                } catch {
-                    print("Failed to save custom input table:", error)
-                }
-            }
-        }
     }
 }
 
