@@ -100,20 +100,25 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
     @MainActor
     override func deactivateServer(_ sender: Any!) {
-        // 未確定テキストが残っている場合は確定させる
-        if !self.segmentsManager.isEmpty {
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            if let client = sender as? IMKTextInput {
-                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            }
-            self.inputState = .none // 状態をリセット
-            self.refreshMarkedText() // クライアントのmarkedTextを確実にクリア
-        }
         self.segmentsManager.deactivate()
         self.candidatesWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
         self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
+    }
+
+    @MainActor
+    override func commitComposition(_ sender: Any!) {
+        if self.segmentsManager.isEmpty {
+            return
+        }
+        let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+        if let client = sender as? IMKTextInput {
+            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        self.inputState = .none
+        self.refreshMarkedText()
+        self.refreshCandidateWindow()
     }
 
     @MainActor
