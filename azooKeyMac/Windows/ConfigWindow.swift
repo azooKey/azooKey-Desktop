@@ -5,9 +5,8 @@ struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
-    @ConfigState private var typeCommaAndPeriod = Config.TypeCommaAndPeriod()
+    @ConfigState private var punctuationStyle = Config.PunctuationStyle()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
-    @ConfigState private var zenzai = Config.ZenzaiIntegration()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
@@ -123,7 +122,6 @@ struct ConfigWindow: View {
                     Divider()
                     HStack {
                         TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
-                            .disabled(!zenzai.value)
                         helpButton(
                             helpContent: """
                         Zenzaiはあなたのプロフィールを考慮した変換を行うことができます。
@@ -147,10 +145,8 @@ struct ConfigWindow: View {
                                 }
                             )
                         )
-                        .disabled(!zenzai.value)
                         Stepper("", value: $inferenceLimit, in: 1 ... 50)
                             .labelsHidden()
-                            .disabled(!zenzai.value)
                         helpButton(helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。", isPresented: $zenzaiInferenceLimitHelpPopover)
                     }
                     Divider()
@@ -169,8 +165,13 @@ struct ConfigWindow: View {
                     Divider()
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
                     Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
-                    Toggle("「、」「。」の代わりに「，」「．」を入力", isOn: $typeCommaAndPeriod)
                     Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                    Picker("句読点の種類", selection: $punctuationStyle) {
+                        Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
+                        Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
+                        Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
+                        Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
+                    }
                     Divider()
                     LabeledContent {
                         HStack {
