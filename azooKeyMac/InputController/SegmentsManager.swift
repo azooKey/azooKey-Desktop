@@ -484,40 +484,33 @@ final class SegmentsManager {
     }
 
     @MainActor
-    func getModifiedRubyCandidate(_ transform: (String) -> String) -> Candidate {
-        let ruby = if let selectedCandidate {
-            // `selectedCandidate.data` の全ての `ruby` を連結して返す
-            selectedCandidate.data.map { element in
-                element.ruby
-            }.joined()
-        } else {
-            // 選択範囲なしの場合はconvertTargetを返す
-            self.composingText.convertTarget
+    func getModifiedRubyCandidate(inputState: InputState, _ transform: (String) -> String) -> Candidate {
+        let (ruby, composingCount): (String, ComposingCount) = switch inputState {
+        case .selecting:
+            if let selectedRuby = selectedCandidate?.data.map({ $0.ruby }).joined() {
+                // `selectedCandidate.data` の全ての `ruby` を連結して返す
+                (selectedRuby, .surfaceCount(selectedRuby.count))
+            } else {
+                // 選択範囲なしの場合はconvertTargetを返す
+                (self.convertTarget, .inputCount(self.composingText.input.count))
+            }
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic:
+            (self.convertTarget, .inputCount(self.composingText.input.count))
         }
         let candidateText = transform(ruby)
-        let candidate = if let selectedCandidate {
-            {
-                var candidate = selectedCandidate
-                candidate.text = candidateText
-                return candidate
-            }()
-        } else {
-            Candidate(
-                text: candidateText,
-                value: 0,
-                composingCount: .inputCount(composingText.input.count),
-                lastMid: 0,
-                data: [DicdataElement(
-                    word: candidateText,
-                    ruby: ruby,
-                    cid: CIDData.固有名詞.cid,
-                    mid: MIDData.一般.mid,
-                    value: 0
-                )]
-            )
-        }
-
-        return candidate
+        return Candidate(
+            text: candidateText,
+            value: 0,
+            composingCount: composingCount,
+            lastMid: 0,
+            data: [DicdataElement(
+                word: candidateText,
+                ruby: ruby,
+                cid: CIDData.固有名詞.cid,
+                mid: MIDData.一般.mid,
+                value: 0
+            )]
+        )
     }
 
     @MainActor
