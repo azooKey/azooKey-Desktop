@@ -155,7 +155,7 @@ public enum InputState: Sendable, Hashable {
                 case .ten:
                     return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
-            case .かな, .forget:
+            case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
@@ -178,7 +178,7 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
-            case .unknown, .tab, .transformSelectedText, .deadKey:
+            case .unknown, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .previewing:
@@ -208,7 +208,7 @@ public enum InputState: Sendable, Hashable {
                 case .ten:
                     return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
-            case .かな, .forget:
+            case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
@@ -225,7 +225,7 @@ public enum InputState: Sendable, Hashable {
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
-            case .unknown, .suggest, .tab, .transformSelectedText, .deadKey:
+            case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .selecting:
@@ -295,11 +295,11 @@ public enum InputState: Sendable, Hashable {
                 return (.editSegment(count), .transition(.selecting))
             case .forget:
                 return (.forgetMemory, .fallthrough)
-            case .かな:
+            case .かな, .tab:
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
-            case .unknown, .suggest, .tab, .transformSelectedText, .deadKey:
+            case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .replaceSuggestion:
@@ -325,9 +325,9 @@ public enum InputState: Sendable, Hashable {
                 return (.hideReplaceSuggestionWindow, .transition(.composing))
             case .英数:
                 return (.submitReplaceSuggestionCandidate, .transition(.none))
-            case .forget:
+            case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
-            default:
+            case .unknown, .function, .number, .editSegment, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         }
