@@ -3,6 +3,22 @@ import Core
 import KanaKanjiConverterModule
 
 extension UserAction {
+    private static func intention(_ c: Character) -> Character? {
+        switch c {
+        case ",":
+            switch Config.PunctuationStyle().value {
+            case .kutenAndComma, .periodAndComma: "，"
+            default: KeyMap.h2zMap(c)
+            }
+        case ".":
+            switch Config.PunctuationStyle().value {
+            case .periodAndToten, .periodAndComma: "．"
+            default: KeyMap.h2zMap(c)
+            }
+        default: KeyMap.h2zMap(c)
+        }
+    }
+
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     static func getUserAction(event: NSEvent, inputLanguage: InputLanguage) -> UserAction {
@@ -10,26 +26,9 @@ extension UserAction {
         let keyMap: (String) -> [InputPiece] = switch inputLanguage {
         case .english: { string in string.map { .character($0) } }
         case .japanese:
-            if Config.TypeCommaAndPeriod().value {
-                { string in
-                    string.map {
-                        let intention: Character? = switch $0 {
-                        case ",": "，"
-                        case ".": "．"
-                        default: KeyMap.h2zMap($0)
-                        }
-                        return .key(
-                            intention: intention,
-                            input: $0,
-                            modifiers: []
-                        )
-                    }
-                }
-            } else {
-                { string in
-                    string.map {
-                        .key(intention: KeyMap.h2zMap($0), input: $0, modifiers: [])
-                    }
+            { string in
+                string.map {
+                    .key(intention: intention($0), input: $0, modifiers: [])
                 }
             }
         }
