@@ -3,29 +3,6 @@
 
 import PackageDescription
 
-#if canImport(FoundationModels)
-let isXcodeVersion26 = true
-#else
-let isXcodeVersion26 = false
-#endif
-
-let xcode26AdditionalTargets: [Target] = [
-    .binaryTarget(
-        // Note: Xcode 26以降、AzooKeyKanaKanjiConverter側のXCFrameworkのbinaryTargetをXcodeが解決してくれなくなった。
-        // そこで、binaryTargetを再度AzooKeyCore側でも要求することで、結果的に認識されるようになる。
-        // さらに`AzooKeyUtils`でも`llama`を要求しないとビルドは通らない。
-        // ただし、Xcode 26より前の場合は逆にこの対応を入れると動作しないので、Xcodeバージョンを確認する必要がある
-        name: "llama",
-        url: "https://github.com/azooKey/llama.cpp/releases/download/b4846/signed-llama.xcframework.zip",
-        // this can be computed `swift package compute-checksum llama-b4844-xcframework.zip`
-        checksum: "db3b13169df8870375f212e6ac21194225f1c85f7911d595ab64c8c790068e0a"
-    )
-]
-
-let xcode26AdditionalTargetDependency: [Target.Dependency] = [
-    "llama"
-]
-
 let package = Package(
     name: "Core",
     platforms: [.macOS(.v13)],
@@ -53,7 +30,7 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftUtils", package: "AzooKeyKanaKanjiConverter"),
                 .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter")
-            ] + (isXcodeVersion26 ? xcode26AdditionalTargetDependency : []),
+            ],
             swiftSettings: [.interoperabilityMode(.Cxx)],
             plugins: [
                 .plugin(name: "GitInfoPlugin")
@@ -64,5 +41,5 @@ let package = Package(
             dependencies: ["Core"],
             swiftSettings: [.interoperabilityMode(.Cxx)]
         )
-    ] + (isXcodeVersion26 ? xcode26AdditionalTargets : [])
+    ]
 )
