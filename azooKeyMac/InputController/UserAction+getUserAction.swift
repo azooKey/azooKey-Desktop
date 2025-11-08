@@ -200,6 +200,29 @@ extension UserAction {
             } else {
                 return .input(keyMap("."))
             }
+        case 0x2C: // Slash
+            return switch inputLanguage {
+            case .japanese:
+                if event.modifierFlags.contains([.shift, .option]) {
+                    // Option+Shift入力で…を入力する
+                    .input(keyMap("…"))
+                } else if event.modifierFlags.contains(.shift) {
+                    // シフト入力でQuestionを入力する
+                    .input(keyMap("?"))
+                } else if event.modifierFlags.contains(.option) {
+                    // Option入力でSlashを入力する
+                    .input(keyMap("/"))
+                } else {
+                    // そうでない場合は「・」を入力する
+                    .input(keyMap("・"))
+                }
+            case .english:
+                if let text = event.characters, isPrintable(text) {
+                    .input(keyMap(text))
+                } else {
+                    .unknown
+                }
+            }
         case 97: // F6
             return .function(.six)
         case 98: // F7
