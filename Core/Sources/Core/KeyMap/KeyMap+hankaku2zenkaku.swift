@@ -41,7 +41,7 @@ extension KeyMap {
         "]": "」",
         ",": "、",
         ".": "。",
-        "/": "・"
+        "/": "／"
     ]
 
     public static func h2zMap(_ text: Character) -> Character? {
