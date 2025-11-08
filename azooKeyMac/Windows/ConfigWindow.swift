@@ -120,12 +120,6 @@ struct ConfigWindow: View {
                         Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
                         Text("学習を無視").tag(Config.Learning.Value.nothing)
                     }
-                    Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
-                        Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
-                        Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
-                        Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
-                        Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
-                    }
                     Divider()
                     HStack {
                         TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
@@ -227,6 +221,12 @@ struct ConfigWindow: View {
                     }
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
+                    Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
+                        Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
+                        Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
+                        Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
+                        Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
+                    }
                     Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
                     HStack {
                         SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
