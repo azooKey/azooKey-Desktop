@@ -57,9 +57,9 @@ GitHub Sponsorsをご利用ください。
 
 コントリビュート歓迎です！！
 
-### 想定環境
+### 推奨環境
 * macOS 15+
-* Xcode 16+
+* Xcode 26.1+
 * Git LFS導入済み
 * SwiftLint導入済み
 
@@ -94,6 +94,7 @@ git submodule update --init
   * azooKeyMac -> Signing & Capabilities から、 Team を Personal Team に変更する
   * リポジトリ内に存在する全てのバンドルID文字列を、適当な文字列に置換 (ex: `dev.ensan.inputmethod.azooKeyMac` -> `dev.yourname.inputmethod.azooKeyMac`)
 * 「Packages are not supported when using legacy build locations, but the current project has them enabled.」と表示される場合は[https://qiita.com/glassmonkey/items/3e8203900b516878ff2c](https://qiita.com/glassmonkey/items/3e8203900b516878ff2c)を参考に、Xcodeの設定をご確認ください
+* Xcode 26.0ではビルドできない可能性があります。Xcode 16系または26.1以降をご利用ください。
 
 変換精度がリリース版に比べて悪いと感じた場合、以下をご確認ください。
 * Git LFSが導入されていない環境では、重みファイルがローカル環境に落とせていない場合があります。`azooKey-Desktop/azooKeyMac/Resources/zenz-v3-small-gguf/ggml-model-Q5_K_M.gguf`が70MB程度のファイルとなっているかを確認してください
