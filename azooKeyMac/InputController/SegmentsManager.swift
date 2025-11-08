@@ -344,7 +344,25 @@ final class SegmentsManager {
         self.appendDebugMessage("systemUserDictionaryCount: \(systemUserDictionary.count)")
         userDictionary.append(contentsOf: consume systemUserDictionary)
 
-        self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary)
+        /// 日付・時刻変換を事前に入れておく
+        let dynamicShortcuts: [DicdataElement] =
+            [("MM/dd", -18), ("yyyy/MM/dd", -18.1), ("MM月dd日（E）", -18.2), ("yyyy年MM月dd日", -18.3)].flatMap { (format, value: PValue) in
+                [
+                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
+                ]
+            } + [
+                // 月
+                .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+                // 年
+                .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+                .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1)
+            ]
+
+        self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary, shortcuts: dynamicShortcuts)
 
         let prefixComposingText = self.composingText.prefixToCursorPosition()
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
