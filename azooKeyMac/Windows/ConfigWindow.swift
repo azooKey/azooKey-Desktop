@@ -20,7 +20,6 @@ struct ConfigWindow: View {
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
 
-    @State private var zenzaiHelpPopover = false
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
     @State private var openAiApiKeyPopover = false
@@ -121,17 +120,7 @@ struct ConfigWindow: View {
                         Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
                         Text("学習を無視").tag(Config.Learning.Value.nothing)
                     }
-                    Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
-                        Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
-                        Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
-                        Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
-                        Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
-                    }
                     Divider()
-                    HStack {
-                        Toggle("Zenzaiを有効化", isOn: $zenzai)
-                        helpButton(helpContent: "Zenzaiはニューラル言語モデルを利用した最新のかな漢字変換システムです。\nMacのGPUを利用して高精度な変換を行います。\n変換エンジンはローカルで動作するため、外部との通信は不要です。", isPresented: $zenzaiHelpPopover)
-                    }
                     HStack {
                         TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                             .disabled(!zenzai.value)
@@ -232,6 +221,12 @@ struct ConfigWindow: View {
                     }
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
+                    Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
+                        Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
+                        Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
+                        Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
+                        Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
+                    }
                     Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
                     HStack {
                         SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))

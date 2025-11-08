@@ -8,15 +8,11 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     var segmentsManager: SegmentsManager
     private var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
-    var zenzaiEnabled: Bool {
-        Config.ZenzaiIntegration().value
-    }
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
 
     var appMenu: NSMenu
-    var zenzaiToggleMenuItem: NSMenuItem
     var liveConversionToggleMenuItem: NSMenuItem
 
     private var candidatesWindow: NSWindow
@@ -32,7 +28,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.segmentsManager = SegmentsManager()
 
         self.appMenu = NSMenu(title: "azooKey")
-        self.zenzaiToggleMenuItem = NSMenuItem()
         self.liveConversionToggleMenuItem = NSMenuItem()
 
         // Initialize the candidates window
@@ -83,7 +78,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.prepareApplicationSupportDirectory()
         // Register custom input table (if available) for `.tableName` usage
         CustomInputTableStore.registerIfExists()
-        self.updateZenzaiToggleMenuItem(newValue: self.zenzaiEnabled)
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.segmentsManager.activate()
 
