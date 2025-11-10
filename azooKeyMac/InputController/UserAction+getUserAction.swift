@@ -210,10 +210,10 @@ extension UserAction {
                     .input(keyMap("?"))
                 } else if event.modifierFlags.contains(.option) {
                     // Option入力でSlashを入力する
-                    .input(keyMap("/"))
+                    .input(keyMap("／"))
                 } else {
-                    // そうでない場合は「・」を入力する
-                    .input(keyMap("・"))
+                    // そうでない場合は「・」を入力する（"/"がkeyMapで"・"に変換される）
+                    .input(keyMap("/"))
                 }
             case .english:
                 if let text = event.characters, isPrintable(text) {
