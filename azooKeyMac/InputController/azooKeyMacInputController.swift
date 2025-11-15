@@ -82,8 +82,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.segmentsManager.activate()
 
         if let client = sender as? IMKTextInput {
-            if let layoutIdentifier = Config.KeyboardLayout().value.layoutName {
-                client.overrideKeyboard(withKeyboardNamed: layoutName)
+            if let layoutIdentifier = Config.KeyboardLayout().value.layoutIdentifier {
+                client.overrideKeyboard(withKeyboardNamed: layoutIdentifier)
             }
             var rect: NSRect = .zero
             client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
@@ -120,8 +120,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     @MainActor
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
         if let value = value as? NSString {
-            if let layoutIdentifier = Config.KeyboardLayout().value.layoutName {
-                self.client()?.overrideKeyboard(withKeyboardNamed: layoutName)
+            if let layoutIdentifier = Config.KeyboardLayout().value.layoutIdentifier {
+                self.client()?.overrideKeyboard(withKeyboardNamed: layoutIdentifier)
             }
             let englishMode = value == "com.apple.inputmethod.Roman"
             // 英数/かなの対応するキーが推された場合と同等のイベントを発生させる
@@ -359,8 +359,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
-        if let layoutIdentifier = Config.KeyboardLayout().value.layoutName {
-            client.overrideKeyboard(withKeyboardNamed: layoutName)
+        if let layoutIdentifier = Config.KeyboardLayout().value.layoutIdentifier {
+            client.overrideKeyboard(withKeyboardNamed: layoutIdentifier)
         }
         switch language {
         case .english:
