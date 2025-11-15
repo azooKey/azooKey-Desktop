@@ -50,9 +50,4 @@ extension Config {
         static let `default` = true
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.includeContextInAITransform"
     }
-    /// macOSのキーボード配列を尊重する設定
-    struct RespectSystemKeyboardLayout: BoolConfigItem {
-        static let `default` = true
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.respectSystemKeyboardLayout"
-    }
 }

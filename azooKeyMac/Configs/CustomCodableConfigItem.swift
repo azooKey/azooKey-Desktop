@@ -157,3 +157,27 @@ extension Config {
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"
     }
 }
+
+extension Config {
+    /// キーボードレイアウトの設定
+    struct KeyboardLayout: CustomCodableConfigItem {
+        enum Value: String, Codable, Equatable, Hashable {
+            case qwerty
+            case colemak
+            case dvorak
+            
+            var layoutName: String? {
+                switch self {
+                case .qwerty:
+                    return "com.apple.keylayout.US"
+                case .colemak:
+                    return "com.apple.keylayout.Colemak"
+                case .dvorak:
+                    return "com.apple.keylayout.Dvorak"
+                }
+            }
+        }
+        static var `default`: Value = .qwerty
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keyboard_layout"
+    }
+}
