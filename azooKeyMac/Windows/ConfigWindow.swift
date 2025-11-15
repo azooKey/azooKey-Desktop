@@ -18,6 +18,7 @@ struct ConfigWindow: View {
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
+    @ConfigState private var keyboardLayout = Config.KeyboardLayout()
 
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -164,6 +165,11 @@ struct ConfigWindow: View {
                     }
                     Divider()
                     Toggle("ライブ変換を有効化", isOn: $liveConversion)
+                    Picker("キーボード配列", selection: $keyboardLayout) {
+                        Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                        Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
+                        Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                    }
                     Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                     Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
                     Picker("句読点の種類", selection: $punctuationStyle) {
