@@ -163,13 +163,13 @@ struct ConfigWindow: View {
                             showingRomajiTableEditor = true
                         }
                     }
-                    Divider()
-                    Toggle("ライブ変換を有効化", isOn: $liveConversion)
                     Picker("キーボード配列", selection: $keyboardLayout) {
                         Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
                         Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
                         Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
                     }
+                    Divider()
+                    Toggle("ライブ変換を有効化", isOn: $liveConversion)
                     Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                     Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
                     Picker("句読点の種類", selection: $punctuationStyle) {
