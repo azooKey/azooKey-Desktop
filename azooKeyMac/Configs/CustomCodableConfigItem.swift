@@ -166,7 +166,7 @@ extension Config {
             case colemak
             case dvorak
             
-            var layoutName: String? {
+            var layoutIdentifier: String? {
                 switch self {
                 case .qwerty:
                     return "com.apple.keylayout.US"
