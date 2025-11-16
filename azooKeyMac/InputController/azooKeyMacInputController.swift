@@ -82,7 +82,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.segmentsManager.activate()
 
         if let client = sender as? IMKTextInput {
-            client.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.US")
+            client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             var rect: NSRect = .zero
             client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: rect.origin)
@@ -118,7 +118,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     @MainActor
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
         if let value = value as? NSString {
-            self.client()?.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.US")
+            self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
             // 英数/かなの対応するキーが推された場合と同等のイベントを発生させる
             let userAction: UserAction? = if englishMode, self.inputLanguage != .english {
@@ -355,7 +355,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
-        client.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.US")
+        client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
         switch language {
         case .english:
             client.selectMode("dev.ensan.inputmethod.azooKeyMac.Roman")
