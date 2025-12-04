@@ -140,10 +140,8 @@ struct ConfigWindow: View {
 
             // 既存のバックアップを削除（一世代のみ保持）
             let contents = try fileManager.contentsOfDirectory(at: parentDir, includingPropertiesForKeys: nil)
-            for item in contents {
-                if item.lastPathComponent.hasPrefix("memory_") {
-                    try fileManager.removeItem(at: item)
-                }
+            for item in contents where item.lastPathComponent.hasPrefix("memory_") {
+                try fileManager.removeItem(at: item)
             }
 
             // memoryディレクトリをリネーム
