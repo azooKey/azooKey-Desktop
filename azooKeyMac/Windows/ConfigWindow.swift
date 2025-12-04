@@ -27,6 +27,13 @@ struct ConfigWindow: View {
     @State private var showingRomajiTableEditor = false
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
+    @State private var showingLearningResetConfirmation = false
+    @State private var learningResetMessage: LearningResetMessage?
+
+    private enum LearningResetMessage {
+        case success
+        case error(String)
+    }
 
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
@@ -91,6 +98,81 @@ struct ConfigWindow: View {
         connectionTestInProgress = false
     }
 
+    private var azooKeyMemoryDir: URL {
+        if #available(macOS 13, *) {
+            URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+                .appending(path: "memory", directoryHint: .isDirectory)
+        } else {
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+                .appendingPathComponent("memory", isDirectory: true)
+        }
+    }
+
+    private func resetLearningData() {
+        let fileManager = FileManager.default
+        let memoryDir = azooKeyMemoryDir
+        let parentDir = memoryDir.deletingLastPathComponent()
+
+        // memoryディレクトリが存在しない場合は何もしない
+        guard fileManager.fileExists(atPath: memoryDir.path) else {
+            learningResetMessage = .error("学習データが見つかりません")
+            // 30秒後にメッセージを消す
+            Task {
+                try? await Task.sleep(for: .seconds(30))
+                await MainActor.run {
+                    if case .error = learningResetMessage {
+                        learningResetMessage = nil
+                    }
+                }
+            }
+            return
+        }
+
+        do {
+            // 日付文字列を生成 (yyyyMMdd形式)
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyyMMdd"
+            let dateString = dateFormatter.string(from: Date())
+            let backupName = "memory_\(dateString)"
+            let backupDir = parentDir.appendingPathComponent(backupName)
+
+            // 既存のバックアップを削除（一世代のみ保持）
+            let contents = try fileManager.contentsOfDirectory(at: parentDir, includingPropertiesForKeys: nil)
+            for item in contents {
+                if item.lastPathComponent.hasPrefix("memory_") {
+                    try fileManager.removeItem(at: item)
+                }
+            }
+
+            // memoryディレクトリをリネーム
+            try fileManager.moveItem(at: memoryDir, to: backupDir)
+
+            learningResetMessage = .success
+            // 10秒後にリセット完了のメッセージを消す
+            Task {
+                try? await Task.sleep(for: .seconds(10))
+                await MainActor.run {
+                    if case .success = learningResetMessage {
+                        learningResetMessage = nil
+                    }
+                }
+            }
+        } catch {
+            learningResetMessage = .error(error.localizedDescription)
+            // 30秒後にリセットのエラーメッセージを消す
+            Task {
+                try? await Task.sleep(for: .seconds(30))
+                await MainActor.run {
+                    if case .error = learningResetMessage {
+                        learningResetMessage = nil
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func helpButton(helpContent: LocalizedStringKey, isPresented: Binding<Bool>) -> some View {
         if #available(macOS 14, *) {
@@ -119,6 +201,36 @@ struct ConfigWindow: View {
                         Text("学習する").tag(Config.Learning.Value.inputAndOutput)
                         Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
                         Text("学習を無視").tag(Config.Learning.Value.nothing)
+                    }
+                    LabeledContent {
+                        HStack {
+                            Button("リセット") {
+                                showingLearningResetConfirmation = true
+                            }
+                            .confirmationDialog(
+                                "履歴学習データをリセットしますか？",
+                                isPresented: $showingLearningResetConfirmation,
+                                titleVisibility: .visible
+                            ) {
+                                Button("リセット", role: .destructive) {
+                                    resetLearningData()
+                                }
+                                Button("キャンセル", role: .cancel) {}
+                            }
+                            Spacer()
+                            switch learningResetMessage {
+                            case .none:
+                                EmptyView()
+                            case .success:
+                                Text("履歴学習データをリセットしました")
+                                    .foregroundColor(.green)
+                            case .error(let message):
+                                Text("エラー: \(message)")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    } label: {
+                        Text("履歴学習データ")
                     }
                     Divider()
                     HStack {
