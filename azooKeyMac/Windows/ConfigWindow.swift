@@ -148,42 +148,6 @@ struct ConfigWindow: View {
                 Spacer()
                 Form {
 
-                    Picker("履歴学習", selection: $learning) {
-                        Text("学習する").tag(Config.Learning.Value.inputAndOutput)
-                        Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
-                        Text("学習を無視").tag(Config.Learning.Value.nothing)
-                    }
-                    LabeledContent {
-                        HStack {
-                            Button("リセット") {
-                                showingLearningResetConfirmation = true
-                            }
-                            .confirmationDialog(
-                                "履歴学習データをリセットしますか？",
-                                isPresented: $showingLearningResetConfirmation,
-                                titleVisibility: .visible
-                            ) {
-                                Button("リセット", role: .destructive) {
-                                    resetLearningData()
-                                }
-                                Button("キャンセル", role: .cancel) {}
-                            }
-                            Spacer()
-                            switch learningResetMessage {
-                            case .none:
-                                EmptyView()
-                            case .success:
-                                Text("履歴学習データをリセットしました")
-                                    .foregroundColor(.green)
-                            case .error(let message):
-                                Text("エラー: \(message)")
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    } label: {
-                        Text("履歴学習データ")
-                    }
-                    Divider()
                     HStack {
                         TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                         helpButton(
@@ -289,6 +253,43 @@ struct ConfigWindow: View {
                     } label: {
                         Text("システムのユーザ辞書")
                     }
+
+                    Picker("履歴学習", selection: $learning) {
+                        Text("学習する").tag(Config.Learning.Value.inputAndOutput)
+                        Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
+                        Text("学習を無視").tag(Config.Learning.Value.nothing)
+                    }
+                    LabeledContent {
+                        HStack {
+                            Button("リセット") {
+                                showingLearningResetConfirmation = true
+                            }
+                            .confirmationDialog(
+                                "履歴学習データをリセットしますか？",
+                                isPresented: $showingLearningResetConfirmation,
+                                titleVisibility: .visible
+                            ) {
+                                Button("リセット", role: .destructive) {
+                                    resetLearningData()
+                                }
+                                Button("キャンセル", role: .cancel) {}
+                            }
+                            Spacer()
+                            switch learningResetMessage {
+                            case .none:
+                                EmptyView()
+                            case .success:
+                                Text("履歴学習データをリセットしました")
+                                    .foregroundColor(.green)
+                            case .error(let message):
+                                Text("エラー: \(message)")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    } label: {
+                        Text("履歴学習データ")
+                    }
+
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
                     Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
