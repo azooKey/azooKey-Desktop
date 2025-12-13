@@ -1,3 +1,4 @@
+import Cocoa
 import Core
 import SwiftUI
 
@@ -27,6 +28,13 @@ struct ConfigWindow: View {
     @State private var showingRomajiTableEditor = false
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
+    @State private var showingLearningResetConfirmation = false
+    @State private var learningResetMessage: LearningResetMessage?
+
+    private enum LearningResetMessage {
+        case success
+        case error(String)
+    }
 
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
@@ -91,6 +99,31 @@ struct ConfigWindow: View {
         connectionTestInProgress = false
     }
 
+    @MainActor
+    private func resetLearningData() {
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+            learningResetMessage = .error("学習データのリセットに失敗しました")
+            Task {
+                try? await Task.sleep(for: .seconds(30))
+                if case .error = learningResetMessage {
+                    learningResetMessage = nil
+                }
+            }
+            return
+        }
+
+        appDelegate.kanaKanjiConverter.resetMemory()
+        learningResetMessage = .success
+
+        // 10秒後にメッセージを消す
+        Task {
+            try? await Task.sleep(for: .seconds(10))
+            if case .success = learningResetMessage {
+                learningResetMessage = nil
+            }
+        }
+    }
+
     @ViewBuilder
     private func helpButton(helpContent: LocalizedStringKey, isPresented: Binding<Bool>) -> some View {
         if #available(macOS 14, *) {
@@ -115,12 +148,6 @@ struct ConfigWindow: View {
                 Spacer()
                 Form {
 
-                    Picker("履歴学習", selection: $learning) {
-                        Text("学習する").tag(Config.Learning.Value.inputAndOutput)
-                        Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
-                        Text("学習を無視").tag(Config.Learning.Value.nothing)
-                    }
-                    Divider()
                     HStack {
                         TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                         helpButton(
@@ -226,6 +253,43 @@ struct ConfigWindow: View {
                     } label: {
                         Text("システムのユーザ辞書")
                     }
+
+                    Picker("履歴学習", selection: $learning) {
+                        Text("学習する").tag(Config.Learning.Value.inputAndOutput)
+                        Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
+                        Text("学習を無視").tag(Config.Learning.Value.nothing)
+                    }
+                    LabeledContent {
+                        HStack {
+                            Button("リセット") {
+                                showingLearningResetConfirmation = true
+                            }
+                            .confirmationDialog(
+                                "履歴学習データをリセットしますか？",
+                                isPresented: $showingLearningResetConfirmation,
+                                titleVisibility: .visible
+                            ) {
+                                Button("リセット", role: .destructive) {
+                                    resetLearningData()
+                                }
+                                Button("キャンセル", role: .cancel) {}
+                            }
+                            Spacer()
+                            switch learningResetMessage {
+                            case .none:
+                                EmptyView()
+                            case .success:
+                                Text("履歴学習データをリセットしました")
+                                    .foregroundColor(.green)
+                            case .error(let message):
+                                Text("エラー: \(message)")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    } label: {
+                        Text("履歴学習データ")
+                    }
+
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
                     Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
