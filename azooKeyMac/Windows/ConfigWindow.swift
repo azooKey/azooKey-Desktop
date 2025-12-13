@@ -1,3 +1,4 @@
+import Cocoa
 import Core
 import SwiftUI
 
@@ -98,75 +99,27 @@ struct ConfigWindow: View {
         connectionTestInProgress = false
     }
 
-    private var azooKeyMemoryDir: URL {
-        if #available(macOS 13, *) {
-            URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-                .appending(path: "memory", directoryHint: .isDirectory)
-        } else {
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("azooKey", isDirectory: true)
-                .appendingPathComponent("memory", isDirectory: true)
-        }
-    }
-
+    @MainActor
     private func resetLearningData() {
-        let fileManager = FileManager.default
-        let memoryDir = azooKeyMemoryDir
-        let parentDir = memoryDir.deletingLastPathComponent()
-
-        // memoryディレクトリが存在しない場合は何もしない
-        guard fileManager.fileExists(atPath: memoryDir.path) else {
-            learningResetMessage = .error("学習データが見つかりません")
-            // 30秒後にメッセージを消す
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+            learningResetMessage = .error("学習データのリセットに失敗しました")
             Task {
                 try? await Task.sleep(for: .seconds(30))
-                await MainActor.run {
-                    if case .error = learningResetMessage {
-                        learningResetMessage = nil
-                    }
+                if case .error = learningResetMessage {
+                    learningResetMessage = nil
                 }
             }
             return
         }
 
-        do {
-            // 日付文字列を生成 (yyyyMMdd形式)
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyyMMdd"
-            let dateString = dateFormatter.string(from: Date())
-            let backupName = "memory_\(dateString)"
-            let backupDir = parentDir.appendingPathComponent(backupName)
+        appDelegate.kanaKanjiConverter.resetMemory()
+        learningResetMessage = .success
 
-            // 既存のバックアップを削除（一世代のみ保持）
-            let contents = try fileManager.contentsOfDirectory(at: parentDir, includingPropertiesForKeys: nil)
-            for item in contents where item.lastPathComponent.hasPrefix("memory_") {
-                try fileManager.removeItem(at: item)
-            }
-
-            // memoryディレクトリをリネーム
-            try fileManager.moveItem(at: memoryDir, to: backupDir)
-
-            learningResetMessage = .success
-            // 10秒後にリセット完了のメッセージを消す
-            Task {
-                try? await Task.sleep(for: .seconds(10))
-                await MainActor.run {
-                    if case .success = learningResetMessage {
-                        learningResetMessage = nil
-                    }
-                }
-            }
-        } catch {
-            learningResetMessage = .error(error.localizedDescription)
-            // 30秒後にリセットのエラーメッセージを消す
-            Task {
-                try? await Task.sleep(for: .seconds(30))
-                await MainActor.run {
-                    if case .error = learningResetMessage {
-                        learningResetMessage = nil
-                    }
-                }
+        // 10秒後にメッセージを消す
+        Task {
+            try? await Task.sleep(for: .seconds(10))
+            if case .success = learningResetMessage {
+                learningResetMessage = nil
             }
         }
     }
