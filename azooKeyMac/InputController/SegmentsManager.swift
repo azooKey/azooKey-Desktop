@@ -438,7 +438,7 @@ final class SegmentsManager {
 
     func getCurrentCandidateWindow(inputState: InputState) -> CandidateWindow {
         switch inputState {
-        case .none, .previewing, .replaceSuggestion, .attachDiacritic:
+        case .none, .previewing, .replaceSuggestion, .attachDiacritic, .unicodeInput:
             return .hidden
         case .composing:
             if !self.liveConversionEnabled, let firstCandidate = self.rawCandidates?.mainResults.first {
@@ -494,7 +494,7 @@ final class SegmentsManager {
                 // 選択範囲なしの場合はconvertTargetを返す
                 (self.convertTarget, .inputCount(self.composingText.input.count))
             }
-        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic:
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput:
             (self.convertTarget, .inputCount(self.composingText.input.count))
         }
         let candidateText = transform(ruby)
@@ -615,6 +615,13 @@ final class SegmentsManager {
                     selectionRange: .notFound
                 )
             }
+        case .unicodeInput(let codePoint):
+            // Unicode入力モード: "U+" + コードポイントを表示
+            let displayText = "U+" + codePoint
+            return MarkedText(
+                text: [.init(content: displayText, focus: .focused)],
+                selectionRange: NSRange(location: displayText.count, length: 0)
+            )
         }
     }
 }

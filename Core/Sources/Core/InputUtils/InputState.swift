@@ -8,6 +8,7 @@ public enum InputState: Sendable, Hashable {
     case previewing
     case selecting
     case replaceSuggestion
+    case unicodeInput(String)
 
     public struct EventCore: Sendable, Equatable {
         public init(modifierFlags: NSEvent.ModifierFlags) {
@@ -95,6 +96,8 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
+            case .startUnicodeInput:
+                return (.enterUnicodeInputMode, .transition(.unicodeInput("")))
             case .unknown, .navigation, .backspace, .enter, .escape, .function, .editSegment, .tab, .forget, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
@@ -121,6 +124,8 @@ public enum InputState: Sendable, Hashable {
                 return (.insertWithoutMarkedText(diacritic + "\n"), .transition(.none))
             case .tab:
                 return (.insertWithoutMarkedText(diacritic + "\t"), .transition(.none))
+            case .startUnicodeInput:
+                return (.insertWithoutMarkedText(diacritic), .transition(.unicodeInput("")))
             case .unknown, .space, .英数, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
                 return (.insertWithoutMarkedText(diacritic), .transition(.none))
             }
@@ -178,6 +183,8 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.fallthrough, .fallthrough)
                 }
+            case .startUnicodeInput:
+                return (.commitMarkedText, .transition(.unicodeInput("")))
             case .unknown, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
@@ -225,6 +232,8 @@ public enum InputState: Sendable, Hashable {
                 }
             case .editSegment(let count):
                 return (.editSegment(count), .transition(.selecting))
+            case .startUnicodeInput:
+                return (.commitMarkedText, .transition(.unicodeInput("")))
             case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
@@ -299,6 +308,8 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
+            case .startUnicodeInput:
+                return (.submitSelectedCandidate, .transition(.unicodeInput("")))
             case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
@@ -327,8 +338,43 @@ public enum InputState: Sendable, Hashable {
                 return (.submitReplaceSuggestionCandidate, .transition(.none))
             case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
+            case .startUnicodeInput:
+                return (.hideReplaceSuggestionWindow, .transition(.unicodeInput("")))
             case .unknown, .function, .number, .editSegment, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
+            }
+        case .unicodeInput(let codePoint):
+            switch userAction {
+            case .input(let pieces):
+                let input = inputPiecesToString(pieces).lowercased()
+                // 16進数のみ受け付ける
+                let hexChars = CharacterSet(charactersIn: "0123456789abcdef")
+                let filteredInput = input.unicodeScalars.filter { hexChars.contains($0) }.map { String($0) }.joined()
+                if !filteredInput.isEmpty {
+                    return (.appendToUnicodeInput(filteredInput), .transition(.unicodeInput(codePoint + filteredInput)))
+                } else {
+                    return (.consume, .fallthrough)
+                }
+            case .number(let number):
+                let digit = number.inputString
+                return (.appendToUnicodeInput(digit), .transition(.unicodeInput(codePoint + digit)))
+            case .backspace:
+                if codePoint.isEmpty {
+                    return (.cancelUnicodeInput, .transition(.none))
+                } else {
+                    let newCodePoint = String(codePoint.dropLast())
+                    return (.removeLastUnicodeInput, .transition(.unicodeInput(newCodePoint)))
+                }
+            case .enter, .space:
+                if codePoint.isEmpty {
+                    return (.cancelUnicodeInput, .transition(.none))
+                } else {
+                    return (.submitUnicodeInput(codePoint), .transition(.none))
+                }
+            case .escape:
+                return (.cancelUnicodeInput, .transition(.none))
+            case .かな, .英数, .tab, .forget, .function, .navigation, .editSegment, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
+                return (.consume, .fallthrough)
             }
         }
     }

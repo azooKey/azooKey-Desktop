@@ -325,6 +325,24 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .transformSelectedText(let selectedText, let prompt):
             self.segmentsManager.appendDebugMessage("Executing transformSelectedText with text: '\(selectedText)' and prompt: '\(prompt)'")
             self.transformSelectedText(selectedText: selectedText, prompt: prompt)
+        // Unicode Input (Shift+Ctrl+U)
+        case .enterUnicodeInputMode:
+            // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
+            break
+        case .appendToUnicodeInput:
+            // markedText の更新は refreshMarkedText で行われる
+            break
+        case .removeLastUnicodeInput:
+            // markedText の更新は refreshMarkedText で行われる
+            break
+        case .submitUnicodeInput(let codePoint):
+            if let scalar = UInt32(codePoint, radix: 16), let unicodeScalar = Unicode.Scalar(scalar) {
+                let character = String(Character(unicodeScalar))
+                client.insertText(character, replacementRange: NSRange(location: NSNotFound, length: 0))
+            }
+        case .cancelUnicodeInput:
+            // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
+            break
         // MARK: 特殊ケース
         case .consume:
             // 何もせず先に進む
