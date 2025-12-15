@@ -343,6 +343,15 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .cancelUnicodeInput:
             // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
             break
+        case .submitSelectedCandidateAndEnterUnicodeInputMode:
+            // 選択中の候補を確定
+            self.submitSelectedCandidate()
+            // 残りのテキストがあればひらがなのまま確定
+            if !self.segmentsManager.isEmpty {
+                let text = self.segmentsManager.convertTarget
+                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                self.segmentsManager.stopComposition()
+            }
         // MARK: 特殊ケース
         case .consume:
             // 何もせず先に進む

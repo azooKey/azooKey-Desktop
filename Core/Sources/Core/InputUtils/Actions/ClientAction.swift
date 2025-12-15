@@ -68,6 +68,7 @@ public enum ClientAction {
     case removeLastUnicodeInput
     case submitUnicodeInput(String)
     case cancelUnicodeInput
+    case submitSelectedCandidateAndEnterUnicodeInputMode
 
     case stopComposition
 }

@@ -309,7 +309,7 @@ public enum InputState: Sendable, Hashable {
             case .英数:
                 return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
             case .startUnicodeInput:
-                return (.submitSelectedCandidate, .transition(.unicodeInput("")))
+                return (.submitSelectedCandidateAndEnterUnicodeInputMode, .transition(.unicodeInput("")))
             case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
