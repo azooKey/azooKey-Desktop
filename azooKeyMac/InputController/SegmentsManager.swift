@@ -620,7 +620,7 @@ final class SegmentsManager {
             // Unicode入力モード: "U+" + コードポイントを表示
             let displayText = "U+" + codePoint
             return MarkedText(
-                text: [.init(content: displayText, focus: .focused)],
+                text: [.init(content: displayText, focus: .none)],
                 selectionRange: NSRange(location: displayText.count, length: 0)
             )
         }
