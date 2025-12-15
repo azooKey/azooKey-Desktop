@@ -561,6 +561,7 @@ final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     func getCurrentMarkedText(inputState: InputState) -> MarkedText {
         switch inputState {
         case .none, .attachDiacritic:
