@@ -17,6 +17,7 @@ public enum UserAction {
     case forget
     case transformSelectedText
     case deadKey(String)
+    case startUnicodeInput
 
     public enum NavigationDirection: Sendable, Equatable, Hashable {
         case up, down, right, left
