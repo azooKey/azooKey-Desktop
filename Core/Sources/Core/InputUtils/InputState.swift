@@ -50,7 +50,7 @@ public enum InputState: Sendable, Hashable {
         }
         if event.modifierFlags.contains(.option) {
             switch userAction {
-            case .input, .deadKey:
+            case .input, .deadKey, .backspace:
                 break
             default:
                 return (.fallthrough, .fallthrough)
@@ -136,7 +136,11 @@ public enum InputState: Sendable, Hashable {
             case .number(let number):
                 return (.appendPieceToMarkedText([number.inputPiece]), .fallthrough)
             case .backspace:
-                return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
+                if event.modifierFlags.contains(.option) {
+                    return (.consume, .fallthrough)
+                } else {
+                    return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
+                }
             case .enter:
                 return (.commitMarkedText, .transition(.none))
             case .escape:
@@ -195,7 +199,11 @@ public enum InputState: Sendable, Hashable {
             case .number(let number):
                 return (.commitMarkedTextAndAppendPieceToMarkedText([number.inputPiece]), .transition(.composing))
             case .backspace:
-                return (.removeLastMarkedText, .transition(.composing))
+                if event.modifierFlags.contains(.option) {
+                    return (.consume, .fallthrough)
+                } else {
+                    return (.removeLastMarkedText, .transition(.composing))
+                }
             case .enter:
                 return (.commitMarkedText, .transition(.none))
             case .space:
@@ -250,7 +258,11 @@ public enum InputState: Sendable, Hashable {
             case .enter:
                 return (.submitSelectedCandidate, .basedOnSubmitCandidate(ifIsEmpty: .none, ifIsNotEmpty: .previewing))
             case .backspace:
-                return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
+                if event.modifierFlags.contains(.option) {
+                    return (.consume, .fallthrough)
+                } else {
+                    return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
+                }
             case .escape:
                 if liveConversionEnabled {
                     return (.hideCandidateWindow, .transition(.composing))
