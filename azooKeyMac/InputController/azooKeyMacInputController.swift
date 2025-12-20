@@ -103,6 +103,12 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
+        // Unicode入力モードの場合は状態だけリセットして終了
+        // マウスクリック等でOSがMarkedTextを確定した場合、IME側からは消せないため
+        if case .unicodeInput = self.inputState {
+            self.inputState = .none
+            return
+        }
         if self.segmentsManager.isEmpty {
             return
         }
