@@ -82,11 +82,13 @@ public enum FoundationModelsClient {
         #endif
     }
 
+    #if canImport(FoundationModels)
     @Generable
     public struct PredictionResponse: Codable {
         @Guide(description: "Array of prediction strings", .count(3...5))
         public var predictions: [String]
     }
+    #endif
 
     public static func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)? = nil) async throws -> [String] {
         #if canImport(FoundationModels)
