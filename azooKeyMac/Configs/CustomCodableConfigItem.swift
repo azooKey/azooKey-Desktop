@@ -165,7 +165,7 @@ extension Config {
             case qwerty
             case colemak
             case dvorak
-            
+
             var layoutIdentifier: String {
                 switch self {
                 case .qwerty:

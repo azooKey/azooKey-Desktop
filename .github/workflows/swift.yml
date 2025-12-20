@@ -65,6 +65,5 @@ jobs:
         run: swiftlint version
       - name: Run SwiftLint
         run: |
-          swiftlint --fix --format
           swiftlint --quiet --strict
   
