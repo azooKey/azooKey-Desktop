@@ -592,16 +592,18 @@ extension azooKeyMacInputController {
         let modelName = Config.OpenAiModelName().value
         let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
-        self.segmentsManager.appendDebugMessage("Using model: \(modelName)")
 
         // Get selected backend
-        let backend: AIBackend = switch preference {
+        let backend: AIBackend
+        switch preference {
         case .off:
-            fatalError("Should not reach here")
+            // Already checked above, but defensive programming
+            self.segmentsManager.appendDebugMessage("Unexpected .off state in backend selection")
+            return
         case .foundationModels:
-            .foundationModels
+            backend = .foundationModels
         case .openAI:
-            .openAI
+            backend = .openAI
         }
         self.segmentsManager.appendDebugMessage("Using backend: \(backend.rawValue)")
 
@@ -647,7 +649,18 @@ extension azooKeyMacInputController {
                     }
                 }
             } catch {
-                self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(error.localizedDescription)")
+                let errorMessage = "APIリクエストエラー: \(error.localizedDescription)"
+                self.segmentsManager.appendDebugMessage(errorMessage)
+
+                // ユーザーに通知
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "変換に失敗しました"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
             }
         }
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")

@@ -32,6 +32,7 @@ struct ConfigWindow: View {
     @State private var showingLearningResetConfirmation = false
     @State private var learningResetMessage: LearningResetMessage?
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
+    @State private var availabilityCheckDone = false
 
     private enum LearningResetMessage {
         case success
@@ -305,22 +306,33 @@ struct ConfigWindow: View {
                             Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
                         }
                         .onAppear {
-                            foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                            // Only check availability once
+                            if !availabilityCheckDone {
+                                foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                                availabilityCheckDone = true
 
-                            // If Foundation Models is available and backend is still at default (.off),
-                            // automatically switch to Foundation Models
-                            if aiBackend.value == .off,
-                               let availability = foundationModelsAvailability,
-                               availability.isAvailable {
-                                aiBackend.value = .foundationModels
-                            }
+                                // If Foundation Models is available and backend is still at default (.off),
+                                // automatically switch to Foundation Models (only on first launch)
+                                let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                                if !hasSetAIBackend,
+                                   aiBackend.value == .off,
+                                   let availability = foundationModelsAvailability,
+                                   availability.isAvailable {
+                                    aiBackend.value = .foundationModels
+                                    UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                                }
 
-                            // If Foundation Models is selected but not available, switch to off
-                            if aiBackend.value == .foundationModels,
-                               let availability = foundationModelsAvailability,
-                               !availability.isAvailable {
-                                aiBackend.value = .off
+                                // If Foundation Models is selected but not available, switch to off
+                                if aiBackend.value == .foundationModels,
+                                   let availability = foundationModelsAvailability,
+                                   !availability.isAvailable {
+                                    aiBackend.value = .off
+                                }
                             }
+                        }
+                        .onChange(of: aiBackend.value) { _ in
+                            // Mark that user has manually changed the backend
+                            UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                         }
 
                     }
