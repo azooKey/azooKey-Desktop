@@ -75,24 +75,6 @@ struct ConfigWindow: View {
         }
     }
 
-    private func getAvailabilityMessage(_ availability: FoundationModelsAvailability) -> String {
-        guard case .unavailable(let reason) = availability else {
-            return ""
-        }
-        switch reason {
-        case .osVersionTooOld:
-            return "macOS 26.0以降が必要です"
-        case .deviceNotEligible:
-            return "このデバイスは対応していません"
-        case .appleIntelligenceNotEnabled:
-            return "Apple Intelligenceが有効化されていません"
-        case .modelNotReady:
-            return "モデルの準備ができていません"
-        case .frameworkNotAvailable:
-            return "Foundation Modelsフレームワークが利用できません"
-        }
-    }
-
     func testConnection() async {
         connectionTestInProgress = true
         connectionTestResult = nil
@@ -314,46 +296,25 @@ struct ConfigWindow: View {
                     VStack(alignment: .leading) {
                         Picker("いい感じ変換", selection: $aiBackend) {
                             Text("オフ").tag(Config.AIBackendPreference.Value.off)
-                            Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+
+                            // Only show Foundation Models if available
+                            if let availability = foundationModelsAvailability, availability.isAvailable {
+                                Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                            }
+
                             Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
                         }
                         .onAppear {
                             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
-                        }
 
-                        if aiBackend.value == .foundationModels {
-                            let availability = FoundationModelsClientCompat.checkAvailability()
-                            if !availability.isAvailable {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.orange)
-                                        .font(.system(size: 14))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Foundation Modelsは利用できません")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.orange)
-                                        Text(getAvailabilityMessage(availability))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.orange.opacity(0.1))
-                                .cornerRadius(6)
-                            } else {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.system(size: 12))
-                                    Text("Foundation Modelsが利用可能です")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
-                                .padding(.top, 4)
+                            // If Foundation Models is selected but not available, switch to off
+                            if aiBackend.value == .foundationModels,
+                               let availability = foundationModelsAvailability,
+                               !availability.isAvailable {
+                                aiBackend.value = .off
                             }
                         }
+
                     }
 
                     if aiBackend.value == .openAI {

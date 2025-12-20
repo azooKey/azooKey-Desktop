@@ -25,6 +25,32 @@ public enum FoundationModelsAvailability {
     }
 }
 
+// Foundation Models specific errors
+public enum FoundationModelsError: LocalizedError, @unchecked Sendable {
+    case unavailable(FoundationModelsAvailability.UnavailabilityReason)
+    case responseParsingFailed
+
+    public var errorDescription: String? {
+        switch self {
+        case .unavailable(let reason):
+            switch reason {
+            case .osVersionTooOld:
+                return "Foundation Models requires macOS 26.0 or later"
+            case .deviceNotEligible:
+                return "Foundation Models is not available on this device"
+            case .appleIntelligenceNotEnabled:
+                return "Apple Intelligence is not enabled"
+            case .modelNotReady:
+                return "Foundation Models is not ready"
+            case .frameworkNotAvailable:
+                return "Foundation Models framework is not available"
+            }
+        case .responseParsingFailed:
+            return "Failed to parse Foundation Models response"
+        }
+    }
+}
+
 // Foundation Models Client for macOS 26.0+
 @available(macOS 26.0, *)
 public enum FoundationModelsClient {
@@ -68,9 +94,26 @@ public enum FoundationModelsClient {
 
         let systemModel = SystemLanguageModel.default
 
-        guard case .available = systemModel.availability else {
-            logger?("Foundation Models not available")
-            throw OpenAIError.invalidURL
+        // Check availability and throw appropriate error
+        switch systemModel.availability {
+        case .available:
+            break
+        case .unavailable(let reason):
+            logger?("Foundation Models not available: \(reason)")
+            let mappedReason: FoundationModelsAvailability.UnavailabilityReason = switch reason {
+            case .deviceNotEligible:
+                .deviceNotEligible
+            case .appleIntelligenceNotEnabled:
+                .appleIntelligenceNotEnabled
+            case .modelNotReady:
+                .modelNotReady
+            @unknown default:
+                .deviceNotEligible
+            }
+            throw FoundationModelsError.unavailable(mappedReason)
+        @unknown default:
+            logger?("Foundation Models availability unknown")
+            throw FoundationModelsError.unavailable(.deviceNotEligible)
         }
 
         let session = LanguageModelSession(model: systemModel)
@@ -90,7 +133,7 @@ public enum FoundationModelsClient {
         logger?("Received structured response with \(response.content.predictions.count) predictions")
         return response.content.predictions
         #else
-        throw OpenAIError.invalidURL
+        throw FoundationModelsError.unavailable(.frameworkNotAvailable)
         #endif
     }
 }
@@ -109,7 +152,7 @@ public enum FoundationModelsClientCompat {
         if #available(macOS 26.0, *) {
             return try await FoundationModelsClient.sendRequest(request, logger: logger)
         } else {
-            throw OpenAIError.parseError("Foundation Models requires macOS 26.0 or later")
+            throw FoundationModelsError.unavailable(.osVersionTooOld)
         }
     }
 }

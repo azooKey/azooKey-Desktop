@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Prompt {
+struct Prompt {
     static let dictionary: [String: String] = [
         // 文章補完プロンプト（デフォルト）
         "": """
@@ -141,7 +141,7 @@ public struct Prompt {
     Output: ["Gracias", "Muchas gracias", "Te lo agradezco", "Mil gracias", "Gracias mil"]
     """
 
-    static func getPromptText(for target: String) -> String {
+    public static func getPromptText(for target: String) -> String {
         let basePrompt = if let prompt = dictionary[target] {
             prompt
         } else if target.hasSuffix("えもじ") {

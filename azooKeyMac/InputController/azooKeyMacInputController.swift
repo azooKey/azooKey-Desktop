@@ -169,8 +169,17 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
 
+        // Check if AI backend is enabled
+        let aiBackendEnabled = Config.AIBackendPreference().value != .off
+
         // Handle suggest action with selected text check (prevent recursive calls)
         if case .suggest = userAction {
+            // If AI backend is off, ignore the suggest action
+            if !aiBackendEnabled {
+                self.segmentsManager.appendDebugMessage("Suggest action ignored: AI backend is off")
+                return false
+            }
+
             // Prevent recursive window calls
             if self.isPromptWindowVisible {
                 self.segmentsManager.appendDebugMessage("Suggest action ignored: prompt window already visible")
@@ -194,7 +203,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
             enableDebugWindow: Config.DebugWindow().value,
-            enableSuggestion: Config.EnableOpenAiApiKey().value
+            enableSuggestion: aiBackendEnabled
         )
         return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
     }
