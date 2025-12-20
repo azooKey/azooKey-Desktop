@@ -187,7 +187,15 @@ extension Config {
             case foundationModels = "Foundation Models"
             case openAI = "OpenAI API"
         }
-        static var `default`: Value = .off
+        static var `default`: Value {
+            // Migration: If user had OpenAI API enabled, preserve that setting
+            let legacyKey = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
+            if let legacyValue = UserDefaults.standard.value(forKey: legacyKey) as? Bool,
+               legacyValue {
+                return .openAI
+            }
+            return .off
+        }
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
     }
 }
