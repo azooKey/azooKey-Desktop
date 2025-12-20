@@ -180,4 +180,14 @@ extension Config {
         static var `default`: Value = .qwerty
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keyboard_layout"
     }
+
+    struct AIBackendPreference: CustomCodableConfigItem {
+        enum Value: String, Codable, Equatable, Hashable {
+            case off = "Off"
+            case foundationModels = "Foundation Models"
+            case openAI = "OpenAI API"
+        }
+        static var `default`: Value = .off
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
+    }
 }

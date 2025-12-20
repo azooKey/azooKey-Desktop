@@ -20,6 +20,7 @@ struct ConfigWindow: View {
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
+    @ConfigState private var aiBackend = Config.AIBackendPreference()
 
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -290,6 +291,12 @@ struct ConfigWindow: View {
                         Text("履歴学習データ")
                     }
 
+                    Divider()
+                    Picker("AIバックエンド（いい感じ変換）", selection: $aiBackend) {
+                        Text("オフ").tag(Config.AIBackendPreference.Value.off)
+                        Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                        Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
+                    }
                     Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
                     Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {

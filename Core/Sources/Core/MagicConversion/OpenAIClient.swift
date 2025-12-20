@@ -1,6 +1,6 @@
 import Foundation
 
-private struct Prompt {
+public struct Prompt {
     static let dictionary: [String: String] = [
         // 文章補完プロンプト（デフォルト）
         "": """
