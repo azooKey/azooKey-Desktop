@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Core
 
 struct PromptInputView: View {
     @State private var promptText: String = ""
@@ -11,6 +12,19 @@ struct PromptInputView: View {
     @State private var isNavigatingHistory: Bool = false
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
     @FocusState private var isTextFieldFocused: Bool
+
+    private var modelDisplayName: String {
+        let backend = Config.AIBackendPreference().value
+        switch backend {
+        case .off:
+            return "Off"
+        case .foundationModels:
+            return "Foundation Models"
+        case .openAI:
+            let modelName = Config.OpenAiModelName().value
+            return modelName.isEmpty ? "OpenAI API" : modelName
+        }
+    }
 
     let onSubmit: (String?) -> Void
     let onPreview: (String, Bool, @escaping (String) -> Void) -> Void  // Added includeContext parameter
@@ -41,15 +55,21 @@ struct PromptInputView: View {
                         .font(.system(size: 8, weight: .semibold))
                 }
 
-                Text("Magic Conversion")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.primary, .secondary],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Magic Conversion")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .secondary],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                    )
+
+                    Text(modelDisplayName)
+                        .font(.system(size: 8, weight: .regular))
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
 
                 Spacer()
 

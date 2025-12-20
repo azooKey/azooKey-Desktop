@@ -208,23 +208,24 @@ public struct OpenAIRequest {
             "response_format": [
                 "type": "json_schema",
                 "json_schema": [
-                    "name": "PredictionResponse", // 必須のnameフィールド
-                    "schema": [ // 必須のschemaフィールド
+                    "name": "prediction_response",
+                    "strict": true,
+                    "schema": [
                         "type": "object",
                         "properties": [
                             "predictions": [
                                 "type": "array",
                                 "items": [
-                                    "type": "string",
-                                    "description": "Replacement text"
-                                ]
+                                    "type": "string"
+                                ],
+                                "description": "Array of prediction strings"
                             ]
                         ],
                         "required": ["predictions"],
                         "additionalProperties": false
-                    ]
-                ]
-            ]
+                    ] as [String: Any]
+                ] as [String: Any]
+            ] as [String: Any]
         ]
     }
 }
@@ -364,7 +365,8 @@ public enum OpenAIClient {
             "response_format": [
                 "type": "json_schema",
                 "json_schema": [
-                    "name": "TextTransformResponse",
+                    "name": "text_transform_response",
+                    "strict": true,
                     "schema": [
                         "type": "object",
                         "properties": [
@@ -375,9 +377,9 @@ public enum OpenAIClient {
                         ],
                         "required": ["result"],
                         "additionalProperties": false
-                    ]
-                ]
-            ]
+                    ] as [String: Any]
+                ] as [String: Any]
+            ] as [String: Any]
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

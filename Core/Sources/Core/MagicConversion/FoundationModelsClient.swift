@@ -57,9 +57,9 @@ public enum FoundationModelsClient {
     }
 
     @Generable
-    public struct PredictionResponse {
-        @Guide(description: "Array of prediction strings")
-        public let predictions: [String]
+    public struct PredictionResponse: Codable {
+        @Guide(description: "Array of prediction strings", .count(3...5))
+        public var predictions: [String]
     }
 
     public static func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)? = nil) async throws -> [String] {
@@ -73,38 +73,24 @@ public enum FoundationModelsClient {
             throw OpenAIError.invalidURL
         }
 
-        let session = try LanguageModelSession(model: systemModel)
+        let session = LanguageModelSession(model: systemModel)
 
-        // Build prompt from request
+        // Build prompt - simplified since we use @Generable for structured output
         let promptText = """
-        \(Prompt.dictionary[request.target] ?? Prompt.dictionary[""]!)
+        \(Prompt.getPromptText(for: request.target))
 
-        Input: \(request.target)
-        Output:
+        Input: `\(request.prompt)<\(request.target)>`
         """
 
-        logger?("Sending prompt to Foundation Models: \(promptText)")
+        logger?("Requesting from Foundation Models with guided generation")
 
-        do {
-            let response = try await session.respond(to: promptText)
+        // Use guided generation with @Generable to get structured output directly
+        let response = try await session.respond(to: promptText, generating: PredictionResponse.self)
 
-            // Parse response
-            logger?("Foundation Models response received: \(response.content)")
-
-            // Try to parse as JSON array
-            if let data = response.content.data(using: .utf8),
-               let predictions = try? JSONDecoder().decode([String].self, from: data) {
-                return predictions
-            }
-
-            // Fallback: return as single prediction
-            return [response.content]
-        } catch {
-            logger?("Foundation Models error: \(error.localizedDescription)")
-            throw OpenAIError.parseError("Generation failed: \(error.localizedDescription)")
-        }
+        logger?("Received structured response with \(response.content.predictions.count) predictions")
+        return response.content.predictions
         #else
-        throw OpenAIError.invalidRequest
+        throw OpenAIError.invalidURL
         #endif
     }
 }
