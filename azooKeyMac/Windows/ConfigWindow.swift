@@ -307,6 +307,14 @@ struct ConfigWindow: View {
                         .onAppear {
                             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
 
+                            // If Foundation Models is available and backend is still at default (.off),
+                            // automatically switch to Foundation Models
+                            if aiBackend.value == .off,
+                               let availability = foundationModelsAvailability,
+                               availability.isAvailable {
+                                aiBackend.value = .foundationModels
+                            }
+
                             // If Foundation Models is selected but not available, switch to off
                             if aiBackend.value == .foundationModels,
                                let availability = foundationModelsAvailability,
