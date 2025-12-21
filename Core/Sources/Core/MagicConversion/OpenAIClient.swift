@@ -1,6 +1,6 @@
 import Foundation
 
-private struct Prompt {
+struct Prompt {
     static let dictionary: [String: String] = [
         // 文章補完プロンプト（デフォルト）
         "": """
@@ -141,7 +141,7 @@ private struct Prompt {
     Output: ["Gracias", "Muchas gracias", "Te lo agradezco", "Mil gracias", "Gracias mil"]
     """
 
-    static func getPromptText(for target: String) -> String {
+    public static func getPromptText(for target: String) -> String {
         let basePrompt = if let prompt = dictionary[target] {
             prompt
         } else if target.hasSuffix("えもじ") {
@@ -208,23 +208,24 @@ public struct OpenAIRequest {
             "response_format": [
                 "type": "json_schema",
                 "json_schema": [
-                    "name": "PredictionResponse", // 必須のnameフィールド
-                    "schema": [ // 必須のschemaフィールド
+                    "name": "prediction_response",
+                    "strict": true,
+                    "schema": [
                         "type": "object",
                         "properties": [
                             "predictions": [
                                 "type": "array",
                                 "items": [
-                                    "type": "string",
-                                    "description": "Replacement text"
-                                ]
+                                    "type": "string"
+                                ],
+                                "description": "Array of prediction strings"
                             ]
                         ],
                         "required": ["predictions"],
                         "additionalProperties": false
-                    ]
-                ]
-            ]
+                    ] as [String: Any]
+                ] as [String: Any]
+            ] as [String: Any]
         ]
     }
 }
@@ -364,7 +365,8 @@ public enum OpenAIClient {
             "response_format": [
                 "type": "json_schema",
                 "json_schema": [
-                    "name": "TextTransformResponse",
+                    "name": "text_transform_response",
+                    "strict": true,
                     "schema": [
                         "type": "object",
                         "properties": [
@@ -375,9 +377,9 @@ public enum OpenAIClient {
                         ],
                         "required": ["result"],
                         "additionalProperties": false
-                    ]
-                ]
-            ]
+                    ] as [String: Any]
+                ] as [String: Any]
+            ] as [String: Any]
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

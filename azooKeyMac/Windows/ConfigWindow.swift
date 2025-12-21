@@ -10,7 +10,6 @@ struct ConfigWindow: View {
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
-    @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
     @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
@@ -20,6 +19,7 @@ struct ConfigWindow: View {
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
+    @ConfigState private var aiBackend = Config.AIBackendPreference()
 
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -30,6 +30,8 @@ struct ConfigWindow: View {
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
     @State private var showingLearningResetConfirmation = false
     @State private var learningResetMessage: LearningResetMessage?
+    @State private var foundationModelsAvailability: FoundationModelsAvailability?
+    @State private var availabilityCheckDone = false
 
     private enum LearningResetMessage {
         case success
@@ -291,47 +293,91 @@ struct ConfigWindow: View {
                     }
 
                     Divider()
+                    VStack(alignment: .leading) {
+                        Picker("いい感じ変換", selection: $aiBackend) {
+                            Text("オフ").tag(Config.AIBackendPreference.Value.off)
+
+                            // Only show Foundation Models if available
+                            if let availability = foundationModelsAvailability, availability.isAvailable {
+                                Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                            }
+
+                            Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
+                        }
+                        .onAppear {
+                            // Only check availability once
+                            if !availabilityCheckDone {
+                                foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                                availabilityCheckDone = true
+
+                                // If Foundation Models is available and backend is still at default (.off),
+                                // automatically switch to Foundation Models (only on first launch)
+                                let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                                if !hasSetAIBackend,
+                                   aiBackend.value == .off,
+                                   let availability = foundationModelsAvailability,
+                                   availability.isAvailable {
+                                    aiBackend.value = .foundationModels
+                                    UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                                }
+
+                                // If Foundation Models is selected but not available, switch to off
+                                if aiBackend.value == .foundationModels,
+                                   let availability = foundationModelsAvailability,
+                                   !availability.isAvailable {
+                                    aiBackend.value = .off
+                                }
+                            }
+                        }
+                        .onChange(of: aiBackend.value) { _ in
+                            // Mark that user has manually changed the backend
+                            UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                        }
+
+                    }
+
+                    if aiBackend.value == .openAI {
+                        HStack {
+                            SecureField("APIキー", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
+                            helpButton(
+                                helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
+                                isPresented: $openAiApiKeyPopover
+                            )
+                        }
+                        TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+                        TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
+                            .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+
+                        HStack {
+                            Button("接続テスト") {
+                                Task {
+                                    await testConnection()
+                                }
+                            }
+                            .disabled(connectionTestInProgress || openAiApiKey.value.isEmpty)
+
+                            if connectionTestInProgress {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            }
+                        }
+
+                        if let result = connectionTestResult {
+                            Text(result)
+                                .foregroundColor(result.contains("成功") ? .green : .red)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Divider()
                     Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
                     Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
                         Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
                         Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
                         Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
                         Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
-                    }
-                    Toggle("OpenAI APIキーの利用", isOn: $enableOpenAiApiKey)
-                    HStack {
-                        SecureField("OpenAI API", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
-                        helpButton(
-                            helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
-                            isPresented: $openAiApiKeyPopover
-                        )
-                    }
-                    TextField("OpenAI Model Name", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
-                        .disabled(!$enableOpenAiApiKey.wrappedValue)
-                    TextField("API Endpoint", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
-                        .disabled(!$enableOpenAiApiKey.wrappedValue)
-                        .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
-
-                    HStack {
-                        Button("接続テスト") {
-                            Task {
-                                await testConnection()
-                            }
-                        }
-                        .disabled(!$enableOpenAiApiKey.wrappedValue || connectionTestInProgress || openAiApiKey.value.isEmpty)
-
-                        if connectionTestInProgress {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        }
-                    }
-
-                    if let result = connectionTestResult {
-                        Text(result)
-                            .foregroundColor(result.contains("成功") ? .green : .red)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                     LabeledContent("Version") {
                         Text(PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version")

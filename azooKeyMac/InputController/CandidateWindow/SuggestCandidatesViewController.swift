@@ -8,6 +8,45 @@ import KanaKanjiConverterModule
 
 class ReplaceSuggestionsViewController: BaseCandidateViewController {
     weak var delegate: (any ReplaceSuggestionsViewControllerDelegate)?
+    private var modelLabel: NSTextField?
+
+    private var modelDisplayName: String {
+        let backend = Config.AIBackendPreference().value
+        switch backend {
+        case .off:
+            return "Off"
+        case .foundationModels:
+            return "Foundation Models"
+        case .openAI:
+            let modelName = Config.OpenAiModelName().value
+            return modelName.isEmpty ? "OpenAI API" : modelName
+        }
+    }
+
+    override func loadView() {
+        super.loadView()
+
+        // Add model name label at the bottom of the window
+        let label = NSTextField(labelWithString: modelDisplayName)
+        label.font = NSFont.systemFont(ofSize: 8)
+        label.textColor = .secondaryLabelColor
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        self.modelLabel = label
+
+        self.view.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: self.view.centerXAnchor),
+            label.bottomAnchor.constraint(equalTo: self.view.bottomAnchor, constant: -2)
+        ])
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        // Update model label when view appears
+        modelLabel?.stringValue = modelDisplayName
+    }
 
     override internal func updateSelectionCallback(_ row: Int) {
         delegate?.replaceSuggestionSelectionChanged(row)

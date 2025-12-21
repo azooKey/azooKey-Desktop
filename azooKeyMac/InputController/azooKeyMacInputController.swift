@@ -175,8 +175,17 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
 
+        // Check if AI backend is enabled
+        let aiBackendEnabled = Config.AIBackendPreference().value != .off
+
         // Handle suggest action with selected text check (prevent recursive calls)
         if case .suggest = userAction {
+            // If AI backend is off, ignore the suggest action
+            if !aiBackendEnabled {
+                self.segmentsManager.appendDebugMessage("Suggest action ignored: AI backend is off")
+                return false
+            }
+
             // Prevent recursive window calls
             if self.isPromptWindowVisible {
                 self.segmentsManager.appendDebugMessage("Suggest action ignored: prompt window already visible")
@@ -200,7 +209,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
             enableDebugWindow: Config.DebugWindow().value,
-            enableSuggestion: Config.EnableOpenAiApiKey().value
+            enableSuggestion: aiBackendEnabled
         )
         return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
     }
@@ -563,6 +572,15 @@ extension azooKeyMacInputController {
         self.replaceSuggestionWindow.setIsVisible(false)
         self.replaceSuggestionWindow.orderOut(nil)
 
+        // Get selected backend preference
+        let preference = Config.AIBackendPreference().value
+
+        // If backend is off, do nothing
+        if preference == .off {
+            self.segmentsManager.appendDebugMessage("AI backend is off, skipping suggestion")
+            return
+        }
+
         let composingText = self.segmentsManager.convertTarget
 
         // プロンプトを取得
@@ -574,15 +592,34 @@ extension azooKeyMacInputController {
         let modelName = Config.OpenAiModelName().value
         let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
-        self.segmentsManager.appendDebugMessage("Using OpenAI Model: \(modelName)")
+
+        // Get selected backend
+        let backend: AIBackend
+        switch preference {
+        case .off:
+            // Already checked above, but defensive programming
+            self.segmentsManager.appendDebugMessage("Unexpected .off state in backend selection")
+            return
+        case .foundationModels:
+            backend = .foundationModels
+        case .openAI:
+            backend = .openAI
+        }
+        self.segmentsManager.appendDebugMessage("Using backend: \(backend.rawValue)")
 
         // 非同期タスクでリクエストを送信
         Task {
             do {
                 self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await OpenAIClient.sendRequest(request, apiKey: apiKey, apiEndpoint: Config.OpenAiApiEndpoint().value, logger: { [weak self] message in
-                    self?.segmentsManager.appendDebugMessage(message)
-                })
+                let predictions = try await AIClient.sendRequest(
+                    request,
+                    backend: backend,
+                    apiKey: apiKey,
+                    apiEndpoint: Config.OpenAiApiEndpoint().value,
+                    logger: { [weak self] message in
+                        self?.segmentsManager.appendDebugMessage(message)
+                    }
+                )
                 self.segmentsManager.appendDebugMessage("APIレスポンス受信成功: \(predictions)")
 
                 // String配列からCandidate配列に変換
@@ -612,7 +649,18 @@ extension azooKeyMacInputController {
                     }
                 }
             } catch {
-                self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(error.localizedDescription)")
+                let errorMessage = "APIリクエストエラー: \(error.localizedDescription)"
+                self.segmentsManager.appendDebugMessage(errorMessage)
+
+                // ユーザーに通知
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "変換に失敗しました"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
             }
         }
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")

@@ -17,4 +17,12 @@ extension Config.Deprecated {
         static let `default` = true
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableZenzai"
     }
+
+    /// OpenAI APIキー有効化設定
+    /// - note: この設定はAIBackendPreferenceで置き換える。マイグレーション用にのみ残す。
+    @available(*, deprecated, message: "Use AIBackendPreference instead")
+    struct EnableOpenAiApiKey: BoolConfigItem {
+        static let `default` = false
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
+    }
 }

@@ -180,4 +180,22 @@ extension Config {
         static var `default`: Value = .qwerty
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keyboard_layout"
     }
+
+    struct AIBackendPreference: CustomCodableConfigItem {
+        enum Value: String, Codable, Equatable, Hashable {
+            case off = "Off"
+            case foundationModels = "Foundation Models"
+            case openAI = "OpenAI API"
+        }
+        static var `default`: Value {
+            // Migration: If user had OpenAI API enabled, preserve that setting
+            let legacyKey = Config.Deprecated.EnableOpenAiApiKey.key
+            if let legacyValue = UserDefaults.standard.value(forKey: legacyKey) as? Bool,
+               legacyValue {
+                return .openAI
+            }
+            return .off
+        }
+        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
+    }
 }
