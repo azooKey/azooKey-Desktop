@@ -169,12 +169,13 @@ extension azooKeyMacInputController {
     func transformSelectedText(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") {
         self.segmentsManager.appendDebugMessage("transformSelectedText: Starting with text '\(selectedText)' and prompt '\(prompt)'")
 
-        guard Config.EnableOpenAiApiKey().value else {
-            self.segmentsManager.appendDebugMessage("transformSelectedText: OpenAI API is not enabled")
+        let aiBackend = Config.AIBackendPreference().value
+        guard aiBackend != .off else {
+            self.segmentsManager.appendDebugMessage("transformSelectedText: AI backend is not enabled")
             return
         }
 
-        self.segmentsManager.appendDebugMessage("transformSelectedText: OpenAI API is enabled, starting request")
+        self.segmentsManager.appendDebugMessage("transformSelectedText: AI backend is enabled (\(aiBackend.rawValue)), starting request")
 
         Task {
             do {
@@ -343,11 +344,12 @@ extension azooKeyMacInputController {
             self.segmentsManager.appendDebugMessage("getTransformationPreview: Starting preview request")
         }
 
-        guard Config.EnableOpenAiApiKey().value else {
+        let aiBackend = Config.AIBackendPreference().value
+        guard aiBackend != .off else {
             await MainActor.run {
-                self.segmentsManager.appendDebugMessage("getTransformationPreview: OpenAI API is not enabled")
+                self.segmentsManager.appendDebugMessage("getTransformationPreview: AI backend is not enabled")
             }
-            throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "AI transformation is not available. Please enable OpenAI API in preferences."])
+            throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "AI transformation is not available. Please enable AI backend in preferences."])
         }
 
         // Create custom prompt for text transformation with context

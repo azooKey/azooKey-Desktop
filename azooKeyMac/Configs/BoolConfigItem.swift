@@ -40,11 +40,6 @@ extension Config {
         static let `default` = false
         static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
     }
-    /// OpenAI APIキー
-    struct EnableOpenAiApiKey: BoolConfigItem {
-        static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
-    }
     /// AI変換時にコンテキストを含めるかどうか
     struct IncludeContextInAITransform: BoolConfigItem {
         static let `default` = true

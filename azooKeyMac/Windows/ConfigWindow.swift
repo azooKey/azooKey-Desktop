@@ -10,7 +10,6 @@ struct ConfigWindow: View {
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
-    @ConfigState private var enableOpenAiApiKey = Config.EnableOpenAiApiKey()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
     @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
