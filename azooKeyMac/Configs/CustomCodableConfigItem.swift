@@ -189,7 +189,7 @@ extension Config {
         }
         static var `default`: Value {
             // Migration: If user had OpenAI API enabled, preserve that setting
-            let legacyKey = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
+            let legacyKey = Config.Deprecated.EnableOpenAiApiKey.key
             if let legacyValue = UserDefaults.standard.value(forKey: legacyKey) as? Bool,
                legacyValue {
                 return .openAI
