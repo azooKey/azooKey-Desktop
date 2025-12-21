@@ -21,6 +21,7 @@ struct ConfigWindow: View {
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
 
+    @State private var selectedTab: Tab = .input
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
     @State private var openAiApiKeyPopover = false
@@ -32,6 +33,24 @@ struct ConfigWindow: View {
     @State private var learningResetMessage: LearningResetMessage?
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
     @State private var availabilityCheckDone = false
+
+    enum Tab: String, CaseIterable {
+        case input = "入力"
+        case conversion = "変換"
+        case ai = "AI機能"
+        case dictionary = "辞書"
+        case advanced = "詳細"
+
+        var icon: String {
+            switch self {
+            case .input: return "keyboard"
+            case .conversion: return "textformat"
+            case .ai: return "sparkles"
+            case .dictionary: return "book"
+            case .advanced: return "gearshape"
+            }
+        }
+    }
 
     private enum LearningResetMessage {
         case success
@@ -141,271 +160,381 @@ struct ConfigWindow: View {
     }
 
     var body: some View {
-        VStack {
-            Text("azooKey on macOS")
-                .bold()
-                .font(.title)
-            Spacer()
-            HStack {
-                Spacer()
-                Form {
-
-                    HStack {
-                        TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
-                        helpButton(
-                            helpContent: """
-                        Zenzaiはあなたのプロフィールを考慮した変換を行うことができます。
-                        名前や仕事、趣味などを入力すると、それに合わせた変換が自動で推薦されます。
-                        （実験的な機能のため、精度が不十分な場合があります）
-                        """,
-                            isPresented: $zenzaiProfileHelpPopover
-                        )
-                    }
-                    HStack {
-                        TextField(
-                            "Zenzaiの推論上限",
-                            text: Binding(
-                                get: {
-                                    String(self.$inferenceLimit.wrappedValue)
-                                },
-                                set: {
-                                    if let value = Int($0), (1 ... 50).contains(value) {
-                                        self.$inferenceLimit.wrappedValue = value
-                                    }
-                                }
-                            )
-                        )
-                        Stepper("", value: $inferenceLimit, in: 1 ... 50)
-                            .labelsHidden()
-                        helpButton(helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。", isPresented: $zenzaiInferenceLimitHelpPopover)
-                    }
-                    Divider()
-                    Picker("入力方式", selection: $inputStyle) {
-                        Text("デフォルト").tag(Config.InputStyle.Value.default)
-                        Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
-                        Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
-                        Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
-                        Text("カスタム").tag(Config.InputStyle.Value.custom)
-                    }
-                    if inputStyle.value == .custom {
-                        Button("カスタム入力テーブルを編集") {
-                            showingRomajiTableEditor = true
-                        }
-                    }
-                    Picker("キーボード配列", selection: $keyboardLayout) {
-                        Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
-                        Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
-                        Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
-                    }
-                    Divider()
-                    Toggle("ライブ変換を有効化", isOn: $liveConversion)
-                    Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
-                    Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
-                    Picker("句読点の種類", selection: $punctuationStyle) {
-                        Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
-                        Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
-                        Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
-                        Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
-                    }
-                    Divider()
-                    LabeledContent {
-                        HStack {
-                            Button("編集") {
-                                (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
-                            }
-                            Spacer()
-                            Text("\(self.userDictionary.value.items.count)件のアイテム")
-                        }
-                    } label: {
-                        Text("azooKeyユーザ辞書")
-                    }
-                    LabeledContent {
-                        Button("読み込む") {
-                            do {
-                                let systemUserDictionaryEntries = try SystemUserDictionaryHelper.fetchEntries()
-                                self.systemUserDictionary.value.items = systemUserDictionaryEntries.map {
-                                    .init(word: $0.phrase, reading: $0.shortcut)
-                                }
-                                self.systemUserDictionary.value.lastUpdate = .now
-                                self.systemUserDictionaryUpdateMessage = .successfulUpdate
-                            } catch {
-                                self.systemUserDictionaryUpdateMessage = .error(error)
-                            }
-                        }
-                        Button("リセット") {
-                            self.systemUserDictionary.value.lastUpdate = nil
-                            self.systemUserDictionary.value.items = []
-                            self.systemUserDictionaryUpdateMessage = nil
-                        }
-                        Spacer()
-                        switch self.systemUserDictionaryUpdateMessage {
-                        case .none:
-                            if let updated = self.systemUserDictionary.value.lastUpdate {
-                                let date = updated.formatted(date: .omitted, time: .omitted)
-                                Text("最終更新: \(updated) / \(self.systemUserDictionary.value.items.count)件のアイテム")
-                            } else {
-                                Text("未設定")
-                            }
-                        case .error(let error):
-                            Text("読み込みエラー: \(error.localizedDescription)")
-                        case .successfulUpdate:
-                            Text("読み込みに成功しました / \(self.systemUserDictionary.value.items.count)件のアイテム")
-                        }
-
-                    } label: {
-                        Text("システムのユーザ辞書")
-                    }
-
-                    Picker("履歴学習", selection: $learning) {
-                        Text("学習する").tag(Config.Learning.Value.inputAndOutput)
-                        Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
-                        Text("学習を無視").tag(Config.Learning.Value.nothing)
-                    }
-                    LabeledContent {
-                        HStack {
-                            Button("リセット") {
-                                showingLearningResetConfirmation = true
-                            }
-                            .confirmationDialog(
-                                "履歴学習データをリセットしますか？",
-                                isPresented: $showingLearningResetConfirmation,
-                                titleVisibility: .visible
-                            ) {
-                                Button("リセット", role: .destructive) {
-                                    resetLearningData()
-                                }
-                                Button("キャンセル", role: .cancel) {}
-                            }
-                            Spacer()
-                            switch learningResetMessage {
-                            case .none:
-                                EmptyView()
-                            case .success:
-                                Text("履歴学習データをリセットしました")
-                                    .foregroundColor(.green)
-                            case .error(let message):
-                                Text("エラー: \(message)")
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    } label: {
-                        Text("履歴学習データ")
-                    }
-
-                    Divider()
-                    VStack(alignment: .leading) {
-                        Picker("いい感じ変換", selection: $aiBackend) {
-                            Text("オフ").tag(Config.AIBackendPreference.Value.off)
-
-                            // Only show Foundation Models if available
-                            if let availability = foundationModelsAvailability, availability.isAvailable {
-                                Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
-                            }
-
-                            Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
-                        }
-                        .onAppear {
-                            // Only check availability once
-                            if !availabilityCheckDone {
-                                foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
-                                availabilityCheckDone = true
-
-                                // If Foundation Models is available and backend is still at default (.off),
-                                // automatically switch to Foundation Models (only on first launch)
-                                let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
-                                if !hasSetAIBackend,
-                                   aiBackend.value == .off,
-                                   let availability = foundationModelsAvailability,
-                                   availability.isAvailable {
-                                    aiBackend.value = .foundationModels
-                                    UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
-                                }
-
-                                // If Foundation Models is selected but not available, switch to off
-                                if aiBackend.value == .foundationModels,
-                                   let availability = foundationModelsAvailability,
-                                   !availability.isAvailable {
-                                    aiBackend.value = .off
-                                }
-                            }
-                        }
-                        .onChange(of: aiBackend.value) { _ in
-                            // Mark that user has manually changed the backend
-                            UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
-                        }
-
-                    }
-
-                    if aiBackend.value == .openAI {
-                        HStack {
-                            SecureField("APIキー", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
-                            helpButton(
-                                helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
-                                isPresented: $openAiApiKeyPopover
-                            )
-                        }
-                        TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
-                        TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
-                            .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
-
-                        HStack {
-                            Button("接続テスト") {
-                                Task {
-                                    await testConnection()
-                                }
-                            }
-                            .disabled(connectionTestInProgress || openAiApiKey.value.isEmpty)
-
-                            if connectionTestInProgress {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            }
-                        }
-
-                        if let result = connectionTestResult {
-                            Text(result)
-                                .foregroundColor(result.contains("成功") ? .green : .red)
-                                .font(.caption)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-
-                    Divider()
-                    Toggle("（開発者用）デバッグウィンドウを有効化", isOn: $debugWindow)
-                    Picker("（開発者用）パーソナライズ", selection: $zenzaiPersonalizationLevel) {
-                        Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
-                        Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
-                        Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
-                        Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
-                    }
-                    LabeledContent("Version") {
-                        Text(PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version")
-                            .monospaced()
-                            .bold()
-                            .copyable([
-                                PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version"
-                            ])
-                    }
-                    .textSelection(.enabled)
-                }
-                .frame(width: 450)
-                Spacer()
+        VStack(spacing: 0) {
+            headerView
+            TabView(selection: $selectedTab) {
+                inputTabView.tag(Tab.input)
+                conversionTabView.tag(Tab.conversion)
+                aiTabView.tag(Tab.ai)
+                dictionaryTabView.tag(Tab.dictionary)
+                advancedTabView.tag(Tab.advanced)
             }
-            Spacer()
+            .tabViewStyle(.automatic)
         }
-        .fixedSize()
-        .frame(width: 500)
+        .frame(width: 600, height: 500)
         .sheet(isPresented: $showingRomajiTableEditor) {
             RomajiTableEditorWindow(base: CustomInputTableStore.loadTable()) { exported in
                 do {
                     _ = try CustomInputTableStore.save(exported: exported)
-                    // Re-register the custom input style so it is immediately available
                     CustomInputTableStore.registerIfExists()
                 } catch {
                     print("Failed to save custom input table:", error)
                 }
             }
+        }
+    }
+
+    private var headerView: some View {
+        VStack(spacing: 8) {
+            Text("azooKey on macOS")
+                .font(.title)
+                .bold()
+            Text("設定")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var inputTabView: some View {
+        Form {
+            Section {
+                Picker("入力方式", selection: $inputStyle) {
+                    Text("デフォルト").tag(Config.InputStyle.Value.default)
+                    Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
+                    Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
+                    Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
+                    Text("カスタム").tag(Config.InputStyle.Value.custom)
+                }
+                if inputStyle.value == .custom {
+                    Button("カスタム入力テーブルを編集") {
+                        showingRomajiTableEditor = true
+                    }
+                }
+                Picker("キーボード配列", selection: $keyboardLayout) {
+                    Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                    Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
+                    Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                }
+            } header: {
+                Label("入力方式", systemImage: "keyboard")
+            }
+
+            Section {
+                Toggle("ライブ変換を有効化", isOn: $liveConversion)
+                Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
+                Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Picker("句読点の種類", selection: $punctuationStyle) {
+                    Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
+                    Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
+                    Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
+                    Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
+                }
+            } header: {
+                Label("入力オプション", systemImage: "character.cursor.ibeam")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .tabItem {
+            Label(Tab.input.rawValue, systemImage: Tab.input.icon)
+        }
+    }
+
+    private var conversionTabView: some View {
+        Form {
+            Section {
+                HStack {
+                    TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
+                    helpButton(
+                        helpContent: """
+                        Zenzaiはあなたのプロフィールを考慮した変換を行うことができます。
+                        名前や仕事、趣味などを入力すると、それに合わせた変換が自動で推薦されます。
+                        （実験的な機能のため、精度が不十分な場合があります）
+                        """,
+                        isPresented: $zenzaiProfileHelpPopover
+                    )
+                }
+                HStack {
+                    TextField(
+                        "Zenzaiの推論上限",
+                        text: Binding(
+                            get: { String(self.$inferenceLimit.wrappedValue) },
+                            set: {
+                                if let value = Int($0), (1 ... 50).contains(value) {
+                                    self.$inferenceLimit.wrappedValue = value
+                                }
+                            }
+                        )
+                    )
+                    Stepper("", value: $inferenceLimit, in: 1 ... 50)
+                        .labelsHidden()
+                    helpButton(
+                        helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。",
+                        isPresented: $zenzaiInferenceLimitHelpPopover
+                    )
+                }
+            } header: {
+                Label("Zenzai変換エンジン", systemImage: "brain")
+            }
+
+            Section {
+                Picker("履歴学習", selection: $learning) {
+                    Text("学習する").tag(Config.Learning.Value.inputAndOutput)
+                    Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
+                    Text("学習を無視").tag(Config.Learning.Value.nothing)
+                }
+                LabeledContent {
+                    HStack {
+                        Button("リセット") {
+                            showingLearningResetConfirmation = true
+                        }
+                        .confirmationDialog(
+                            "履歴学習データをリセットしますか？",
+                            isPresented: $showingLearningResetConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("リセット", role: .destructive) {
+                                resetLearningData()
+                            }
+                            Button("キャンセル", role: .cancel) {}
+                        }
+                        Spacer()
+                        switch learningResetMessage {
+                        case .none:
+                            EmptyView()
+                        case .success:
+                            Text("履歴学習データをリセットしました")
+                                .foregroundColor(.green)
+                        case .error(let message):
+                            Text("エラー: \(message)")
+                                .foregroundColor(.red)
+                        }
+                    }
+                } label: {
+                    Text("履歴学習データ")
+                }
+            } header: {
+                Label("学習", systemImage: "memorychip")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .tabItem {
+            Label(Tab.conversion.rawValue, systemImage: Tab.conversion.icon)
+        }
+    }
+
+    private var aiTabView: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("いい感じ変換", selection: $aiBackend) {
+                        Text("オフ").tag(Config.AIBackendPreference.Value.off)
+
+                        if let availability = foundationModelsAvailability, availability.isAvailable {
+                            Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                        }
+
+                        Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
+                    }
+                    .onAppear {
+                        if !availabilityCheckDone {
+                            foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                            availabilityCheckDone = true
+
+                            let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                            if !hasSetAIBackend,
+                               aiBackend.value == .off,
+                               let availability = foundationModelsAvailability,
+                               availability.isAvailable {
+                                aiBackend.value = .foundationModels
+                                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                            }
+
+                            if aiBackend.value == .foundationModels,
+                               let availability = foundationModelsAvailability,
+                               !availability.isAvailable {
+                                aiBackend.value = .off
+                            }
+                        }
+                    }
+                    .onChange(of: aiBackend.value) { _ in
+                        UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                    }
+
+                    if aiBackend.value == .openAI {
+                        Divider()
+                        openAISettingsView
+                    }
+                }
+            } header: {
+                Label("AI変換設定", systemImage: "sparkles")
+            } footer: {
+                if aiBackend.value == .foundationModels {
+                    Text("Foundation ModelsはローカルのApple Intelligenceを使用します。API課金は発生しません。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if aiBackend.value == .openAI {
+                    Text("OpenAI APIを使用すると課金が発生します。APIキーはローカルにのみ保存されます。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .tabItem {
+            Label(Tab.ai.rawValue, systemImage: Tab.ai.icon)
+        }
+    }
+
+    private var openAISettingsView: some View {
+        Group {
+            HStack {
+                SecureField("APIキー", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
+                helpButton(
+                    helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
+                    isPresented: $openAiApiKeyPopover
+                )
+            }
+            TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+            TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
+                .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+
+            HStack {
+                Button("接続テスト") {
+                    Task {
+                        await testConnection()
+                    }
+                }
+                .disabled(connectionTestInProgress || openAiApiKey.value.isEmpty)
+
+                if connectionTestInProgress {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+
+            if let result = connectionTestResult {
+                Text(result)
+                    .foregroundColor(result.contains("成功") ? .green : .red)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var dictionaryTabView: some View {
+        Form {
+            Section {
+                LabeledContent {
+                    HStack {
+                        Button("編集") {
+                            (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
+                        }
+                        Spacer()
+                        Text("\(self.userDictionary.value.items.count)件のアイテム")
+                            .foregroundStyle(.secondary)
+                    }
+                } label: {
+                    Text("azooKeyユーザ辞書")
+                }
+            } header: {
+                Label("ユーザ辞書", systemImage: "book.closed")
+            }
+
+            Section {
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack {
+                            Button("読み込む") {
+                                do {
+                                    let systemUserDictionaryEntries = try SystemUserDictionaryHelper.fetchEntries()
+                                    self.systemUserDictionary.value.items = systemUserDictionaryEntries.map {
+                                        .init(word: $0.phrase, reading: $0.shortcut)
+                                    }
+                                    self.systemUserDictionary.value.lastUpdate = .now
+                                    self.systemUserDictionaryUpdateMessage = .successfulUpdate
+                                } catch {
+                                    self.systemUserDictionaryUpdateMessage = .error(error)
+                                }
+                            }
+                            Button("リセット") {
+                                self.systemUserDictionary.value.lastUpdate = nil
+                                self.systemUserDictionary.value.items = []
+                                self.systemUserDictionaryUpdateMessage = nil
+                            }
+                        }
+                        switch self.systemUserDictionaryUpdateMessage {
+                        case .none:
+                            if let updated = self.systemUserDictionary.value.lastUpdate {
+                                Text("最終更新: \(updated.formatted()) / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("未設定")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        case .error(let error):
+                            Text("読み込みエラー: \(error.localizedDescription)")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        case .successfulUpdate:
+                            Text("読み込みに成功しました / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                    }
+                } label: {
+                    Text("システムのユーザ辞書")
+                }
+            } header: {
+                Label("システム辞書", systemImage: "folder")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .tabItem {
+            Label(Tab.dictionary.rawValue, systemImage: Tab.dictionary.icon)
+        }
+    }
+
+    private var advancedTabView: some View {
+        Form {
+            Section {
+                Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
+                Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
+                    Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
+                    Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
+                    Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
+                    Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
+                }
+            } header: {
+                Label("開発者向け設定", systemImage: "hammer")
+            }
+
+            Section {
+                LabeledContent("Version") {
+                    Text(PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version")
+                        .monospaced()
+                        .bold()
+                        .copyable([
+                            PackageMetadata.gitTag ?? PackageMetadata.gitCommit ?? "Unknown Version"
+                        ])
+                }
+            } header: {
+                Label("アプリ情報", systemImage: "info.circle")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .tabItem {
+            Label(Tab.advanced.rawValue, systemImage: Tab.advanced.icon)
         }
     }
 }
