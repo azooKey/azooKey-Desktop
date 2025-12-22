@@ -32,132 +32,109 @@ extension UserAction {
                 }
             }
         }
-        // Diacritic processing
-        if event.modifierFlags.contains(.option) && event.modifierFlags.isDisjoint(with: [.command, .control]) {
-            if let diacritic = DiacriticAttacher.deadKeyList[event.keyCode] {
+        // Resolve action based on logical key character (ignoring modifiers)
+        if let logicalKey = event.charactersIgnoringModifiers?.lowercased() {
+            if event.modifierFlags.contains(.option),
+               event.modifierFlags.isDisjoint(with: .control),
+               inputLanguage == .english,
+               DiacriticAttacher.deadKeyList.contains(logicalKey) {
                 if event.modifierFlags.contains(.shift) {
                     // Shift + Option: insert diacritical mark only
                     return event.characters.map { .input($0.map(InputPiece.character)) } ?? .unknown
                 } else {
                     // Option only: begin dead key sequence
-                    return .deadKey(diacritic)
+                    return .deadKey(logicalKey)
                 }
             }
-        }
-        switch event.keyCode {
-        case 0x04: // 'H'
-            // Ctrl + H is binding for backspace
-            if event.modifierFlags.contains(.control) {
-                return .backspace
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
+            if event.modifierFlags.contains(.control),
+               event.modifierFlags.isDisjoint(with: [.shift, .option]) {
+                switch logicalKey {
+                case "h": // Control + h
+                    return .backspace
+                case "p": // Control + p
+                    return .navigation(.up)
+                case "m": // Control + m
+                    return .enter
+                case "n": // Control + n
+                    return .navigation(.down)
+                case "f": // Control + f
+                    return .navigation(.right)
+                case "i": // Control + i
+                    return .editSegment(-1)  // Shift segment cursor left
+                case "o": // Control + o
+                    return .editSegment(1)  // Shift segment cursor right
+                case "l": // Control + l
+                    return .function(.nine)
+                case "j": // Control + j
+                    return .function(.six)
+                case "k": // Control + k
+                    return .function(.seven)
+                case ";": // Control + ;
+                    return .function(.eight)
+                case "s": // Control + s
+                    return .suggest
+                default:
+                    break
+                }
             }
-        case 0x23: // Control + p
-            if event.modifierFlags.contains(.control) {
-                return .navigation(.up)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x2E: // Control + m
-            if event.modifierFlags.contains(.control) {
-                return .enter
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x2D: // Control + n
-            if event.modifierFlags.contains(.control) {
-                return .navigation(.down)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x03: // Control + f
-            if event.modifierFlags.contains(.control) {
-                return .navigation(.right)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x22: // Control + i
-            if event.modifierFlags.contains(.control) {
-                return .editSegment(-1)  // Shift segment cursor left
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x1F: // Control + o
-            if event.modifierFlags.contains(.control) {
-                return .editSegment(1)  // Shift segment cursor right
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x25: // Control + l
-            if event.modifierFlags.contains(.control) {
-                return .function(.nine)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x26: // Control + j
-            if event.modifierFlags.contains(.control) {
-                return .function(.six)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x28: // Control + k
-            if event.modifierFlags.contains(.control) {
-                return .function(.seven)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x27: // Control + :
-            if event.modifierFlags.contains(.control) {
-                return .function(.ten)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x29: // Control + ;
-            if event.modifierFlags.contains(.control) {
-                return .function(.eight)
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x01: // Control + s
-            if event.modifierFlags.contains(.control) {
-                return .suggest
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
-            }
-        case 0x20: // Shift + Control + u
-            if event.modifierFlags.contains(.control) && event.modifierFlags.contains(.shift) {
+            switch logicalKey {
+            case "u"
+                    where event.modifierFlags.contains([.shift, .control]):
+                // Shift + Control + u
                 return .startUnicodeInput
-            } else if let text = event.characters, isPrintable(text) {
-                return .input(keyMap(text))
-            } else {
-                return .unknown
+            case ":"
+                    where event.modifierFlags.contains(.control)
+                    && event.modifierFlags.isDisjoint(with: [.shift, .option]):
+                // Control + : in QWERTY(JIS) layout
+                return .function(.ten)
+            case "'"
+                    where event.modifierFlags.contains(.control)
+                    && event.modifierFlags.isDisjoint(with: [.shift, .option]):
+                // Control + ' in QWERTY(ANSI)/Colemak/Dvorak layouts
+                return .function(.ten)
+            case "¥", "\\":
+                // Yen or Backslash
+                switch (Config.TypeBackSlash().value, event.modifierFlags.contains(.shift), event.modifierFlags.contains(.option)) {
+                case (_, true, _):
+                    return .input(keyMap("|"))
+                case (true, false, false), (false, false, true):
+                    return .input(keyMap("\\"))
+                case (true, false, true), (false, false, false):
+                    return .input(keyMap("¥"))
+                }
+            case ","
+                    where event.modifierFlags.isDisjoint(with: [.shift, .option, .control]):
+                // Comma
+                return .input(keyMap(","))
+            case "."
+                    where event.modifierFlags.isDisjoint(with: [.shift, .option, .control]):
+                // Period
+                return .input(keyMap("."))
+            case "/"
+                    where inputLanguage == .japanese
+                    && event.modifierFlags.isDisjoint(with: .control):
+                // Slash
+                switch (event.modifierFlags.contains(.shift),
+                        event.modifierFlags.contains(.option)) {
+                case (true, true):
+                    // Option+Shift入力で…を入力する
+                    return .input(keyMap("…"))
+                case (true, false):
+                    // シフト入力でQuestionを入力する
+                    return .input(keyMap("?"))
+                case (false, true):
+                    // Option入力でSlashを入力する
+                    return .input(keyMap("／"))
+                default:
+                    // そうでない場合は「・」を入力する（"/"がkeyMapで"・"に変換される）
+                    break
+                }
+            default:
+                break
             }
+        }
+        // Resolve action based on physical key code
+        switch event.keyCode {
         case 0x24, 0x4C: // Enter (0x24) and Numpad Enter (0x4C)
             return .enter
         case 48: // Tab
@@ -178,58 +155,6 @@ extension UserAction {
             }
         case 53: // Escape
             return .escape
-        case 93: // Yen
-            switch (Config.TypeBackSlash().value, event.modifierFlags.contains(.shift), event.modifierFlags.contains(.option)) {
-            case (_, true, _):
-                return .input(keyMap("|"))
-            case (true, false, false), (false, false, true):
-                return .input(keyMap("\\"))
-            case (true, false, true), (false, false, false):
-                return .input(keyMap("¥"))
-            }
-        case 43: // Comma
-            if event.modifierFlags.contains(.shift) {
-                if let text = event.characters, isPrintable(text) {
-                    return .input(keyMap(text))
-                } else {
-                    return .unknown
-                }
-            } else {
-                return .input(keyMap(","))
-            }
-        case 47: // Period
-            if event.modifierFlags.contains(.shift) {
-                if let text = event.characters, isPrintable(text) {
-                    return .input(keyMap(text))
-                } else {
-                    return .unknown
-                }
-            } else {
-                return .input(keyMap("."))
-            }
-        case 0x2C: // Slash
-            return switch inputLanguage {
-            case .japanese:
-                if event.modifierFlags.contains([.shift, .option]) {
-                    // Option+Shift入力で…を入力する
-                    .input(keyMap("…"))
-                } else if event.modifierFlags.contains(.shift) {
-                    // シフト入力でQuestionを入力する
-                    .input(keyMap("?"))
-                } else if event.modifierFlags.contains(.option) {
-                    // Option入力でSlashを入力する
-                    .input(keyMap("／"))
-                } else {
-                    // そうでない場合は「・」を入力する（"/"がkeyMapで"・"に変換される）
-                    .input(keyMap("/"))
-                }
-            case .english:
-                if let text = event.characters, isPrintable(text) {
-                    .input(keyMap(text))
-                } else {
-                    .unknown
-                }
-            }
         case 97: // F6
             return .function(.six)
         case 98: // F7
