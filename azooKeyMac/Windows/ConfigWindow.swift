@@ -3,6 +3,30 @@ import Core
 import KanaKanjiConverterModule
 import SwiftUI
 
+// ログファイルへの書き込みヘルパー
+private func logToFile(_ message: String) {
+    let logDir = FileManager.default.temporaryDirectory.appendingPathComponent("azooKeyMac-logs")
+    try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+
+    let logFile = logDir.appendingPathComponent("ConfigWindow.log")
+    let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+    let logMessage = "[\(timestamp)] \(message)\n"
+
+    if let data = logMessage.data(using: .utf8) {
+        if FileManager.default.fileExists(atPath: logFile.path) {
+            if let fileHandle = try? FileHandle(forWritingTo: logFile) {
+                fileHandle.seekToEndOfFile()
+                fileHandle.write(data)
+                try? fileHandle.close()
+            }
+        } else {
+            try? data.write(to: logFile)
+        }
+    }
+    print(message)
+}
+
+
 struct ConfigWindow: View {
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -18,6 +42,7 @@ struct ConfigWindow: View {
     @State private var initialLoadDone = false
     @State private var loadingTask: Task<Void, Never>?
     @State private var cachedCustomInputTable: InputTable?
+    @State private var isTabContentReady = false
     @State private var cachedUserDictCount: Int?
     @State private var cachedSystemDictCount: Int?
     @State private var cachedSystemDictLastUpdate: Date?
@@ -101,6 +126,7 @@ struct ConfigWindow: View {
 
     // @ConfigStateを経由せずに直接UserDefaultsから辞書データを読み込むヘルパー関数
     nonisolated private static func loadDictionaryInfo() -> DictionaryInfo {
+        let start = Date()
         var userCount = 0
         var systemCount = 0
         var systemLastUpdate: Date?
@@ -118,6 +144,7 @@ struct ConfigWindow: View {
             systemLastUpdate = dict.lastUpdate
         }
 
+        logToFile("⏱️ [loadDictionaryInfo] took \(Date().timeIntervalSince(start))s")
         return DictionaryInfo(
             userDict: userCount,
             systemDict: systemCount,
@@ -152,6 +179,7 @@ struct ConfigWindow: View {
 
     // 全ての設定値をバックグラウンドで読み込む
     nonisolated private static func loadAllConfigs() async -> AllConfigs {
+        let start = Date()
         let zenzaiProfile = UserDefaults.standard.string(forKey: Config.ZenzaiProfile.key) ?? ""
         let liveConversion = UserDefaults.standard.bool(forKey: Config.LiveConversion.key)
 
@@ -209,6 +237,7 @@ struct ConfigWindow: View {
 
         let debugWindow = UserDefaults.standard.bool(forKey: Config.DebugWindow.key)
 
+        logToFile("⏱️ [loadAllConfigs] took \(Date().timeIntervalSince(start))s")
         return AllConfigs(
             zenzaiProfile: zenzaiProfile,
             liveConversion: liveConversion,
@@ -297,27 +326,73 @@ struct ConfigWindow: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            basicTabView
-                .tabItem {
-                    Label(Tab.basic.rawValue, systemImage: Tab.basic.icon)
-                }
-                .tag(Tab.basic)
+        let bodyStart = Date()
+        logToFile("🔵 [body] START evaluation, selectedTab=\(selectedTab.rawValue)")
 
-            customizeTabView
-                .tabItem {
-                    Label(Tab.customize.rawValue, systemImage: Tab.customize.icon)
+        // SwiftUIのTabViewを使用せず独自実装にした理由:
+        // TabViewはタブ切り替え時に内部的に全てのタブビューを事前レンダリングしようとするため、
+        // メインスレッドがブロックされレインボーカーソル（ビーチボール）が発生していた。
+        // 独自実装により、選択されたタブのみをレンダリングすることで問題を解決。
+        let result = VStack(spacing: 0) {
+            // カスタムタブバー
+            HStack(spacing: 0) {
+                ForEach([Tab.basic, Tab.customize, Tab.advanced], id: \.self) { tab in
+                    Button(action: {
+                        logToFile("🔘 [TabButton] clicked: \(tab.rawValue)")
+                        selectedTab = tab
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 18))
+                            Text(tab.rawValue)
+                                .font(.system(size: 11))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(
+                        Group {
+                            if selectedTab == tab {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.accentColor.opacity(0.15))
+                            } else {
+                                Color.clear
+                            }
+                        }
+                    )
+                    .overlay(
+                        Group {
+                            if selectedTab == tab {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
+                            }
+                        }
+                    )
                 }
-                .tag(Tab.customize)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(Color(nsColor: .controlBackgroundColor))
 
-            advancedTabView
-                .tabItem {
-                    Label(Tab.advanced.rawValue, systemImage: Tab.advanced.icon)
+            Divider()
+
+            // コンテンツエリア（選択されたタブのみ表示）
+            Group {
+                if selectedTab == .basic {
+                    basicTabView
+                } else if selectedTab == .customize {
+                    customizeTabView
+                } else {
+                    advancedTabView
                 }
-                .tag(Tab.advanced)
+            }
         }
         .frame(width: 600, height: 500)
         .onAppear {
+            logToFile("🟢 [ConfigWindow] onAppear called")
             performInitialLoad()
         }
         .onDisappear {
@@ -333,7 +408,7 @@ struct ConfigWindow: View {
                     // 保存後にキャッシュを更新
                     cachedCustomInputTable = CustomInputTableStore.loadTable()
                 } catch {
-                    print("Failed to save custom input table:", error)
+                    logToFile("Failed to save custom input table: \(error)")
                 }
             }
         }
@@ -343,22 +418,45 @@ struct ConfigWindow: View {
                 cachedCustomInputTable = CustomInputTableStore.loadTable()
             }
         }
+        .onChange(of: selectedTab) { newTab in
+            logToFile("🔄 [ConfigWindow] tab changed to: \(newTab.rawValue)")
+            // メインスレッドに処理を譲ってからログ出力
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+                logToFile("✨ [ConfigWindow] tab change processing complete")
+            }
+        }
+
+        logToFile("🏁 [body] END evaluation in \(Date().timeIntervalSince(bodyStart))s")
+        return result
     }
 
     private func performInitialLoad() {
+        let logFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("azooKeyMac-logs")
+            .appendingPathComponent("ConfigWindow.log")
+        logToFile("📂 Log file: \(logFile.path)")
+        logToFile("🟡 [performInitialLoad] called, initialLoadDone=\(initialLoadDone), loadingTask=\(loadingTask != nil ? "running" : "nil")")
+
         // 既に読み込み済みまたは読み込み中の場合はスキップ
         guard !initialLoadDone, loadingTask == nil else {
+            logToFile("⚠️ [performInitialLoad] skipped (already loaded or loading)")
             return
         }
         initialLoadDone = true
+        logToFile("✅ [performInitialLoad] starting initial load")
 
         // Foundation Models可用性チェック（初回のみ実行、キャッシュする）
         if foundationModelsAvailability == nil {
+            logToFile("🔍 [performInitialLoad] checking Foundation Models availability")
+            let start = Date()
             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+            logToFile("✅ [performInitialLoad] Foundation Models check done in \(Date().timeIntervalSince(start))s")
         }
 
         // 重い処理を単一のタスクで実行（タブ切り替えで再実行されない）
         loadingTask = Task { @MainActor in
+            logToFile("🚀 [performInitialLoad] background task started")
             // バックグラウンドで全ての設定を並行読み込み
             async let dictInfo = Task.detached(priority: .userInitiated) {
                 ConfigWindow.loadDictionaryInfo()
@@ -380,10 +478,14 @@ struct ConfigWindow: View {
             }.value
 
             // 全ての読み込みを待機
+            logToFile("⏳ [performInitialLoad] waiting for all configs to load...")
+            let loadStart = Date()
             let (loadedDictInfo, loadedConfigs, loadedAIBackend) = await (dictInfo, configs, aiBackend)
+            logToFile("✅ [performInitialLoad] all configs loaded in \(Date().timeIntervalSince(loadStart))s")
 
             // タスクがキャンセルされていないか確認
             guard !Task.isCancelled else {
+                logToFile("❌ [performInitialLoad] task was cancelled")
                 return
             }
 
@@ -410,6 +512,7 @@ struct ConfigWindow: View {
             }
 
             // 全てのキャッシュを一度に更新
+            logToFile("💾 [performInitialLoad] updating all cached values")
             self.cachedUserDictCount = loadedDictInfo.userDict
             self.cachedSystemDictCount = loadedDictInfo.systemDict
             self.cachedSystemDictLastUpdate = loadedDictInfo.systemLastUpdate
@@ -431,13 +534,16 @@ struct ConfigWindow: View {
 
             // タスクの完了を記録
             self.loadingTask = nil
+            logToFile("🎉 [performInitialLoad] initial load completed successfully")
         }
     }
 
     // MARK: - 基本タブ
     @ViewBuilder
     private var basicTabView: some View {
-        Form {
+        let start = Date()
+        logToFile("🏗️ [basicTabView] START construction")
+        let view = Form {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("いい感じ変換", selection: Binding(
@@ -500,7 +606,7 @@ struct ConfigWindow: View {
                                 UserDefaults.standard.set(newValue, forKey: Config.OpenAiApiEndpoint.key)
                             }
                         ), prompt: Text("例: https://api.openai.com/v1/chat/completions"))
-                            .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+                        .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
 
                         HStack {
                             Button("接続テスト") {
@@ -647,12 +753,16 @@ struct ConfigWindow: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        logToFile("✅ [basicTabView] END construction in \(Date().timeIntervalSince(start))s")
+        return view
     }
 
     // MARK: - カスタマイズタブ
     @ViewBuilder
     private var customizeTabView: some View {
-        Form {
+        let start = Date()
+        logToFile("🏗️ [customizeTabView] START construction")
+        let view = Form {
             Section {
                 Picker("入力方式", selection: Binding(
                     get: { cachedInputStyle ?? .default },
@@ -780,12 +890,16 @@ struct ConfigWindow: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        logToFile("✅ [customizeTabView] END construction in \(Date().timeIntervalSince(start))s")
+        return view
     }
 
     // MARK: - 詳細設定タブ
     @ViewBuilder
     private var advancedTabView: some View {
-        Form {
+        let start = Date()
+        logToFile("🏗️ [advancedTabView] START construction")
+        let view = Form {
             Section {
                 HStack {
                     TextField(
@@ -809,7 +923,7 @@ struct ConfigWindow: View {
                             UserDefaults.standard.set(newValue, forKey: Config.ZenzaiInferenceLimit.key)
                         }
                     ), in: 1 ... 50)
-                        .labelsHidden()
+                    .labelsHidden()
                     helpButton(
                         helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。",
                         isPresented: $zenzaiInferenceLimitHelpPopover
@@ -866,6 +980,13 @@ struct ConfigWindow: View {
                         UserDefaults.standard.set(newValue, forKey: Config.DebugWindow.key)
                     }
                 ))
+
+                Button("ログファイルを開く") {
+                    let logFile = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("azooKeyMac-logs")
+                        .appendingPathComponent("ConfigWindow.log")
+                    NSWorkspace.shared.selectFile(logFile.path, inFileViewerRootedAtPath: logFile.deletingLastPathComponent().path)
+                }
             } header: {
                 Label("開発者向け設定", systemImage: "hammer")
             }
@@ -885,6 +1006,8 @@ struct ConfigWindow: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        logToFile("✅ [advancedTabView] END construction in \(Date().timeIntervalSince(start))s")
+        return view
     }
 }
 
