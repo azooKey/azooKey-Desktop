@@ -1,24 +1,9 @@
 import Cocoa
 import Core
+import KanaKanjiConverterModule
 import SwiftUI
 
 struct ConfigWindow: View {
-    @ConfigState private var liveConversion = Config.LiveConversion()
-    @ConfigState private var inputStyle = Config.InputStyle()
-    @ConfigState private var typeBackSlash = Config.TypeBackSlash()
-    @ConfigState private var punctuationStyle = Config.PunctuationStyle()
-    @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
-    @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
-    @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
-    @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
-    @ConfigState private var openAiModelName = Config.OpenAiModelName()
-    @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
-    @ConfigState private var learning = Config.Learning()
-    @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
-    @ConfigState private var debugWindow = Config.DebugWindow()
-    @ConfigState private var keyboardLayout = Config.KeyboardLayout()
-    @ConfigState private var aiBackend = Config.AIBackendPreference()
-
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -30,7 +15,9 @@ struct ConfigWindow: View {
     @State private var showingLearningResetConfirmation = false
     @State private var learningResetMessage: LearningResetMessage?
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
-    @State private var availabilityCheckDone = false
+    @State private var initialLoadDone = false
+    @State private var loadingTask: Task<Void, Never>?
+    @State private var cachedCustomInputTable: InputTable?
     @State private var cachedUserDictCount: Int?
     @State private var cachedSystemDictCount: Int?
     @State private var cachedSystemDictLastUpdate: Date?
@@ -106,8 +93,14 @@ struct ConfigWindow: View {
         }
     }
 
+    private struct DictionaryInfo {
+        let userDict: Int
+        let systemDict: Int
+        let systemLastUpdate: Date?
+    }
+
     // @ConfigStateを経由せずに直接UserDefaultsから辞書データを読み込むヘルパー関数
-    nonisolated private static func loadDictionaryInfo() -> (userDict: Int, systemDict: Int, systemLastUpdate: Date?) {
+    nonisolated private static func loadDictionaryInfo() -> DictionaryInfo {
         var userCount = 0
         var systemCount = 0
         var systemLastUpdate: Date?
@@ -125,7 +118,11 @@ struct ConfigWindow: View {
             systemLastUpdate = dict.lastUpdate
         }
 
-        return (userCount, systemCount, systemLastUpdate)
+        return DictionaryInfo(
+            userDict: userCount,
+            systemDict: systemCount,
+            systemLastUpdate: systemLastUpdate
+        )
     }
 
     // システムユーザ辞書を直接UserDefaultsに保存するヘルパー関数（@ConfigStateを経由しない）
@@ -136,23 +133,25 @@ struct ConfigWindow: View {
         }
     }
 
+    private struct AllConfigs {
+        let zenzaiProfile: String
+        let liveConversion: Bool
+        let inputStyle: Config.InputStyle.Value
+        let typeBackSlash: Bool
+        let typeHalfSpace: Bool
+        let punctuationStyle: Config.PunctuationStyle.Value
+        let learning: Config.Learning.Value
+        let openAiApiKey: String
+        let openAiModelName: String
+        let openAiApiEndpoint: String
+        let inferenceLimit: Int
+        let zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value
+        let keyboardLayout: Config.KeyboardLayout.Value
+        let debugWindow: Bool
+    }
+
     // 全ての設定値をバックグラウンドで読み込む
-    nonisolated private static func loadAllConfigs() async -> (
-        zenzaiProfile: String,
-        liveConversion: Bool,
-        inputStyle: Config.InputStyle.Value,
-        typeBackSlash: Bool,
-        typeHalfSpace: Bool,
-        punctuationStyle: Config.PunctuationStyle.Value,
-        learning: Config.Learning.Value,
-        openAiApiKey: String,
-        openAiModelName: String,
-        openAiApiEndpoint: String,
-        inferenceLimit: Int,
-        zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value,
-        keyboardLayout: Config.KeyboardLayout.Value,
-        debugWindow: Bool
-    ) {
+    nonisolated private static func loadAllConfigs() async -> AllConfigs {
         let zenzaiProfile = UserDefaults.standard.string(forKey: Config.ZenzaiProfile.key) ?? ""
         let liveConversion = UserDefaults.standard.bool(forKey: Config.LiveConversion.key)
 
@@ -210,7 +209,22 @@ struct ConfigWindow: View {
 
         let debugWindow = UserDefaults.standard.bool(forKey: Config.DebugWindow.key)
 
-        return (zenzaiProfile, liveConversion, inputStyle, typeBackSlash, typeHalfSpace, punctuationStyle, learning, openAiApiKey, openAiModelName, openAiApiEndpoint, finalInferenceLimit, zenzaiPersonalizationLevel, keyboardLayout, debugWindow)
+        return AllConfigs(
+            zenzaiProfile: zenzaiProfile,
+            liveConversion: liveConversion,
+            inputStyle: inputStyle,
+            typeBackSlash: typeBackSlash,
+            typeHalfSpace: typeHalfSpace,
+            punctuationStyle: punctuationStyle,
+            learning: learning,
+            openAiApiKey: openAiApiKey,
+            openAiModelName: openAiModelName,
+            openAiApiEndpoint: openAiApiEndpoint,
+            inferenceLimit: finalInferenceLimit,
+            zenzaiPersonalizationLevel: zenzaiPersonalizationLevel,
+            keyboardLayout: keyboardLayout,
+            debugWindow: debugWindow
+        )
     }
 
     func testConnection() async {
@@ -303,17 +317,58 @@ struct ConfigWindow: View {
                 .tag(Tab.advanced)
         }
         .frame(width: 600, height: 500)
-        .task {
-            guard !availabilityCheckDone else {
-                return
+        .onAppear {
+            performInitialLoad()
+        }
+        .onDisappear {
+            // ウィンドウが閉じられる時に実行中のタスクをキャンセル
+            loadingTask?.cancel()
+        }
+        .sheet(isPresented: $showingRomajiTableEditor) {
+            // キャッシュされたテーブルを使用（ビュー再評価のたびにloadTable()が実行されるのを防ぐ）
+            RomajiTableEditorWindow(base: cachedCustomInputTable) { exported in
+                do {
+                    _ = try CustomInputTableStore.save(exported: exported)
+                    CustomInputTableStore.registerIfExists()
+                    // 保存後にキャッシュを更新
+                    cachedCustomInputTable = CustomInputTableStore.loadTable()
+                } catch {
+                    print("Failed to save custom input table:", error)
+                }
             }
-            availabilityCheckDone = true
+        }
+        .onChange(of: showingRomajiTableEditor) { isShowing in
+            // エディタを開く直前にテーブルを読み込む
+            if isShowing {
+                cachedCustomInputTable = CustomInputTableStore.loadTable()
+            }
+        }
+    }
 
+    private func performInitialLoad() {
+        // 既に読み込み済みまたは読み込み中の場合はスキップ
+        guard !initialLoadDone, loadingTask == nil else {
+            return
+        }
+        initialLoadDone = true
+
+        // Foundation Models可用性チェック（初回のみ実行、キャッシュする）
+        if foundationModelsAvailability == nil {
             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+        }
 
-            // AIBackendの初期値をキャッシュに読み込み、必要に応じて自動設定
-            let availability = foundationModelsAvailability
-            Task.detached(priority: .userInitiated) {
+        // 重い処理を単一のタスクで実行（タブ切り替えで再実行されない）
+        loadingTask = Task { @MainActor in
+            // バックグラウンドで全ての設定を並行読み込み
+            async let dictInfo = Task.detached(priority: .userInitiated) {
+                ConfigWindow.loadDictionaryInfo()
+            }.value
+
+            async let configs = Task.detached(priority: .userInitiated) {
+                await ConfigWindow.loadAllConfigs()
+            }.value
+
+            async let aiBackend = Task.detached(priority: .userInitiated) { () -> Config.AIBackendPreference.Value in
                 let currentBackend: Config.AIBackendPreference.Value
                 if let data = UserDefaults.standard.data(forKey: Config.AIBackendPreference.key),
                    let decoded = try? JSONDecoder().decode(Config.AIBackendPreference.Value.self, from: data) {
@@ -321,79 +376,66 @@ struct ConfigWindow: View {
                 } else {
                     currentBackend = Config.AIBackendPreference.default
                 }
+                return currentBackend
+            }.value
 
-                let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
-                var finalBackend = currentBackend
+            // 全ての読み込みを待機
+            let (loadedDictInfo, loadedConfigs, loadedAIBackend) = await (dictInfo, configs, aiBackend)
 
-                // Foundation Modelsが利用可能で、まだ設定していない場合は自動的に設定
-                if !hasSetAIBackend,
-                   currentBackend == .off,
-                   let availability = availability,
-                   availability.isAvailable {
-                    finalBackend = .foundationModels
-                    // バックグラウンドで設定を保存
-                    if let encoded = try? JSONEncoder().encode(Config.AIBackendPreference.Value.foundationModels) {
-                        UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
-                    }
-                    UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+            // タスクがキャンセルされていないか確認
+            guard !Task.isCancelled else {
+                return
+            }
+
+            // AIBackendの自動設定（必要な場合のみ）
+            let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+            var finalBackend = loadedAIBackend
+
+            if !hasSetAIBackend,
+               loadedAIBackend == .off,
+               let availability = foundationModelsAvailability,
+               availability.isAvailable {
+                finalBackend = .foundationModels
+                if let encoded = try? JSONEncoder().encode(Config.AIBackendPreference.Value.foundationModels) {
+                    UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
                 }
-
-                // Foundation Modelsが利用不可なのに設定されている場合はオフに戻す
-                if currentBackend == .foundationModels,
-                   let availability = availability,
-                   !availability.isAvailable {
-                    finalBackend = .off
-                    // バックグラウンドで設定を保存
-                    if let encoded = try? JSONEncoder().encode(Config.AIBackendPreference.Value.off) {
-                        UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
-                    }
-                }
-
-                await MainActor.run {
-                    self.cachedAIBackend = finalBackend
+                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+            } else if loadedAIBackend == .foundationModels,
+                      let availability = foundationModelsAvailability,
+                      !availability.isAvailable {
+                finalBackend = .off
+                if let encoded = try? JSONEncoder().encode(Config.AIBackendPreference.Value.off) {
+                    UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
                 }
             }
 
-            // 全ての設定値とカウントをバックグラウンドで事前に取得
-            if cachedUserDictCount == nil || cachedSystemDictCount == nil {
-                Task.detached(priority: .userInitiated) {
-                    let dictInfo = ConfigWindow.loadDictionaryInfo()
-                    let configs = await ConfigWindow.loadAllConfigs()
-                    await MainActor.run {
-                        self.cachedUserDictCount = dictInfo.userDict
-                        self.cachedSystemDictCount = dictInfo.systemDict
-                        self.cachedSystemDictLastUpdate = dictInfo.systemLastUpdate
-                        self.cachedZenzaiProfile = configs.zenzaiProfile
-                        self.cachedLiveConversion = configs.liveConversion
-                        self.cachedInputStyle = configs.inputStyle
-                        self.cachedTypeBackSlash = configs.typeBackSlash
-                        self.cachedTypeHalfSpace = configs.typeHalfSpace
-                        self.cachedPunctuationStyle = configs.punctuationStyle
-                        self.cachedLearning = configs.learning
-                        self.cachedOpenAiApiKey = configs.openAiApiKey
-                        self.cachedOpenAiModelName = configs.openAiModelName
-                        self.cachedOpenAiApiEndpoint = configs.openAiApiEndpoint
-                        self.cachedInferenceLimit = configs.inferenceLimit
-                        self.cachedZenzaiPersonalizationLevel = configs.zenzaiPersonalizationLevel
-                        self.cachedKeyboardLayout = configs.keyboardLayout
-                        self.cachedDebugWindow = configs.debugWindow
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingRomajiTableEditor) {
-            RomajiTableEditorWindow(base: CustomInputTableStore.loadTable()) { exported in
-                do {
-                    _ = try CustomInputTableStore.save(exported: exported)
-                    CustomInputTableStore.registerIfExists()
-                } catch {
-                    print("Failed to save custom input table:", error)
-                }
-            }
+            // 全てのキャッシュを一度に更新
+            self.cachedUserDictCount = loadedDictInfo.userDict
+            self.cachedSystemDictCount = loadedDictInfo.systemDict
+            self.cachedSystemDictLastUpdate = loadedDictInfo.systemLastUpdate
+            self.cachedAIBackend = finalBackend
+            self.cachedZenzaiProfile = loadedConfigs.zenzaiProfile
+            self.cachedLiveConversion = loadedConfigs.liveConversion
+            self.cachedInputStyle = loadedConfigs.inputStyle
+            self.cachedTypeBackSlash = loadedConfigs.typeBackSlash
+            self.cachedTypeHalfSpace = loadedConfigs.typeHalfSpace
+            self.cachedPunctuationStyle = loadedConfigs.punctuationStyle
+            self.cachedLearning = loadedConfigs.learning
+            self.cachedOpenAiApiKey = loadedConfigs.openAiApiKey
+            self.cachedOpenAiModelName = loadedConfigs.openAiModelName
+            self.cachedOpenAiApiEndpoint = loadedConfigs.openAiApiEndpoint
+            self.cachedInferenceLimit = loadedConfigs.inferenceLimit
+            self.cachedZenzaiPersonalizationLevel = loadedConfigs.zenzaiPersonalizationLevel
+            self.cachedKeyboardLayout = loadedConfigs.keyboardLayout
+            self.cachedDebugWindow = loadedConfigs.debugWindow
+
+            // タスクの完了を記録
+            self.loadingTask = nil
         }
     }
 
     // MARK: - 基本タブ
+    @ViewBuilder
     private var basicTabView: some View {
         Form {
             Section {
@@ -402,11 +444,13 @@ struct ConfigWindow: View {
                         get: { cachedAIBackend ?? .off },
                         set: { newValue in
                             cachedAIBackend = newValue
-                            // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                            if let encoded = try? JSONEncoder().encode(newValue) {
-                                UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
+                            // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                            Task.detached(priority: .userInitiated) {
+                                if let encoded = try? JSONEncoder().encode(newValue) {
+                                    UserDefaults.standard.set(encoded, forKey: Config.AIBackendPreference.key)
+                                }
+                                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                             }
-                            UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                         }
                     )) {
                         Text("オフ").tag(Config.AIBackendPreference.Value.off)
@@ -427,7 +471,10 @@ struct ConfigWindow: View {
                                 get: { cachedOpenAiApiKey ?? "" },
                                 set: { newValue in
                                     cachedOpenAiApiKey = newValue
-                                    openAiApiKey.value = newValue
+                                    // Keychainに直接保存（非同期）
+                                    Task {
+                                        await KeychainHelper.save(key: Config.OpenAiApiKey.key, value: newValue)
+                                    }
                                 }
                             ), prompt: Text("例:sk-xxxxxxxxxxx"))
                             helpButton(
@@ -603,6 +650,7 @@ struct ConfigWindow: View {
     }
 
     // MARK: - カスタマイズタブ
+    @ViewBuilder
     private var customizeTabView: some View {
         Form {
             Section {
@@ -610,9 +658,11 @@ struct ConfigWindow: View {
                     get: { cachedInputStyle ?? .default },
                     set: { newValue in
                         cachedInputStyle = newValue
-                        // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                        if let encoded = try? JSONEncoder().encode(newValue) {
-                            UserDefaults.standard.set(encoded, forKey: Config.InputStyle.key)
+                        // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                        Task.detached(priority: .userInitiated) {
+                            if let encoded = try? JSONEncoder().encode(newValue) {
+                                UserDefaults.standard.set(encoded, forKey: Config.InputStyle.key)
+                            }
                         }
                     }
                 )) {
@@ -660,9 +710,11 @@ struct ConfigWindow: View {
                     get: { cachedPunctuationStyle ?? .kutenAndToten },
                     set: { newValue in
                         cachedPunctuationStyle = newValue
-                        // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                        if let encoded = try? JSONEncoder().encode(newValue) {
-                            UserDefaults.standard.set(encoded, forKey: Config.PunctuationStyle.key)
+                        // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                        Task.detached(priority: .userInitiated) {
+                            if let encoded = try? JSONEncoder().encode(newValue) {
+                                UserDefaults.standard.set(encoded, forKey: Config.PunctuationStyle.key)
+                            }
                         }
                     }
                 )) {
@@ -680,9 +732,11 @@ struct ConfigWindow: View {
                     get: { cachedLearning ?? .inputAndOutput },
                     set: { newValue in
                         cachedLearning = newValue
-                        // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                        if let encoded = try? JSONEncoder().encode(newValue) {
-                            UserDefaults.standard.set(encoded, forKey: Config.Learning.key)
+                        // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                        Task.detached(priority: .userInitiated) {
+                            if let encoded = try? JSONEncoder().encode(newValue) {
+                                UserDefaults.standard.set(encoded, forKey: Config.Learning.key)
+                            }
                         }
                     }
                 )) {
@@ -729,6 +783,7 @@ struct ConfigWindow: View {
     }
 
     // MARK: - 詳細設定タブ
+    @ViewBuilder
     private var advancedTabView: some View {
         Form {
             Section {
@@ -764,9 +819,11 @@ struct ConfigWindow: View {
                     get: { cachedZenzaiPersonalizationLevel ?? .normal },
                     set: { newValue in
                         cachedZenzaiPersonalizationLevel = newValue
-                        // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                        if let encoded = try? JSONEncoder().encode(newValue) {
-                            UserDefaults.standard.set(encoded, forKey: Config.ZenzaiPersonalizationLevel.key)
+                        // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                        Task.detached(priority: .userInitiated) {
+                            if let encoded = try? JSONEncoder().encode(newValue) {
+                                UserDefaults.standard.set(encoded, forKey: Config.ZenzaiPersonalizationLevel.key)
+                            }
                         }
                     }
                 )) {
@@ -784,9 +841,11 @@ struct ConfigWindow: View {
                     get: { cachedKeyboardLayout ?? .qwerty },
                     set: { newValue in
                         cachedKeyboardLayout = newValue
-                        // UserDefaultsに直接保存（@ConfigStateを経由しない）
-                        if let encoded = try? JSONEncoder().encode(newValue) {
-                            UserDefaults.standard.set(encoded, forKey: Config.KeyboardLayout.key)
+                        // UserDefaultsに非同期で保存（メインスレッドをブロックしない）
+                        Task.detached(priority: .userInitiated) {
+                            if let encoded = try? JSONEncoder().encode(newValue) {
+                                UserDefaults.standard.set(encoded, forKey: Config.KeyboardLayout.key)
+                            }
                         }
                     }
                 )) {
