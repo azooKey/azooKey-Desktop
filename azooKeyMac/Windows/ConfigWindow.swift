@@ -334,40 +334,48 @@ struct ConfigWindow: View {
         // メインスレッドがブロックされレインボーカーソル（ビーチボール）が発生していた。
         // 独自実装により、選択されたタブのみをレンダリングすることで問題を解決。
         let result = VStack(spacing: 0) {
-            // カスタムタブバー（macOSネイティブアプリ風のコンパクトなデザイン）
+            // カスタムタブバー（いい感じ変換ウィンドウ風の角丸デザイン）
             HStack(spacing: 4) {
                 ForEach([Tab.basic, Tab.customize, Tab.advanced], id: \.self) { tab in
                     Button(action: {
                         logToFile("🔘 [TabButton] clicked: \(tab.rawValue)")
                         selectedTab = tab
                     }) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             Image(systemName: tab.icon)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(selectedTab == tab ? Color.accentColor : Color(nsColor: .secondaryLabelColor))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(selectedTab == tab ? Color(nsColor: .controlAccentColor) : Color(nsColor: .secondaryLabelColor))
                             Text(tab.rawValue)
-                                .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
-                                .foregroundColor(selectedTab == tab ? Color.primary : Color(nsColor: .secondaryLabelColor))
+                                .font(.system(size: 11, weight: selectedTab == tab ? .medium : .regular))
+                                .foregroundColor(selectedTab == tab ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Group {
-                                if selectedTab == tab {
-                                    Capsule()
-                                        .fill(Color(nsColor: .controlBackgroundColor))
-                                        .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 0.5)
-                                }
-                            }
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(selectedTab == tab ? Color(nsColor: .controlBackgroundColor) : Color.clear)
                         )
-                        .contentShape(Capsule())
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(
+                                    selectedTab == tab ? Color(nsColor: .separatorColor).opacity(0.5) : Color.clear,
+                                    lineWidth: 0.5
+                                )
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .unemphasizedSelectedContentBackgroundColor).opacity(0.3))
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
 
             // コンテンツエリア（選択されたタブのみ表示）
             Group {
