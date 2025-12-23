@@ -26,7 +26,6 @@ private func logToFile(_ message: String) {
     print(message)
 }
 
-
 struct ConfigWindow: View {
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -337,33 +336,36 @@ struct ConfigWindow: View {
             // カスタムタブバー（いい感じ変換ウィンドウ風の角丸デザイン）
             HStack(spacing: 4) {
                 ForEach([Tab.basic, Tab.customize, Tab.advanced], id: \.self) { tab in
-                    Button(action: {
-                        logToFile("🔘 [TabButton] clicked: \(tab.rawValue)")
-                        selectedTab = tab
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(selectedTab == tab ? Color(nsColor: .controlAccentColor) : Color(nsColor: .secondaryLabelColor))
-                            Text(tab.rawValue)
-                                .font(.system(size: 11, weight: selectedTab == tab ? .medium : .regular))
-                                .foregroundColor(selectedTab == tab ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
+                    Button(
+                        action: {
+                            logToFile("🔘 [TabButton] clicked: \(tab.rawValue)")
+                            selectedTab = tab
+                        },
+                        label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: tab.icon)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(selectedTab == tab ? Color(nsColor: .controlAccentColor) : Color(nsColor: .secondaryLabelColor))
+                                Text(tab.rawValue)
+                                    .font(.system(size: 11, weight: selectedTab == tab ? .medium : .regular))
+                                    .foregroundColor(selectedTab == tab ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(selectedTab == tab ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(
+                                        selectedTab == tab ? Color(nsColor: .separatorColor).opacity(0.5) : Color.clear,
+                                        lineWidth: 0.5
+                                    )
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 6))
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(selectedTab == tab ? Color(nsColor: .controlBackgroundColor) : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(
-                                    selectedTab == tab ? Color(nsColor: .separatorColor).opacity(0.5) : Color.clear,
-                                    lineWidth: 0.5
-                                )
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 6))
-                    }
+                    )
                     .buttonStyle(.plain)
                 }
             }
@@ -648,16 +650,16 @@ struct ConfigWindow: View {
             Section {
                 LabeledContent {
                     HStack {
-                        Button("編集") {
-                            (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
-                        }
-                        Spacer()
                         if let count = cachedUserDictCount {
                             Text("\(count)件のアイテム")
                                 .foregroundStyle(.secondary)
                         } else {
                             ProgressView()
                                 .scaleEffect(0.7)
+                        }
+                        Spacer()
+                        Button("編集") {
+                            (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
                         }
                     }
                 } label: {
@@ -854,6 +856,17 @@ struct ConfigWindow: View {
                 }
                 LabeledContent {
                     HStack {
+                        switch learningResetMessage {
+                        case .none:
+                            EmptyView()
+                        case .success:
+                            Text("履歴学習データをリセットしました")
+                                .foregroundColor(.green)
+                        case .error(let message):
+                            Text("エラー: \(message)")
+                                .foregroundColor(.red)
+                        }
+                        Spacer()
                         Button("リセット") {
                             showingLearningResetConfirmation = true
                         }
@@ -866,17 +879,6 @@ struct ConfigWindow: View {
                                 resetLearningData()
                             }
                             Button("キャンセル", role: .cancel) {}
-                        }
-                        Spacer()
-                        switch learningResetMessage {
-                        case .none:
-                            EmptyView()
-                        case .success:
-                            Text("履歴学習データをリセットしました")
-                                .foregroundColor(.green)
-                        case .error(let message):
-                            Text("エラー: \(message)")
-                                .foregroundColor(.red)
                         }
                     }
                 } label: {
