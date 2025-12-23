@@ -34,101 +34,63 @@ extension UserAction {
         }
         // Resolve action based on logical key character (ignoring modifiers)
         if let logicalKey = event.charactersIgnoringModifiers?.lowercased() {
-            if event.modifierFlags.contains(.option),
-               event.modifierFlags.isDisjoint(with: .control),
-               inputLanguage == .english,
-               DiacriticAttacher.deadKeyList.contains(logicalKey) {
-                if event.modifierFlags.contains(.shift) {
-                    // Shift + Option: insert diacritical mark only
-                    return event.characters.map { .input($0.map(InputPiece.character)) } ?? .unknown
-                } else {
-                    // Option only: begin dead key sequence
-                    return .deadKey(logicalKey)
-                }
-            }
-            if event.modifierFlags.contains(.control),
-               event.modifierFlags.isDisjoint(with: [.shift, .option]) {
-                switch logicalKey {
-                case "h": // Control + h
-                    return .backspace
-                case "p": // Control + p
-                    return .navigation(.up)
-                case "m": // Control + m
-                    return .enter
-                case "n": // Control + n
-                    return .navigation(.down)
-                case "f": // Control + f
-                    return .navigation(.right)
-                case "i": // Control + i
-                    return .editSegment(-1)  // Shift segment cursor left
-                case "o": // Control + o
-                    return .editSegment(1)  // Shift segment cursor right
-                case "l": // Control + l
-                    return .function(.nine)
-                case "j": // Control + j
-                    return .function(.six)
-                case "k": // Control + k
-                    return .function(.seven)
-                case ";": // Control + ;
-                    return .function(.eight)
-                case "s": // Control + s
-                    return .suggest
-                default:
-                    break
-                }
-            }
-            switch logicalKey {
-            case "u"
-                    where event.modifierFlags.contains([.shift, .control]):
-                // Shift + Control + u
+            switch (logicalKey, event.modifierFlags) {
+            case (let key, [.option])
+                    where DiacriticAttacher.deadKeyList.contains(key) && inputLanguage == .english:
+                return .deadKey(key)
+
+            case ("h", [.control]): // Control + h
+                return .backspace
+            case ("p", [.control]): // Control + p
+                return .navigation(.up)
+            case ("m", [.control]): // Control + m
+                return .enter
+            case ("n", [.control]): // Control + n
+                return .navigation(.down)
+            case ("f", [.control]): // Control + f
+                return .navigation(.right)
+            case ("i", [.control]): // Control + i
+                return .editSegment(-1)  // Shift segment cursor left
+            case ("o", [.control]): // Control + o
+                return .editSegment(1)  // Shift segment cursor right
+            case ("l", [.control]): // Control + l
+                return .function(.nine)
+            case ("j", [.control]): // Control + j
+                return .function(.six)
+            case ("k", [.control]): // Control + k
+                return .function(.seven)
+            case (";", [.control]): // Control + ;
+                return .function(.eight)
+            case (":", [.control]): // Control + :
+                return .function(.ten)
+            case ("'", [.control]): // Control + '
+                return .function(.ten)
+            case ("s", [.control]): // Control + s
+                return .suggest
+            case ("u", [.control, .shift]): // Shift + Control + u
                 return .startUnicodeInput
-            case ":"
-                    where event.modifierFlags.contains(.control)
-                    && event.modifierFlags.isDisjoint(with: [.shift, .option]):
-                // Control + : in QWERTY(JIS) layout
-                return .function(.ten)
-            case "'"
-                    where event.modifierFlags.contains(.control)
-                    && event.modifierFlags.isDisjoint(with: [.shift, .option]):
-                // Control + ' in QWERTY(ANSI)/Colemak/Dvorak layouts
-                return .function(.ten)
-            case "¥", "\\":
-                // Yen or Backslash
-                switch (Config.TypeBackSlash().value, event.modifierFlags.contains(.shift), event.modifierFlags.contains(.option)) {
-                case (_, true, _):
-                    return .input(keyMap("|"))
-                case (true, false, false), (false, false, true):
-                    return .input(keyMap("\\"))
-                case (true, false, true), (false, false, false):
-                    return .input(keyMap("¥"))
+
+            case ("¥", [.shift, .option]), ("¥", [.shift]), ("\\", [.shift, .option]), ("\\", [.shift]):
+                return .input(keyMap("|"))
+            case ("¥", []), ("\\", []):
+                return if Config.TypeBackSlash().value {
+                    .input(keyMap("\\"))
+                } else {
+                    .input(keyMap("¥"))
                 }
-            case ","
-                    where event.modifierFlags.isDisjoint(with: [.shift, .option, .control]):
-                // Comma
-                return .input(keyMap(","))
-            case "."
-                    where event.modifierFlags.isDisjoint(with: [.shift, .option, .control]):
-                // Period
-                return .input(keyMap("."))
-            case "/"
-                    where inputLanguage == .japanese
-                    && event.modifierFlags.isDisjoint(with: .control):
-                // Slash
-                switch (event.modifierFlags.contains(.shift),
-                        event.modifierFlags.contains(.option)) {
-                case (true, true):
-                    // Option+Shift入力で…を入力する
-                    return .input(keyMap("…"))
-                case (true, false):
-                    // シフト入力でQuestionを入力する
-                    return .input(keyMap("?"))
-                case (false, true):
-                    // Option入力でSlashを入力する
-                    return .input(keyMap("／"))
-                default:
-                    // そうでない場合は「・」を入力する（"/"がkeyMapで"・"に変換される）
-                    break
+            case ("¥", [.option]), ("\\", [.option]):
+                return if Config.TypeBackSlash().value {
+                    .input(keyMap("¥"))
+                } else {
+                    .input(keyMap("\\"))
                 }
+
+            case ("/", [.shift, .option]) where inputLanguage == .japanese:
+                return .input(keyMap("…"))
+            case ("/", [.shift]) where inputLanguage == .japanese:
+                return .input(keyMap("?"))
+            case ("/", [.option]) where inputLanguage == .japanese:
+                return .input(keyMap("／"))
             default:
                 break
             }
