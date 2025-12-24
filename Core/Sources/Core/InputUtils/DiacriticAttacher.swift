@@ -1,12 +1,7 @@
 public struct DiacriticAttacher {
-    // Maps each dead key's hardware key code to its assigned diacritic
-    public static let deadKeyList: [UInt16: String] = [
-        0x20: "¨", // 'u'
-        0x0e: "´", // 'e'
-        0x32: "`", // '`' (US layout)
-        0x5e: "`", // '_' (JIS layout)
-        0x22: "ˆ", // 'i'
-        0x2d: "˜"  // 'n'
+    // Set of characters that start a dead key sequence
+    public static let deadKeyList: Set<String> = [
+        "¨", "´", "`", "ˆ", "˜"
     ]
 
     // Maps a diacritic and a base character to its lowercase and uppercase result
