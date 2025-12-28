@@ -128,11 +128,13 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     }
 
     @MainActor
+    // 英数キーのダブルタップ処理が複雑なため、lintを無効化
+    // swiftlint:disable:next cyclomatic_complexity
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
         if let value = value as? NSString {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
-            
+
             // 英数キーの場合: ダブルタップ検出を行う
             if englishMode && self.inputLanguage != .english {
                 // ダブルタップ検出
@@ -140,7 +142,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 let isDoubleTap = (currentTime - Self.lastKeyDownTime < Self.doubleTapInterval)
                 Self.lastKeyDownTime = currentTime
                 Self.lastKeyCode = 102  // 英数キーのkeyCode
-                
+
                 if let client = self.client() {
                     switch self.inputState {
                     case .composing, .previewing, .selecting:
@@ -148,7 +150,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                             // 既存のタイマーをキャンセル
                             Self.pendingEisuAction?.cancel()
                             Self.pendingEisuAction = nil
-                            
+
                             if isDoubleTap {
                                 // ダブルタップ: 半角ローマ字で確定して英語モードへ
                                 _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
@@ -158,7 +160,9 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                             } else {
                                 // シングルタップ: 0.38秒後にひらがなで確定するタイマーをセット
                                 let workItem = DispatchWorkItem { [weak self] in
-                                    guard let self = self else { return }
+                                    guard let self = self else {
+                                        return
+                                    }
                                     Task { @MainActor in
                                         // タイマー実行時にまだ入力中のテキストがあるか確認
                                         if !self.segmentsManager.isEmpty {
@@ -180,7 +184,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                                 }
                                 Self.pendingEisuAction = workItem
                                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.doubleTapInterval, execute: workItem)
-                                
+
                                 // OS のモード切り替えリクエストを一旦受け入れてから日本語モードに戻す
                                 super.setValue(value, forTag: tag, client: sender)
                                 client.selectMode("dev.ensan.inputmethod.azooKeyMac.Japanese")
@@ -198,7 +202,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 super.setValue(value, forTag: tag, client: sender)
                 return
             }
-            
+
             // かなキーの場合: 従来の動作
             if !englishMode && self.inputLanguage == .english {
                 let (clientAction, clientActionCallback) = self.inputState.event(
