@@ -35,6 +35,10 @@ final class SegmentsManager {
     private var replaceSuggestions: [Candidate] = []
     private var suggestSelectionIndex: Int?
 
+    // MARK: - 英数キーダブルタップ用（ローマ字候補保存）
+    private var savedRomanText: String?
+    private var savedCommittedTextLength: Int = 0
+
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
 
     private func getZenzaiPersonalizationMode() -> ConvertRequestOptions.ZenzaiMode.PersonalizationMode? {
@@ -624,6 +628,33 @@ final class SegmentsManager {
                 selectionRange: NSRange(location: displayText.count, length: 0)
             )
         }
+    }
+
+    // MARK: - 英数キーダブルタップ用（ローマ字候補保存・復元）
+
+    /// ローマ字候補を保存する（英数キー1回目で呼ぶ）
+    /// - Parameters:
+    ///   - romanText: ローマ字テキスト
+    ///   - committedTextLength: 確定したテキストの長さ
+    func saveRomanTextForUndo(romanText: String, committedTextLength: Int) {
+        self.savedRomanText = romanText
+        self.savedCommittedTextLength = committedTextLength
+    }
+
+    /// 保存したローマ字候補を取得する（英数キー2回目で呼ぶ）
+    /// - Returns: (ローマ字テキスト, 削除すべき確定済みテキストの長さ)。復元できない場合はnil
+    func getSavedRomanText() -> (romanText: String, deleteLength: Int)? {
+        guard let romanText = self.savedRomanText else {
+            return nil
+        }
+        let length = self.savedCommittedTextLength
+        return (romanText, length)
+    }
+
+    /// 保存したローマ字候補をクリアする
+    func clearSavedRomanText() {
+        self.savedRomanText = nil
+        self.savedCommittedTextLength = 0
     }
 }
 
