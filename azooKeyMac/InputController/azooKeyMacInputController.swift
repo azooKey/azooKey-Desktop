@@ -27,7 +27,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     // ダブルタップ検出用 (複数インスタンス対策でstatic)
     private static var lastKeyDownTime: TimeInterval = 0
     private static var lastKeyCode: UInt16 = 0
-    private static let doubleTapInterval: TimeInterval = 0.5
+    private static let doubleTapInterval: TimeInterval = 0.4
     private static var pendingEisuAction: DispatchWorkItem?
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
