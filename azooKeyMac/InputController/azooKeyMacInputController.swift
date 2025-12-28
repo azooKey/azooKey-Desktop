@@ -27,7 +27,49 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     // ダブルタップ検出用 (複数インスタンス対策でstatic)
     private static var lastKeyDownTime: TimeInterval = 0
     private static var lastKeyCode: UInt16 = 0
-    private static let doubleTapInterval: TimeInterval = 0.4
+    private static let doubleTapInterval: TimeInterval = 0.5
+
+    // MARK: - ダブルタップ検出
+    private func checkAndUpdateDoubleTap(keyCode: UInt16) -> Bool {
+        let now = Date().timeIntervalSince1970
+        let isDouble = (Self.lastKeyCode == keyCode) && (now - Self.lastKeyDownTime < Self.doubleTapInterval)
+        Self.lastKeyDownTime = now
+        Self.lastKeyCode = keyCode
+        return isDouble
+    }
+
+    // MARK: - ローマ字復元
+    @discardableResult
+    private func restoreSavedRomanText(client: IMKTextInput) -> Bool {
+        guard let saved = self.segmentsManager.getSavedRomanText() else {
+            return false
+        }
+        let currentLocation = client.selectedRange().location
+        if currentLocation >= saved.deleteLength {
+            let deleteRange = NSRange(
+                location: currentLocation - saved.deleteLength,
+                length: saved.deleteLength
+            )
+            client.insertText(saved.romanText, replacementRange: deleteRange)
+            self.segmentsManager.clearSavedRomanText()
+            return true
+        }
+        self.segmentsManager.clearSavedRomanText()
+        return false
+    }
+
+    // MARK: - 入力言語切り替え
+    @MainActor
+    private func changeInputLanguage(to language: InputLanguage, client: IMKTextInput) {
+        if self.inputLanguage == language {
+            return
+        }
+        self.inputLanguage = language
+        self.switchInputLanguage(language, client: client)
+        if language == .english {
+            self.inputState = .none
+        }
+    }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         self.segmentsManager = SegmentsManager()
@@ -126,97 +168,44 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.refreshCandidateWindow()
     }
 
+    // MARK: - setValue: 状態同期のみ
     @MainActor
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
+        defer {
+            super.setValue(value, forTag: tag, client: sender)
+        }
+
         if let value = value as? NSString {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
 
-            // 英数キーの場合: ダブルタップ検出を行う
             if englishMode {
-                // ダブルタップ検出（時刻更新はhandleで行う）
-                let currentTime = Date().timeIntervalSince1970
-                let timeDiff = currentTime - Self.lastKeyDownTime
-                let isDoubleTap = (Self.lastKeyCode == 102) && (timeDiff < Self.doubleTapInterval)
-
-                // ダブルタップ: 確定済みテキストを削除してローマ字で再確定
-                if isDoubleTap, let saved = self.segmentsManager.getSavedRomanText(), let client = self.client() {
-                    let currentLocation = client.selectedRange().location
-                    if currentLocation >= saved.deleteLength {
-                        let deleteRange = NSRange(
-                            location: currentLocation - saved.deleteLength,
-                            length: saved.deleteLength
-                        )
-                        // ローマ字で置換
-                        client.insertText(saved.romanText, replacementRange: deleteRange)
-                    }
+                // 英語モードへの切り替え通知（実際の処理はhandleで行う）
+                // メニューバー経由の切り替えに対応
+                if self.inputLanguage == .japanese && self.segmentsManager.isEmpty {
+                    self.inputLanguage = .english
                     self.segmentsManager.clearSavedRomanText()
-                    super.setValue(value, forTag: tag, client: sender)
-                    return
                 }
-
-                // シングルタップまたは既に英語モードの場合
-                if self.inputLanguage != .english {
-                    if let client = self.client() {
-                        switch self.inputState {
-                        case .composing, .previewing, .selecting:
-                            if !self.segmentsManager.isEmpty {
-                                // シングルタップ: 即座にひらがなで確定、ローマ字候補を保存
-                                let romanCandidate = self.segmentsManager.getModifiedRomanCandidate {
-                                    $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
-                                }
-                                let markedText = self.segmentsManager.getCurrentMarkedText(inputState: self.inputState)
-                                let committedText = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
-                                self.segmentsManager.saveRomanTextForUndo(
-                                    romanText: romanCandidate.text,
-                                    committedTextLength: committedText.count
-                                )
-                                // ひらがなで確定して英語モードへ
-                                _ = self.handleClientAction(
-                                    .commitMarkedTextAndSelectInputLanguage(.english),
-                                    clientActionCallback: .transition(.none),
-                                    client: client
-                                )
-                                // OSには英語モードを通知しつつ、すぐ日本語モードに戻す
-                                // （ダブルタップの2回目でsetValueが呼ばれるように）
-                                // inputLanguageも日本語に戻す（次の英数キーで条件チェックが正しく動作するように）
-                                super.setValue(value, forTag: tag, client: sender)
-                                client.selectMode("dev.ensan.inputmethod.azooKeyMac.Japanese")
-                                self.inputLanguage = .japanese
-                                return
-                            }
-                        default:
-                            break
-                        }
-                        // 入力がない場合: 英語モードへ切り替えのみ
-                        self.segmentsManager.clearSavedRomanText()
-                        self.inputLanguage = .english
-                        self.switchInputLanguage(.english, client: client)
-                        self.inputState = .none
-                    }
+            } else {
+                // 日本語モードへの切り替え
+                if self.inputLanguage == .english {
+                    self.inputLanguage = .japanese
+                    let (clientAction, clientActionCallback) = self.inputState.event(
+                        eventCore: .init(modifierFlags: []),
+                        userAction: .かな,
+                        inputLanguage: self.inputLanguage,
+                        liveConversionEnabled: false,
+                        enableDebugWindow: false,
+                        enableSuggestion: false
+                    )
+                    _ = self.handleClientAction(
+                        clientAction,
+                        clientActionCallback: clientActionCallback,
+                        client: self.client()
+                    )
                 }
-                super.setValue(value, forTag: tag, client: sender)
-                return
-            }
-
-            // かなキーの場合: 従来の動作
-            if !englishMode && self.inputLanguage == .english {
-                let (clientAction, clientActionCallback) = self.inputState.event(
-                    eventCore: .init(modifierFlags: []),
-                    userAction: .かな,
-                    inputLanguage: self.inputLanguage,
-                    liveConversionEnabled: false,
-                    enableDebugWindow: false,
-                    enableSuggestion: false
-                )
-                _ = self.handleClientAction(
-                    clientAction,
-                    clientActionCallback: clientActionCallback,
-                    client: self.client()
-                )
             }
         }
-        super.setValue(value, forTag: tag, client: sender)
     }
 
     override func menu() -> NSMenu! {
@@ -230,7 +219,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             }
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
-
+    // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -241,33 +230,53 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
 
-        // 英数キー（keyCode 102）はダブルタップ検出とローマ字復元を行う
+        // 英数キー（keyCode 102）の処理
         if event.keyCode == 102 {
-            // ダブルタップ検出
-            let currentTime = Date().timeIntervalSince1970
-            let timeDiff = currentTime - Self.lastKeyDownTime
-            let isDoubleTap = (Self.lastKeyCode == 102) && (timeDiff < Self.doubleTapInterval)
+            let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
 
-            // 時刻とキーコードを更新（setValueより後に呼ばれるのでここで更新）
-            Self.lastKeyDownTime = currentTime
-            Self.lastKeyCode = 102
-
-            // ダブルタップかつローマ字候補が保存されている場合
-            if isDoubleTap, let saved = self.segmentsManager.getSavedRomanText() {
-                let currentLocation = client.selectedRange().location
-                if currentLocation >= saved.deleteLength {
-                    let deleteRange = NSRange(
-                        location: currentLocation - saved.deleteLength,
-                        length: saved.deleteLength
-                    )
-                    // ローマ字で置換
-                    client.insertText(saved.romanText, replacementRange: deleteRange)
+            if isDoubleTap {
+                // 【ダブルタップ時】ローマ字復元
+                if restoreSavedRomanText(client: client) {
+                    changeInputLanguage(to: .english, client: client)
                 }
-                self.segmentsManager.clearSavedRomanText()
-                // 英語モードへ切り替え
-                self.inputLanguage = .english
-                self.switchInputLanguage(.english, client: client)
+                return true
             }
+
+            // 【シングルタップ時】
+            if self.inputLanguage == .japanese {
+                switch self.inputState {
+                case .composing, .previewing, .selecting:
+                    if !self.segmentsManager.isEmpty {
+                        // 現在の未確定テキストからローマ字情報を保存
+                        let romanCandidate = self.segmentsManager.getModifiedRomanCandidate {
+                            $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+                        }
+                        let markedText = self.segmentsManager.getCurrentMarkedText(inputState: self.inputState)
+                        let committedTextCount = markedText.reduce(0) { $0 + $1.content.count }
+
+                        self.segmentsManager.saveRomanTextForUndo(
+                            romanText: romanCandidate.text,
+                            committedTextLength: committedTextCount
+                        )
+
+                        // ひらがなで確定して英語へ移行
+                        _ = self.handleClientAction(
+                            .commitMarkedTextAndSelectInputLanguage(.english),
+                            clientActionCallback: .transition(.none),
+                            client: client
+                        )
+                        // 内部状態を更新
+                        self.inputLanguage = .english
+                        return true
+                    }
+                default:
+                    break
+                }
+            }
+
+            // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
+            self.segmentsManager.clearSavedRomanText()
+            changeInputLanguage(to: .english, client: client)
             return true
         }
 
