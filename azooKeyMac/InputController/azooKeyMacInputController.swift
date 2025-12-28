@@ -24,6 +24,11 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     var promptInputWindow: PromptInputWindow
     var isPromptWindowVisible: Bool = false
 
+    // MARK: - ダブルタップ検出用（複数インスタンス対策でstatic）
+    private static var lastKeyDownTime: TimeInterval = 0
+    private static var lastKeyCode: UInt16 = 0
+    private static let doubleTapInterval: TimeInterval = 0.5
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         self.segmentsManager = SegmentsManager()
 
@@ -126,18 +131,48 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         if let value = value as? NSString {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
-            // 英数/かなの対応するキーが推された場合と同等のイベントを発生させる
-            let userAction: UserAction? = if englishMode, self.inputLanguage != .english {
-                .英数
-            } else if !englishMode, self.inputLanguage == .english {
-                .かな
-            } else {
-                nil
+            
+            // 英数キーの場合: ダブルタップ検出を行う
+            if englishMode && self.inputLanguage != .english {
+                // ダブルタップ検出
+                let currentTime = Date().timeIntervalSince1970
+                let isDoubleTap = (currentTime - Self.lastKeyDownTime < Self.doubleTapInterval)
+                Self.lastKeyDownTime = currentTime
+                Self.lastKeyCode = 102  // 英数キーのkeyCode
+                
+                if let client = self.client() {
+                    switch self.inputState {
+                    case .composing, .previewing, .selecting:
+                        if !self.segmentsManager.isEmpty {
+                            if isDoubleTap {
+                                // ダブルタップ: 半角ローマ字で確定して英語モードへ
+                                _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
+                                self.inputLanguage = .english
+                                self.switchInputLanguage(.english, client: client)
+                            } else {
+                                // シングルタップ: 確定せずにダブルタップを待つ
+                                // 何もしない（入力中のテキストを維持）
+                            }
+                            super.setValue(value, forTag: tag, client: sender)
+                            return
+                        }
+                    default:
+                        break
+                    }
+                    // 入力がない場合: 英語モードへ切り替えのみ
+                    self.inputLanguage = .english
+                    self.switchInputLanguage(.english, client: client)
+                    self.inputState = .none
+                }
+                super.setValue(value, forTag: tag, client: sender)
+                return
             }
-            if let userAction {
+            
+            // かなキーの場合: 従来の動作
+            if !englishMode && self.inputLanguage == .english {
                 let (clientAction, clientActionCallback) = self.inputState.event(
                     eventCore: .init(modifierFlags: []),
-                    userAction: userAction,
+                    userAction: .かな,
                     inputLanguage: self.inputLanguage,
                     liveConversionEnabled: false,
                     enableDebugWindow: false,
@@ -174,6 +209,40 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         }
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
+
+        // MARK: - ダブルタップ検出（Mozcスタイル）
+        let currentTime = Date().timeIntervalSince1970
+        let isDoubleTap = (event.keyCode == Self.lastKeyCode) && (currentTime - Self.lastKeyDownTime < Self.doubleTapInterval)
+        Self.lastKeyDownTime = currentTime
+        Self.lastKeyCode = event.keyCode
+
+        // 英数キー（keyCode 102）の特別処理
+        // 通常の inputState.event() を通すと先に確定されてしまうため、ここで処理を分岐
+        if event.keyCode == 102 {
+            switch self.inputState {
+            case .composing, .previewing, .selecting:
+                if !self.segmentsManager.isEmpty {
+                    if isDoubleTap {
+                        // ダブルタップ: 半角ローマ字で確定して英語モードへ
+                        _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
+                        self.inputLanguage = .english
+                        self.switchInputLanguage(.english, client: client)
+                        return true
+                    } else {
+                        // シングルタップ: 確定せずにダブルタップを待つ
+                        // （何もしないことで、入力中のテキストを維持）
+                        return true
+                    }
+                }
+            default:
+                break
+            }
+            // 入力がない場合: 英語モードへ切り替えのみ
+            self.inputLanguage = .english
+            self.switchInputLanguage(.english, client: client)
+            self.inputState = .none
+            return true
+        }
 
         // Check if AI backend is enabled
         let aiBackendEnabled = Config.AIBackendPreference().value != .off
