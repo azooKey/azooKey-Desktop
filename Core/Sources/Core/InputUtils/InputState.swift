@@ -82,8 +82,6 @@ public enum InputState: Sendable, Hashable {
                 }
             case .かな:
                 return (.selectInputLanguage(.japanese), .fallthrough)
-            case .英数:
-                return (.selectInputLanguage(.english), .fallthrough)
             case .space(let isFullSpace):
                 if inputLanguage != .english && isFullSpace {
                     return (.insertWithoutMarkedText("　"), .fallthrough)
@@ -126,7 +124,7 @@ public enum InputState: Sendable, Hashable {
                 return (.insertWithoutMarkedText(diacritic + "\t"), .transition(.none))
             case .startUnicodeInput:
                 return (.insertWithoutMarkedText(diacritic), .transition(.unicodeInput("")))
-            case .unknown, .space, .英数, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
+            case .unknown, .space, .navigation, .editSegment, .suggest, .forget, .transformSelectedText:
                 return (.insertWithoutMarkedText(diacritic), .transition(.none))
             }
         case .composing:
@@ -166,8 +164,6 @@ public enum InputState: Sendable, Hashable {
                 }
             case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
-            case .英数:
-                return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
             case .navigation(let direction):
                 if direction == .down {
                     return (.enterCandidateSelectionMode, .transition(.selecting))
@@ -225,8 +221,6 @@ public enum InputState: Sendable, Hashable {
                 }
             case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
-            case .英数:
-                return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
             case .navigation(let direction):
                 if direction == .down {
                     return (.enterCandidateSelectionMode, .transition(.selecting))
@@ -318,8 +312,6 @@ public enum InputState: Sendable, Hashable {
                 return (.forgetMemory, .fallthrough)
             case .かな, .tab:
                 return (.consume, .fallthrough)
-            case .英数:
-                return (.commitMarkedTextAndSelectInputLanguage(.english), .transition(.none))
             case .startUnicodeInput:
                 return (.submitSelectedCandidateAndEnterUnicodeInputMode, .transition(.unicodeInput("")))
             case .unknown, .suggest, .transformSelectedText, .deadKey:
@@ -346,8 +338,6 @@ public enum InputState: Sendable, Hashable {
                 return (.submitReplaceSuggestionCandidate, .transition(.none))
             case .backspace, .escape:
                 return (.hideReplaceSuggestionWindow, .transition(.composing))
-            case .英数:
-                return (.submitReplaceSuggestionCandidate, .transition(.none))
             case .かな, .forget, .tab:
                 return (.consume, .fallthrough)
             case .startUnicodeInput:
@@ -385,7 +375,7 @@ public enum InputState: Sendable, Hashable {
                 }
             case .escape:
                 return (.cancelUnicodeInput, .transition(.none))
-            case .かな, .英数, .tab, .forget, .function, .navigation, .editSegment, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
+            case .かな, .tab, .forget, .function, .navigation, .editSegment, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
                 return (.consume, .fallthrough)
             }
         }

@@ -7,7 +7,6 @@ public enum UserAction {
     case escape
     case tab
     case unknown
-    case 英数
     case かな
     case navigation(NavigationDirection)
     case function(Function)
