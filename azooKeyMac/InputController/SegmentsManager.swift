@@ -38,6 +38,7 @@ final class SegmentsManager {
     // MARK: - 英数キーダブルタップ用（ローマ字候補保存）
     private var savedRomanText: String?
     private var savedCommittedTextLength: Int = 0
+    private var lastCommittedCandidate: (composingText: ComposingText, candidate: Candidate)?
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
 
@@ -307,6 +308,10 @@ final class SegmentsManager {
         self.composingText.isEmpty
     }
 
+    var currentComposingText: ComposingText {
+        self.composingText
+    }
+
     func getCleanLeftSideContext(maxCount: Int) -> String? {
         self.delegate?.getLeftSideContext(maxCount: 30).map {
             var last = $0.split(separator: "\n", omittingEmptySubsequences: false).last ?? $0[...]
@@ -565,6 +570,25 @@ final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
+    /// 確定されるであろう候補を取得する
+    func getCandidateToCommit(inputState: InputState) -> Candidate {
+        let markedText = self.getCurrentMarkedText(inputState: inputState)
+        let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
+        
+        if let candidate = self.candidates?.first(where: { $0.text == text }) {
+            return candidate
+        }
+        
+        // フォールバック：ひらがな候補を返す
+        return Candidate(
+            text: text,
+            value: 0,
+            composingCount: .inputCount(self.composingText.input.count),
+            lastMid: 0,
+            data: []
+        )
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     func getCurrentMarkedText(inputState: InputState) -> MarkedText {
         switch inputState {
@@ -636,9 +660,12 @@ final class SegmentsManager {
     /// - Parameters:
     ///   - romanText: ローマ字テキスト
     ///   - committedTextLength: 確定したテキストの長さ
-    func saveRomanTextForUndo(romanText: String, committedTextLength: Int) {
+    ///   - composingText: 確定時のComposingText
+    ///   - candidate: 確定した候補
+    func saveRomanTextForUndo(romanText: String, committedTextLength: Int, composingText: ComposingText, candidate: Candidate) {
         self.savedRomanText = romanText
         self.savedCommittedTextLength = committedTextLength
+        self.lastCommittedCandidate = (composingText, candidate)
     }
 
     /// 保存したローマ字候補を取得する（英数キー2回目で呼ぶ）
@@ -655,6 +682,7 @@ final class SegmentsManager {
     func clearSavedRomanText() {
         self.savedRomanText = nil
         self.savedCommittedTextLength = 0
+        self.lastCommittedCandidate = nil
     }
 }
 

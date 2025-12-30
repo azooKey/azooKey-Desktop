@@ -254,9 +254,15 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                         let markedText = self.segmentsManager.getCurrentMarkedText(inputState: self.inputState)
                         let committedTextCount = markedText.reduce(0) { $0 + $1.content.count }
 
+                        // 確定される候補とComposingTextを取得
+                        let candidateToCommit = self.segmentsManager.getCandidateToCommit(inputState: self.inputState)
+                        let currentComposingText = self.segmentsManager.currentComposingText
+
                         self.segmentsManager.saveRomanTextForUndo(
                             romanText: romanCandidate.text,
-                            committedTextLength: committedTextCount
+                            committedTextLength: committedTextCount,
+                            composingText: currentComposingText,
+                            candidate: candidateToCommit
                         )
 
                         // ひらがなで確定して英語へ移行
