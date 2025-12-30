@@ -574,11 +574,11 @@ final class SegmentsManager {
     func getCandidateToCommit(inputState: InputState) -> Candidate {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
-        
+
         if let candidate = self.candidates?.first(where: { $0.text == text }) {
             return candidate
         }
-        
+
         // フォールバック：ひらがな候補を返す
         return Candidate(
             text: text,
