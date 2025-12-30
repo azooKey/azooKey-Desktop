@@ -32,7 +32,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     // MARK: - ダブルタップ検出
     private func checkAndUpdateDoubleTap(keyCode: UInt16) -> Bool {
         let now = Date().timeIntervalSince1970
-        let isDouble = (Self.lastKeyCode == keyCode) && (now - Self.lastKeyDownTime < Self.doubleTapInterval)
+        let isDouble = (self.lastKeyCode == keyCode) && (now - self.lastKeyDownTime < Self.doubleTapInterval)
         self.lastKeyDownTime = now
         self.lastKeyCode = keyCode
         return isDouble
@@ -232,7 +232,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             }
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
-    // swiftlint:disable:next cyclomatic_complexity
+
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -256,37 +256,31 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             }
 
             // 【シングルタップ時】
-            if self.inputLanguage == .japanese {
-                switch self.inputState {
-                case .composing, .previewing, .selecting:
-                    if !self.segmentsManager.isEmpty {
-                        // 確定される候補とComposingTextを保存
-                        let candidateToCommit = self.segmentsManager.getCandidateToCommit(inputState: self.inputState)
-                        let currentComposingText = self.segmentsManager.currentComposingText
+            if self.inputLanguage == .japanese,
+               self.inputState == .composing || self.inputState == .previewing || self.inputState == .selecting,
+               !self.segmentsManager.isEmpty {
+                // 確定される候補とComposingTextを保存
+                let candidateToCommit = self.segmentsManager.getCandidateToCommit(inputState: self.inputState)
+                let currentComposingText = self.segmentsManager.currentComposingText
 
-                        self.segmentsManager.saveLastCommittedCandidate(
-                            composingText: currentComposingText,
-                            candidate: candidateToCommit
-                        )
+                self.segmentsManager.saveLastCommittedCandidate(
+                    composingText: currentComposingText,
+                    candidate: candidateToCommit
+                )
 
-                        // ひらがなで確定して英語へ移行
-                        _ = self.handleClientAction(
-                            .commitMarkedTextAndSelectInputLanguage(.english),
-                            clientActionCallback: .transition(.none),
-                            client: client
-                        )
-                        // 内部状態を更新
-                        self.inputLanguage = .english
-                        return true
-                    }
-                default:
-                    break
-                }
+                // ひらがなで確定して英語へ移行
+                _ = self.handleClientAction(
+                    .commitMarkedTextAndSelectInputLanguage(.english),
+                    clientActionCallback: .transition(.none),
+                    client: client
+                )
+                // 内部状態を更新
+                self.inputLanguage = .english
+            } else {
+                // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
+                self.segmentsManager.clearLastCommittedCandidate()
+                changeInputLanguage(to: .english, client: client)
             }
-
-            // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
-            self.segmentsManager.clearLastCommittedCandidate()
-            changeInputLanguage(to: .english, client: client)
             return true
         }
 
