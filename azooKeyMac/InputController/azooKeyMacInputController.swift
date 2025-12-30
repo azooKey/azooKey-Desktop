@@ -41,7 +41,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     // MARK: - 確定候補復元（ダブルタップ時）
     @discardableResult
     private func restoreLastCommittedCandidate(client: IMKTextInput) -> Bool {
-        guard let saved = self.segmentsManager.getLastCommittedCandidate() else {
+        guard let saved = self.segmentsManager.lastCommittedCandidate else {
             return false
         }
 
@@ -260,13 +260,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                self.inputState == .composing || self.inputState == .previewing || self.inputState == .selecting,
                !self.segmentsManager.isEmpty {
                 // 確定される候補とComposingTextを保存
-                let candidateToCommit = self.segmentsManager.getCandidateToCommit(inputState: self.inputState)
-                let currentComposingText = self.segmentsManager.currentComposingText
-
-                self.segmentsManager.saveLastCommittedCandidate(
-                    composingText: currentComposingText,
-                    candidate: candidateToCommit
-                )
+                self.segmentsManager.saveLastCommittedCandidate(inputState: self.inputState)
 
                 // ひらがなで確定して英語へ移行
                 _ = self.handleClientAction(

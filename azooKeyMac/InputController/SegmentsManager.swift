@@ -36,7 +36,7 @@ final class SegmentsManager {
     private var suggestSelectionIndex: Int?
 
     // MARK: - 英数キーダブルタップ用（確定候補保存）
-    private var lastCommittedCandidate: (composingText: ComposingText, candidate: Candidate)?
+    private(set) var lastCommittedCandidate: (composingText: ComposingText, candidate: Candidate)?
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
 
@@ -304,10 +304,6 @@ final class SegmentsManager {
 
     var isEmpty: Bool {
         self.composingText.isEmpty
-    }
-
-    var currentComposingText: ComposingText {
-        self.composingText
     }
 
     func getCleanLeftSideContext(maxCount: Int) -> String? {
@@ -655,13 +651,8 @@ final class SegmentsManager {
     // MARK: - 英数キーダブルタップ用（確定候補保存・復元）
 
     /// 確定候補を保存する（英数キー1回目で呼ぶ）
-    func saveLastCommittedCandidate(composingText: ComposingText, candidate: Candidate) {
-        self.lastCommittedCandidate = (composingText, candidate)
-    }
-
-    /// 保存した確定候補を取得する（英数キー2回目で呼ぶ）
-    func getLastCommittedCandidate() -> (composingText: ComposingText, candidate: Candidate)? {
-        self.lastCommittedCandidate
+    func saveLastCommittedCandidate(inputState: InputState) {
+        self.lastCommittedCandidate = (self.composingText, self.getCandidateToCommit(inputState: inputState))
     }
 
     /// 保存した確定候補をクリアする
