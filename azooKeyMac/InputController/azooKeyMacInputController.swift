@@ -233,6 +233,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -248,9 +249,24 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
 
             if isDoubleTap {
-                // 【ダブルタップ時】確定候補をローマ字に復元
-                if restoreLastCommittedCandidate(client: client) {
+                // 【ダブルタップ時】
+                if !self.segmentsManager.isEmpty {
+                    // marked textがある場合：全体をローマ字に変換して確定
+                    let romanCandidate = self.segmentsManager.getModifiedRomanCandidate {
+                        $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+                    }
+                    client.insertText(romanCandidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                    self.segmentsManager.stopComposition()
+                    self.segmentsManager.clearLastCommittedCandidate()
+                    self.inputState = .none
+                    self.refreshMarkedText()
+                    self.refreshCandidateWindow()
                     changeInputLanguage(to: .english, client: client)
+                } else {
+                    // marked textがない場合：確定済みテキストを復元（従来の処理）
+                    if restoreLastCommittedCandidate(client: client) {
+                        changeInputLanguage(to: .english, client: client)
+                    }
                 }
                 return true
             }
@@ -262,14 +278,10 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 // 確定される候補とComposingTextを保存
                 self.segmentsManager.saveLastCommittedCandidate(inputState: self.inputState)
 
-                // ひらがなで確定して英語へ移行
-                _ = self.handleClientAction(
-                    .commitMarkedTextAndSelectInputLanguage(.english),
-                    clientActionCallback: .transition(.none),
-                    client: client
-                )
-                // 内部状態を更新
+                // marked text を維持したまま、内部モードだけ英語に切り替え
+                // Google日本語入力と同様に、確定せずに英語入力を続けられるようにする
                 self.inputLanguage = .english
+                // inputStateは維持（.composing等のまま）
             } else {
                 // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
                 self.segmentsManager.clearLastCommittedCandidate()
@@ -352,9 +364,13 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: true)
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let styleToUse: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: styleToUse)
         case .appendPieceToMarkedText(let pieces):
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let styleToUse: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: styleToUse)
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -365,11 +381,15 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .commitMarkedTextAndAppendToMarkedText(let string):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let styleToUse: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: styleToUse)
         case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let styleToUse: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: styleToUse)
         case .submitSelectedCandidate:
             self.submitSelectedCandidate()
         case .removeLastMarkedText:
