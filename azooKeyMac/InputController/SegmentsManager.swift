@@ -541,10 +541,13 @@ final class SegmentsManager {
 
     @MainActor
     func commitMarkedText(inputState: InputState) -> String {
-        let candidate = self.getCandidateToCommit(inputState: inputState)
-        self.prefixCandidateCommited(candidate, leftSideContext: "")
+        let markedText = self.getCurrentMarkedText(inputState: inputState)
+        let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
+        if let candidate = self.candidates?.first(where: { $0.text == text }) {
+            self.prefixCandidateCommited(candidate, leftSideContext: "")
+        }
         self.stopComposition()
-        return candidate.text
+        return text
     }
 
     // サジェスト候補を設定するメソッド
@@ -556,25 +559,6 @@ final class SegmentsManager {
     // サジェスト候補の選択状態をリセット
     func resetSuggestionSelection() {
         suggestSelectionIndex = nil
-    }
-
-    /// 確定されるであろう候補を取得する
-    func getCandidateToCommit(inputState: InputState) -> Candidate {
-        let markedText = self.getCurrentMarkedText(inputState: inputState)
-        let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
-
-        return if let candidate = self.candidates?.first(where: { $0.text == text }) {
-            candidate
-        } else {
-            // フォールバック：ひらがな候補を返す
-            Candidate(
-                text: text,
-                value: 0,
-                composingCount: .inputCount(self.composingText.input.count),
-                lastMid: 0,
-                data: []
-            )
-        }
     }
 
     // swiftlint:disable:next cyclomatic_complexity
