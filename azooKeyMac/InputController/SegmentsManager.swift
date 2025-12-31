@@ -625,7 +625,6 @@ final class SegmentsManager {
             )
         }
     }
-
 }
 
 protocol SegmentManagerDelegate: AnyObject {
