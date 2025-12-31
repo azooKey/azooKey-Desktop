@@ -24,6 +24,18 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     var promptInputWindow: PromptInputWindow
     var isPromptWindowVisible: Bool = false
 
+    // ダブルタップ検出用
+    private var lastKey: (time: TimeInterval, code: UInt16) = (0, 0)
+    private static let doubleTapInterval: TimeInterval = 0.5
+
+    // MARK: - ダブルタップ検出
+    private func checkAndUpdateDoubleTap(keyCode: UInt16) -> Bool {
+        let now = Date().timeIntervalSince1970
+        let isDouble = (self.lastKey.code == keyCode) && (now - self.lastKey.time < Self.doubleTapInterval)
+        self.lastKey = (time: now, code: keyCode)
+        return isDouble
+    }
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         self.segmentsManager = SegmentsManager()
 
@@ -121,36 +133,43 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         self.refreshCandidateWindow()
     }
 
+    // MARK: - setValue: 状態同期のみ
     @MainActor
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
+        defer {
+            super.setValue(value, forTag: tag, client: sender)
+        }
+
         if let value = value as? NSString {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
-            // 英数/かなの対応するキーが推された場合と同等のイベントを発生させる
-            let userAction: UserAction? = if englishMode, self.inputLanguage != .english {
-                .英数
-            } else if !englishMode, self.inputLanguage == .english {
-                .かな
+
+            if englishMode {
+                // 英語モードへの切り替え通知（実際の処理はhandleで行う）
+                // メニューバー経由の切り替えに対応
+                if self.inputLanguage == .japanese && self.segmentsManager.isEmpty {
+                    self.inputLanguage = .english
+                }
             } else {
-                nil
-            }
-            if let userAction {
-                let (clientAction, clientActionCallback) = self.inputState.event(
-                    eventCore: .init(modifierFlags: []),
-                    userAction: userAction,
-                    inputLanguage: self.inputLanguage,
-                    liveConversionEnabled: false,
-                    enableDebugWindow: false,
-                    enableSuggestion: false
-                )
-                _ = self.handleClientAction(
-                    clientAction,
-                    clientActionCallback: clientActionCallback,
-                    client: self.client()
-                )
+                // 日本語モードへの切り替え
+                if self.inputLanguage == .english {
+                    self.inputLanguage = .japanese
+                    let (clientAction, clientActionCallback) = self.inputState.event(
+                        eventCore: .init(modifierFlags: []),
+                        userAction: .かな,
+                        inputLanguage: self.inputLanguage,
+                        liveConversionEnabled: false,
+                        enableDebugWindow: false,
+                        enableSuggestion: false
+                    )
+                    _ = self.handleClientAction(
+                        clientAction,
+                        clientActionCallback: clientActionCallback,
+                        client: self.client()
+                    )
+                }
             }
         }
-        super.setValue(value, forTag: tag, client: sender)
     }
 
     override func menu() -> NSMenu! {
@@ -174,6 +193,39 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         }
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
+
+        // 英数キー（keyCode 102）の処理
+        if event.keyCode == 102 {
+            let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
+
+            if isDoubleTap {
+                // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
+                if !self.segmentsManager.isEmpty {
+                    self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
+                        $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+                    })
+                    self.switchInputLanguage(.english, client: client)
+                    self.inputState = .none
+                }
+                // marked textがない場合は何もしない（シングルタップで確定しないため、復元すべきテキストがない）
+                return true
+            }
+
+            // 【シングルタップ時】
+            if self.inputLanguage == .japanese,
+               self.inputState == .composing || self.inputState == .previewing || self.inputState == .selecting,
+               !self.segmentsManager.isEmpty {
+                // marked text を維持したまま、内部モードだけ英語に切り替え
+                // Google日本語入力と同様に、確定せずに英語入力を続けられるようにする
+                self.inputLanguage = .english
+                // inputStateは維持（.composing等のまま）
+            } else {
+                // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
+                self.switchInputLanguage(.english, client: client)
+                self.inputState = .none
+            }
+            return true
+        }
 
         // Check if AI backend is enabled
         let aiBackendEnabled = Config.AIBackendPreference().value != .off
@@ -249,9 +301,13 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: true)
             self.segmentsManager.update(requestRichCandidates: true)
         case .appendToMarkedText(let string):
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .appendPieceToMarkedText(let pieces):
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
         case .insertWithoutMarkedText(let string):
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
@@ -262,11 +318,15 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .commitMarkedTextAndAppendToMarkedText(let string):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: self.inputStyle)
+            // 英語モードの場合は.directでローマ字変換せずそのまま入力
+            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
+            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
         case .submitSelectedCandidate:
             self.submitSelectedCandidate()
         case .removeLastMarkedText:
@@ -309,12 +369,10 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .forgetMemory:
             self.segmentsManager.forgetMemory()
         case .selectInputLanguage(let language):
-            self.inputLanguage = language
             self.switchInputLanguage(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.inputLanguage = language
             self.switchInputLanguage(language, client: client)
         // PredictiveSuggestion
         case .requestPredictiveSuggestion:
@@ -397,6 +455,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
+        self.inputLanguage = language
         client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
         switch language {
         case .english:
