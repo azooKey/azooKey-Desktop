@@ -36,19 +36,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         return isDouble
     }
 
-    // MARK: - 入力言語切り替え
-    @MainActor
-    private func transitionToInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
-        if self.inputLanguage == language {
-            return
-        }
-        self.inputLanguage = language
-        self.switchInputLanguage(language, client: client)
-        if language == .english {
-            self.inputState = .none
-        }
-    }
-
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         self.segmentsManager = SegmentsManager()
 
@@ -222,7 +209,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                     self.inputState = .none
                     self.refreshMarkedText()
                     self.refreshCandidateWindow()
-                    transitionToInputLanguage(.english, client: client)
+                    self.switchInputLanguage(.english, client: client)
+                    self.inputState = .none
                 }
                 // marked textがない場合は何もしない（シングルタップで確定しないため、復元すべきテキストがない）
                 return true
@@ -238,7 +226,8 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 // inputStateは維持（.composing等のまま）
             } else {
                 // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
-                transitionToInputLanguage(.english, client: client)
+                self.switchInputLanguage(.english, client: client)
+                self.inputState = .none
             }
             return true
         }
@@ -385,12 +374,10 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         case .forgetMemory:
             self.segmentsManager.forgetMemory()
         case .selectInputLanguage(let language):
-            self.inputLanguage = language
             self.switchInputLanguage(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.inputLanguage = language
             self.switchInputLanguage(language, client: client)
         // PredictiveSuggestion
         case .requestPredictiveSuggestion:
@@ -473,6 +460,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
+        self.inputLanguage = language
         client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
         switch language {
         case .english:
