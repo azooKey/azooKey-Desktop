@@ -541,13 +541,10 @@ final class SegmentsManager {
 
     @MainActor
     func commitMarkedText(inputState: InputState) -> String {
-        let markedText = self.getCurrentMarkedText(inputState: inputState)
-        let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}
-        if let candidate = self.candidates?.first(where: {$0.text == text}) {
-            self.prefixCandidateCommited(candidate, leftSideContext: "")
-        }
+        let candidate = self.getCandidateToCommit(inputState: inputState)
+        self.prefixCandidateCommited(candidate, leftSideContext: "")
         self.stopComposition()
-        return text
+        return candidate.text
     }
 
     // サジェスト候補を設定するメソッド
@@ -566,18 +563,18 @@ final class SegmentsManager {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
 
-        if let candidate = self.candidates?.first(where: { $0.text == text }) {
-            return candidate
+        return if let candidate = self.candidates?.first(where: { $0.text == text }) {
+            candidate
+        } else {
+            // フォールバック：ひらがな候補を返す
+            Candidate(
+                text: text,
+                value: 0,
+                composingCount: .inputCount(self.composingText.input.count),
+                lastMid: 0,
+                data: []
+            )
         }
-
-        // フォールバック：ひらがな候補を返す
-        return Candidate(
-            text: text,
-            value: 0,
-            composingCount: .inputCount(self.composingText.input.count),
-            lastMid: 0,
-            data: []
-        )
     }
 
     // swiftlint:disable:next cyclomatic_complexity
