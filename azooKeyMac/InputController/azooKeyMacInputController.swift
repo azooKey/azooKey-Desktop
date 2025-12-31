@@ -25,8 +25,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     var isPromptWindowVisible: Bool = false
 
     // ダブルタップ検出用
-    private var lastKeyDownTime: TimeInterval = 0
-    private var lastKeyCode: UInt16 = 0
+    private var lastKey: (time: TimeInterval, code: UInt16) = (0, 0)
     private static let doubleTapInterval: TimeInterval = 0.5
 
     // MARK: - ダブルタップ検出
