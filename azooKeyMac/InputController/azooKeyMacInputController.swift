@@ -38,7 +38,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
     // MARK: - 入力言語切り替え
     @MainActor
-    private func changeInputLanguage(to language: InputLanguage, client: IMKTextInput) {
+    private func transitionToInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
         if self.inputLanguage == language {
             return
         }
@@ -222,7 +222,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                     self.inputState = .none
                     self.refreshMarkedText()
                     self.refreshCandidateWindow()
-                    changeInputLanguage(to: .english, client: client)
+                    transitionToInputLanguage(.english, client: client)
                 }
                 // marked textがない場合は何もしない（シングルタップで確定しないため、復元すべきテキストがない）
                 return true
@@ -238,7 +238,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 // inputStateは維持（.composing等のまま）
             } else {
                 // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
-                changeInputLanguage(to: .english, client: client)
+                transitionToInputLanguage(.english, client: client)
             }
             return true
         }
