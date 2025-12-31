@@ -201,14 +201,9 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             if isDoubleTap {
                 // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
                 if !self.segmentsManager.isEmpty {
-                    let romanCandidate = self.segmentsManager.getModifiedRomanCandidate {
+                    self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
                         $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
-                    }
-                    client.insertText(romanCandidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
-                    self.segmentsManager.stopComposition()
-                    self.inputState = .none
-                    self.refreshMarkedText()
-                    self.refreshCandidateWindow()
+                    })
                     self.switchInputLanguage(.english, client: client)
                     self.inputState = .none
                 }
