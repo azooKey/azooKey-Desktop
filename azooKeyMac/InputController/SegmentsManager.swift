@@ -542,8 +542,8 @@ final class SegmentsManager {
     @MainActor
     func commitMarkedText(inputState: InputState) -> String {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
-        let text = markedText.reduce(into: "") { $0.append(contentsOf: $1.content) }
-        if let candidate = self.candidates?.first(where: { $0.text == text }) {
+        let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content) }
+        if let candidate = self.candidates?.first(where: {$0.text == text }) {
             self.prefixCandidateCommited(candidate, leftSideContext: "")
         }
         self.stopComposition()
