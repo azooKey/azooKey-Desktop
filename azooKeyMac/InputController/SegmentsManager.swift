@@ -35,9 +35,6 @@ final class SegmentsManager {
     private var replaceSuggestions: [Candidate] = []
     private var suggestSelectionIndex: Int?
 
-    // MARK: - 英数キーダブルタップ用（確定候補保存）
-    private(set) var lastCommittedCandidate: (composingText: ComposingText, candidate: Candidate)?
-
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
 
     private func getZenzaiPersonalizationMode() -> ConvertRequestOptions.ZenzaiMode.PersonalizationMode? {
@@ -648,17 +645,6 @@ final class SegmentsManager {
         }
     }
 
-    // MARK: - 英数キーダブルタップ用（確定候補保存・復元）
-
-    /// 確定候補を保存する（英数キー1回目で呼ぶ）
-    func saveLastCommittedCandidate(inputState: InputState) {
-        self.lastCommittedCandidate = (self.composingText, self.getCandidateToCommit(inputState: inputState))
-    }
-
-    /// 保存した確定候補をクリアする
-    func clearLastCommittedCandidate() {
-        self.lastCommittedCandidate = nil
-    }
 }
 
 protocol SegmentManagerDelegate: AnyObject {

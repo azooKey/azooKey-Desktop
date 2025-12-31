@@ -31,43 +31,9 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
     // MARK: - ダブルタップ検出
     private func checkAndUpdateDoubleTap(keyCode: UInt16) -> Bool {
         let now = Date().timeIntervalSince1970
-        let isDouble = (self.lastKeyCode == keyCode) && (now - self.lastKeyDownTime < Self.doubleTapInterval)
-        self.lastKeyDownTime = now
-        self.lastKeyCode = keyCode
+        let isDouble = (self.lastKey.code == keyCode) && (now - self.lastKey.time < Self.doubleTapInterval)
+        self.lastKey = (time: now, code: keyCode)
         return isDouble
-    }
-
-    // MARK: - 確定候補復元（ダブルタップ時）
-    @discardableResult
-    private func restoreLastCommittedCandidate(client: IMKTextInput) -> Bool {
-        guard let saved = self.segmentsManager.lastCommittedCandidate else {
-            return false
-        }
-
-        // composingTextからローマ字を抽出
-        let romanText = String(saved.composingText.input.compactMap {
-            switch $0.piece {
-            case .compositionSeparator: nil
-            case .character(let c): c
-            case .key(intention: _, input: let input, modifiers: _): input
-            }
-        }).applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? ""
-
-        // 確定されたテキストの長さを取得
-        let deleteLength = saved.candidate.text.count
-
-        let currentLocation = client.selectedRange().location
-        if currentLocation >= deleteLength {
-            let deleteRange = NSRange(
-                location: currentLocation - deleteLength,
-                length: deleteLength
-            )
-            client.insertText(romanText, replacementRange: deleteRange)
-            self.segmentsManager.clearLastCommittedCandidate()
-            return true
-        }
-        self.segmentsManager.clearLastCommittedCandidate()
-        return false
     }
 
     // MARK: - 入力言語切り替え
@@ -196,7 +162,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
                 // メニューバー経由の切り替えに対応
                 if self.inputLanguage == .japanese && self.segmentsManager.isEmpty {
                     self.inputLanguage = .english
-                    self.segmentsManager.clearLastCommittedCandidate()
                 }
             } else {
                 // 日本語モードへの切り替え
@@ -232,7 +197,6 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -248,25 +212,19 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
 
             if isDoubleTap {
-                // 【ダブルタップ時】
+                // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
                 if !self.segmentsManager.isEmpty {
-                    // marked textがある場合：全体をローマ字に変換して確定
                     let romanCandidate = self.segmentsManager.getModifiedRomanCandidate {
                         $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
                     }
                     client.insertText(romanCandidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
                     self.segmentsManager.stopComposition()
-                    self.segmentsManager.clearLastCommittedCandidate()
                     self.inputState = .none
                     self.refreshMarkedText()
                     self.refreshCandidateWindow()
                     changeInputLanguage(to: .english, client: client)
-                } else {
-                    // marked textがない場合：確定済みテキストを復元（従来の処理）
-                    if restoreLastCommittedCandidate(client: client) {
-                        changeInputLanguage(to: .english, client: client)
-                    }
                 }
+                // marked textがない場合は何もしない（シングルタップで確定しないため、復元すべきテキストがない）
                 return true
             }
 
@@ -274,16 +232,12 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             if self.inputLanguage == .japanese,
                self.inputState == .composing || self.inputState == .previewing || self.inputState == .selecting,
                !self.segmentsManager.isEmpty {
-                // 確定される候補とComposingTextを保存
-                self.segmentsManager.saveLastCommittedCandidate(inputState: self.inputState)
-
                 // marked text を維持したまま、内部モードだけ英語に切り替え
                 // Google日本語入力と同様に、確定せずに英語入力を続けられるようにする
                 self.inputLanguage = .english
                 // inputStateは維持（.composing等のまま）
             } else {
                 // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
-                self.segmentsManager.clearLastCommittedCandidate()
                 changeInputLanguage(to: .english, client: client)
             }
             return true
