@@ -167,6 +167,25 @@ extension azooKeyMacInputController {
     }
 
     @MainActor
+    func triggerAiTranslation(initialPrompt: String) -> Bool {
+        let aiBackendEnabled = Config.AIBackendPreference().value != .off
+        guard aiBackendEnabled else {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: AI backend is off")
+            return false
+        }
+        if self.isPromptWindowVisible {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: prompt window already visible")
+            return true
+        }
+        guard let client = self.client() else {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: No client available")
+            return false
+        }
+        self.showPromptInputWindow(initialPrompt: initialPrompt)
+        return true
+    }
+
+    @MainActor
     func transformSelectedText(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") {
         self.segmentsManager.appendDebugMessage("transformSelectedText: Starting with text '\(selectedText)' and prompt '\(prompt)'")
 
