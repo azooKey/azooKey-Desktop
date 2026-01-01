@@ -184,6 +184,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -199,8 +200,12 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
             let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
 
             if isDoubleTap {
-                // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
-                if !self.segmentsManager.isEmpty {
+                let selectedRange = client.selectedRange()
+                if selectedRange.length > 0 {
+                    self.showPromptInputWindow(initialPrompt: "english")
+                    return true
+                } else if !self.segmentsManager.isEmpty {
+                    // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
                     self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
                         $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
                     })

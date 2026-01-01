@@ -13,6 +13,7 @@ struct PromptInputView: View {
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
     @FocusState private var isTextFieldFocused: Bool
 
+    let initialPrompt: String?
     private var modelDisplayName: String {
         let backend = Config.AIBackendPreference().value
         switch backend {
@@ -318,7 +319,8 @@ struct PromptInputView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .onAppear {
             // Reset all state variables when the view appears
-            promptText = ""
+            let trimmedInitialPrompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+            promptText = trimmedInitialPrompt ?? ""
             previewText = ""
             isLoading = false
             showPreview = false
@@ -335,6 +337,13 @@ struct PromptInputView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 hoveredHistoryIndex = nil
                 isTextFieldFocused = true
+            }
+
+            if let trimmedInitialPrompt, !trimmedInitialPrompt.isEmpty {
+                // Trigger preview as if Enter was pressed once.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    requestPreview()
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateHistoryUp)) { _ in
@@ -538,6 +547,7 @@ struct PromptInputView: View {
 
 #Preview {
     PromptInputView(
+        initialPrompt: nil,
         onSubmit: { _ in
         },
         onPreview: { prompt, _, callback in
