@@ -4,9 +4,9 @@ import InputMethodKit
 import KanaKanjiConverterModuleWithDefaultDictionary
 
 @objc(azooKeyMacInputController)
-class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this type_name
+class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // swiftlint:disable:this type_name
     var segmentsManager: SegmentsManager
-    private var inputState: InputState = .none
+    private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
@@ -14,6 +14,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
     var appMenu: NSMenu
     var liveConversionToggleMenuItem: NSMenuItem
+    var transformSelectedTextMenuItem: NSMenuItem
 
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController
@@ -41,6 +42,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
 
         self.appMenu = NSMenu(title: "azooKey")
         self.liveConversionToggleMenuItem = NSMenuItem()
+        self.transformSelectedTextMenuItem = NSMenuItem()
 
         // Initialize the candidates window
         self.candidatesViewController = CandidatesViewController()
@@ -91,6 +93,7 @@ class azooKeyMacInputController: IMKInputController { // swiftlint:disable:this 
         // Register custom input table (if available) for `.tableName` usage
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
+        self.updateTransformSelectedTextMenuItemEnabledState()
         self.segmentsManager.activate()
 
         if let client = sender as? IMKTextInput {
