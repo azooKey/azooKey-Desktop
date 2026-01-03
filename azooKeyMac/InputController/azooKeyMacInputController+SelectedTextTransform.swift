@@ -81,12 +81,14 @@ extension azooKeyMacInputController {
 
         guard selectedRange.length > 0 else {
             self.segmentsManager.appendDebugMessage("showPromptInputWindow: No selected text in window")
+            self.isPromptWindowVisible = false
             return
         }
 
         var actualRange = NSRange()
         guard let selectedText = client.string(from: selectedRange, actualRange: &actualRange) else {
             self.segmentsManager.appendDebugMessage("showPromptInputWindow: Failed to get selected text")
+            self.isPromptWindowVisible = false
             return
         }
 
