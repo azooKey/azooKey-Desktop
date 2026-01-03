@@ -52,8 +52,13 @@ extension azooKeyMacInputController {
             _ = self.handleClientAction(.showPromptInputWindow, clientActionCallback: .fallthrough, client: client)
             return
         }
-        if self.inputState == .composing {
+        switch self.inputState {
+        case .composing, .replaceSuggestion:
             _ = self.handleClientAction(.requestReplaceSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
+        case .none:
+            _ = self.handleClientAction(.requestPredictiveSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
+        default:
+            break
         }
     }
 
@@ -80,7 +85,7 @@ extension azooKeyMacInputController {
             return false
         }
         let hasSelection = client.selectedRange().length > 0
-        return hasSelection || self.inputState == .composing
+        return hasSelection || self.inputState == .composing || self.inputState == .replaceSuggestion || self.inputState == .none
     }
 
     private func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool) {
