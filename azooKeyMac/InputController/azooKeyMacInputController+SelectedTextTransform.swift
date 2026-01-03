@@ -63,7 +63,7 @@ extension azooKeyMacInputController {
     }
 
     @MainActor
-    func showPromptInputWindow() {
+    func showPromptInputWindow(initialPrompt: String? = nil) {
         self.segmentsManager.appendDebugMessage("showPromptInputWindow: Starting")
 
         // Set flag to prevent recursive calls
@@ -113,6 +113,7 @@ extension azooKeyMacInputController {
         // Show prompt input window with preview functionality
         self.promptInputWindow.showPromptInput(
             at: cursorLocation,
+            initialPrompt: initialPrompt,
             onPreview: { [weak self] prompt, callback in
                 guard let self = self else {
                     return
@@ -165,6 +166,25 @@ extension azooKeyMacInputController {
                 self?.isPromptWindowVisible = false
             }
         )
+    }
+
+    @MainActor
+    func triggerAiTranslation(initialPrompt: String) -> Bool {
+        let aiBackendEnabled = Config.AIBackendPreference().value != .off
+        guard aiBackendEnabled else {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: AI backend is off")
+            return false
+        }
+        if self.isPromptWindowVisible {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: prompt window already visible")
+            return true
+        }
+        guard let client = self.client() else {
+            self.segmentsManager.appendDebugMessage("AI translation ignored: No client available")
+            return false
+        }
+        self.showPromptInputWindow(initialPrompt: initialPrompt)
+        return true
     }
 
     @MainActor
