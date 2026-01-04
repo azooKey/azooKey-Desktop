@@ -23,7 +23,7 @@ extension StringConfigItem {
 extension Config {
     public struct ZenzaiProfile: StringConfigItem {
         public init() {}
-        
+
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.ZenzaiProfile"
     }
 }
