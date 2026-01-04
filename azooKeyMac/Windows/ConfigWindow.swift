@@ -321,7 +321,7 @@ struct ConfigWindow: View {
                         switch self.systemUserDictionaryUpdateMessage {
                         case .none:
                             if let updated = self.systemUserDictionary.value.lastUpdate {
-                                Text("最終更新: \(updated) / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                                Text("最終更新: \(updated.formatted()) / \(self.systemUserDictionary.value.items.count)件のアイテム")
                             } else {
                                 Text("未設定")
                             }
