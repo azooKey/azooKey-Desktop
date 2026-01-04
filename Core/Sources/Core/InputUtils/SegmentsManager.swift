@@ -2,12 +2,20 @@ import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
 public final class SegmentsManager {
-    public init(kanaKanjiConverter: KanaKanjiConverter) {
+    public init(
+        kanaKanjiConverter: KanaKanjiConverter,
+        applicationDirectoryURL: URL,
+        containerURL: URL?
+    ) {
         self.kanaKanjiConverter = kanaKanjiConverter
+        self.applicationDirectoryURL = applicationDirectoryURL
+        self.containerURL = containerURL
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
     private var kanaKanjiConverter: KanaKanjiConverter
+    private let applicationDirectoryURL: URL
+    private let containerURL: URL?
 
     private var composingText: ComposingText = ComposingText()
 
@@ -44,7 +52,7 @@ public final class SegmentsManager {
         if alpha == 0 {
             return nil
         }
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac") else {
+        guard let containerURL else {
             self.appendDebugMessage("❌ Failed to get container URL.")
             return nil
         }
@@ -131,15 +139,7 @@ public final class SegmentsManager {
     }
 
     public var azooKeyMemoryDir: URL {
-        if #available(macOS 13, *) {
-            URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-                .appending(path: "memory", directoryHint: .isDirectory)
-        } else {
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("azooKey", isDirectory: true)
-                .appendingPathComponent("memory", isDirectory: true)
-        }
+        self.applicationDirectoryURL
     }
 
     @MainActor
