@@ -8,7 +8,7 @@ import Testing
     // always true
     #expect(entries.count >= 0)
     #else
-    #expect(throws: SystemUserDictionaryHelper.FetchError.unsupportedOperatingSystem) {
+    await #expect(throws: SystemUserDictionaryHelper.FetchError.unsupportedOperatingSystem) {
         _ = try await SystemUserDictionaryHelper.fetchEntries()
     }
     #endif
