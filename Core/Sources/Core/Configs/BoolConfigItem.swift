@@ -5,7 +5,7 @@ protocol BoolConfigItem: ConfigItem<Bool> {
 }
 
 extension BoolConfigItem {
-    var value: Bool {
+    public var value: Bool {
         get {
             if let value = UserDefaults.standard.value(forKey: Self.key) {
                 value as? Bool ?? Self.default
@@ -21,28 +21,33 @@ extension BoolConfigItem {
 
 extension Config {
     /// デバッグウィンドウにd/Dで遷移する設定
-    struct DebugWindow: BoolConfigItem {
+    public struct DebugWindow: BoolConfigItem {
+        public init() {}
         static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.enableDebugWindow"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.enableDebugWindow"
     }
     /// ライブ変換を有効化する設定
-    struct LiveConversion: BoolConfigItem {
+    public struct LiveConversion: BoolConfigItem {
+        public init() {}
         static let `default` = true
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableLiveConversion"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableLiveConversion"
     }
     /// 円マークの代わりにバックスラッシュを入力する設定
-    struct TypeBackSlash: BoolConfigItem {
+    public struct TypeBackSlash: BoolConfigItem {
+        public init() {}
         static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeBackSlash"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeBackSlash"
     }
     /// 「　」の代わりに「 」を入力する設定
-    struct TypeHalfSpace: BoolConfigItem {
+    public struct TypeHalfSpace: BoolConfigItem {
+        public init() {}
         static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
     }
     /// AI変換時にコンテキストを含めるかどうか
-    struct IncludeContextInAITransform: BoolConfigItem {
+    public struct IncludeContextInAITransform: BoolConfigItem {
+        public init() {}
         static let `default` = true
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.includeContextInAITransform"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.includeContextInAITransform"
     }
 }

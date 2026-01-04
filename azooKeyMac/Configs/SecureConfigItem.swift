@@ -1,10 +1,4 @@
-//
-//  StringConfigItem.swift
-//  azooKeyMac
-//
-//  Created by miwa on 2024/04/27.
-//
-
+import Core
 import Foundation
 
 protocol StringConfigItem: ConfigItem<String> {}
@@ -51,40 +45,5 @@ extension Config {
             cachedValue = await KeychainHelper.read(key: key) ?? ""
             isLoaded = true
         }
-    }
-}
-
-extension Config {
-    struct ZenzaiProfile: StringConfigItem {
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.ZenzaiProfile"
-    }
-}
-
-extension Config {
-    /// OpenAIモデル名
-    struct OpenAiModelName: StringConfigItem {
-        static var `default`: String = "gpt-4o-mini"
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
-    }
-
-    /// OpenAI API エンドポイント
-    struct OpenAiApiEndpoint: StringConfigItem {
-        static let `default` = "https://api.openai.com/v1/chat/completions"
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiEndpoint"
-
-        var value: String {
-            get {
-                let stored = UserDefaults.standard.string(forKey: Self.key) ?? ""
-                return stored.isEmpty ? Self.default : stored
-            }
-            nonmutating set {
-                UserDefaults.standard.set(newValue, forKey: Self.key)
-            }
-        }
-    }
-
-    /// プロンプト履歴（JSON形式で保存）
-    struct PromptHistory: StringConfigItem {
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
     }
 }

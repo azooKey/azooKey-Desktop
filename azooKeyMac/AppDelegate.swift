@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import Core
 import InputMethodKit
 import KanaKanjiConverterModuleWithDefaultDictionary
 import SwiftUI
