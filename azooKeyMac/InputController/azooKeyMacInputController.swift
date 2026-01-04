@@ -38,7 +38,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
-        self.segmentsManager = SegmentsManager()
+        let applicationDirectoryURL = if #available(macOS 13, *) {
+            URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+                .appending(path: "memory", directoryHint: .isDirectory)
+        } else {
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+                .appendingPathComponent("memory", isDirectory: true)
+        }
+
+        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac")
+        self.segmentsManager = SegmentsManager(
+            kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
+            applicationDirectoryURL: applicationDirectoryURL,
+            containerURL: containerURL
+        )
 
         self.appMenu = NSMenu(title: "azooKey")
         self.liveConversionToggleMenuItem = NSMenuItem()

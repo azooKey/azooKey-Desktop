@@ -63,7 +63,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		55CE06C72CB01F000002DAF1 /* InputController */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = InputController; sourceTree = "<group>"; };
 		55CE06D72CB01F080002DAF1 /* Configs */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Configs; sourceTree = "<group>"; };
-		55CE06E42CB01F130002DAF1 /* Extensions */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Extensions; sourceTree = "<group>"; };
 		55CE06E92CB01F130002DAF1 /* Windows */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Windows; sourceTree = "<group>"; };
 		55CE06ED2CB01F160002DAF1 /* azooKeyMacTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacTests; sourceTree = "<group>"; };
 		55CE06F12CB01F160002DAF1 /* azooKeyMacUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = azooKeyMacUITests; sourceTree = "<group>"; };
@@ -127,7 +126,6 @@
 				1A41E64126E74627009B65D7 /* AppDelegate.swift */,
 				55CE06D72CB01F080002DAF1 /* Configs */,
 				55CE06E92CB01F130002DAF1 /* Windows */,
-				55CE06E42CB01F130002DAF1 /* Extensions */,
 				55E1E7412BEF63AE0084A069 /* Resources */,
 				1A41E61B26E745DD009B65D7 /* Assets.xcassets */,
 				1A41E64626E74937009B65D7 /* main.tiff */,
@@ -170,7 +168,6 @@
 			fileSystemSynchronizedGroups = (
 				55CE06C72CB01F000002DAF1 /* InputController */,
 				55CE06D72CB01F080002DAF1 /* Configs */,
-				55CE06E42CB01F130002DAF1 /* Extensions */,
 				55CE06E92CB01F130002DAF1 /* Windows */,
 				55CE06F52CB01F180002DAF1 /* Preview Content */,
 			);
