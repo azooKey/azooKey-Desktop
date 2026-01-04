@@ -34,7 +34,7 @@ struct ConfigWindow: View {
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
     @State private var availabilityCheckDone = false
 
-    enum Tab: String, CaseIterable, Hashable {
+    private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
         case customize = "カスタマイズ"
         case advanced = "詳細設定"
@@ -308,47 +308,46 @@ struct ConfigWindow: View {
             Section {
                 LabeledContent {
                     HStack {
+                        Text("\(self.userDictionary.value.items.count)件のアイテム")
                         Button("編集") {
                             (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
                         }
-                        Spacer()
-                        Text("\(self.userDictionary.value.items.count)件のアイテム")
                     }
                 } label: {
                     Text("azooKeyユーザ辞書")
                 }
                 LabeledContent {
-                    Button("読み込む") {
-                        do {
-                            let systemUserDictionaryEntries = try SystemUserDictionaryHelper.fetchEntries()
-                            self.systemUserDictionary.value.items = systemUserDictionaryEntries.map {
-                                .init(word: $0.phrase, reading: $0.shortcut)
+                    HStack {
+                        switch self.systemUserDictionaryUpdateMessage {
+                        case .none:
+                            if let updated = self.systemUserDictionary.value.lastUpdate {
+                                Text("最終更新: \(updated) / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                            } else {
+                                Text("未設定")
                             }
-                            self.systemUserDictionary.value.lastUpdate = .now
-                            self.systemUserDictionaryUpdateMessage = .successfulUpdate
-                        } catch {
-                            self.systemUserDictionaryUpdateMessage = .error(error)
+                        case .error(let error):
+                            Text("読み込みエラー: \(error.localizedDescription)")
+                        case .successfulUpdate:
+                            Text("読み込みに成功しました / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                        }
+                        Button("読み込む") {
+                            do {
+                                let systemUserDictionaryEntries = try SystemUserDictionaryHelper.fetchEntries()
+                                self.systemUserDictionary.value.items = systemUserDictionaryEntries.map {
+                                    .init(word: $0.phrase, reading: $0.shortcut)
+                                }
+                                self.systemUserDictionary.value.lastUpdate = .now
+                                self.systemUserDictionaryUpdateMessage = .successfulUpdate
+                            } catch {
+                                self.systemUserDictionaryUpdateMessage = .error(error)
+                            }
+                        }
+                        Button("リセット") {
+                            self.systemUserDictionary.value.lastUpdate = nil
+                            self.systemUserDictionary.value.items = []
+                            self.systemUserDictionaryUpdateMessage = nil
                         }
                     }
-                    Button("リセット") {
-                        self.systemUserDictionary.value.lastUpdate = nil
-                        self.systemUserDictionary.value.items = []
-                        self.systemUserDictionaryUpdateMessage = nil
-                    }
-                    Spacer()
-                    switch self.systemUserDictionaryUpdateMessage {
-                    case .none:
-                        if let updated = self.systemUserDictionary.value.lastUpdate {
-                            Text("最終更新: \(updated) / \(self.systemUserDictionary.value.items.count)件のアイテム")
-                        } else {
-                            Text("未設定")
-                        }
-                    case .error(let error):
-                        Text("読み込みエラー: \(error.localizedDescription)")
-                    case .successfulUpdate:
-                        Text("読み込みに成功しました / \(self.systemUserDictionary.value.items.count)件のアイテム")
-                    }
-
                 } label: {
                     Text("システムのユーザ辞書")
                 }
@@ -356,6 +355,107 @@ struct ConfigWindow: View {
                 Label("ユーザ辞書", systemImage: "book.closed")
             }
 
+            Section {
+                Toggle("ライブ変換を有効化", isOn: $liveConversion)
+            } header: {
+                Label("変換設定", systemImage: "brain")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    // MARK: - カスタマイズタブ
+    @ViewBuilder
+    private var customizeTabView: some View {
+        Form {
+            Section {
+                Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
+                Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Picker("句読点の種類", selection: $punctuationStyle) {
+                    Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
+                    Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
+                    Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
+                    Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
+                }
+            } header: {
+                Label("入力オプション", systemImage: "character.cursor.ibeam")
+            }
+
+            Section {
+                Picker("履歴学習", selection: $learning) {
+                    Text("学習する").tag(Config.Learning.Value.inputAndOutput)
+                    Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
+                    Text("学習を無視").tag(Config.Learning.Value.nothing)
+                }
+                LabeledContent {
+                    HStack {
+                        switch learningResetMessage {
+                        case .none:
+                            EmptyView()
+                        case .success:
+                            Text("履歴学習データをリセットしました")
+                                .foregroundColor(.green)
+                        case .error(let message):
+                            Text("エラー: \(message)")
+                                .foregroundColor(.red)
+                        }
+                        Button("リセット") {
+                            showingLearningResetConfirmation = true
+                        }
+                        .confirmationDialog(
+                            "履歴学習データをリセットしますか？",
+                            isPresented: $showingLearningResetConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("リセット", role: .destructive) {
+                                resetLearningData()
+                            }
+                            Button("キャンセル", role: .cancel) {}
+                        }
+                    }
+                } label: {
+                    Text("履歴学習データ")
+                }
+            } header: {
+                Label("学習", systemImage: "memorychip")
+            }
+
+            Section {
+                Picker("入力方式", selection: $inputStyle) {
+                    Text("デフォルト").tag(Config.InputStyle.Value.default)
+                    Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
+                    Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
+                    Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
+                    Text("カスタム").tag(Config.InputStyle.Value.custom)
+                }
+                if inputStyle.value == .custom {
+                    Button("カスタム入力テーブルを編集") {
+                        showingRomajiTableEditor = true
+                    }
+                }
+            } header: {
+                Label("入力方式", systemImage: "keyboard")
+            }
+
+            Section {
+                Picker("キーボード配列", selection: $keyboardLayout) {
+                    Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                    Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
+                    Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                }
+            } header: {
+                Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    // MARK: - 詳細設定タブ
+    @ViewBuilder
+    private var advancedTabView: some View {
+        Form {
             Section {
                 HStack {
                     TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
@@ -387,119 +487,17 @@ struct ConfigWindow: View {
                     helpButton(helpContent: "推論上限を小さくすると、入力中のもたつきが改善されることがあります。", isPresented: $zenzaiInferenceLimitHelpPopover)
                 }
             } header: {
-                Label("変換設定", systemImage: "brain")
-            }
-        }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    // MARK: - カスタマイズタブ
-    @ViewBuilder
-    private var customizeTabView: some View {
-        Form {
-            Section {
-                Picker("入力方式", selection: $inputStyle) {
-                    Text("デフォルト").tag(Config.InputStyle.Value.default)
-                    Text("かな入力（JIS）").tag(Config.InputStyle.Value.defaultKanaJIS)
-                    Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
-                    Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
-                    Text("カスタム").tag(Config.InputStyle.Value.custom)
-                }
-                if inputStyle.value == .custom {
-                    Button("カスタム入力テーブルを編集") {
-                        showingRomajiTableEditor = true
-                    }
-                }
-            } header: {
-                Label("入力方式", systemImage: "keyboard")
+                Label("Zenzai設定", systemImage: "cpu")
             }
 
             Section {
-                Picker("キーボード配列", selection: $keyboardLayout) {
-                    Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
-                    Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
-                    Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
-                }
-            } header: {
-                Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
-            }
-
-            Section {
-                Toggle("ライブ変換を有効化", isOn: $liveConversion)
-                Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
-                Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
-                Picker("句読点の種類", selection: $punctuationStyle) {
-                    Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
-                    Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
-                    Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
-                    Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
-                }
-            } header: {
-                Label("入力オプション", systemImage: "character.cursor.ibeam")
-            }
-
-            Section {
-                Picker("履歴学習", selection: $learning) {
-                    Text("学習する").tag(Config.Learning.Value.inputAndOutput)
-                    Text("学習を停止").tag(Config.Learning.Value.onlyOutput)
-                    Text("学習を無視").tag(Config.Learning.Value.nothing)
-                }
-                LabeledContent {
-                    HStack {
-                        Button("リセット") {
-                            showingLearningResetConfirmation = true
-                        }
-                        .confirmationDialog(
-                            "履歴学習データをリセットしますか？",
-                            isPresented: $showingLearningResetConfirmation,
-                            titleVisibility: .visible
-                        ) {
-                            Button("リセット", role: .destructive) {
-                                resetLearningData()
-                            }
-                            Button("キャンセル", role: .cancel) {}
-                        }
-                        Spacer()
-                        switch learningResetMessage {
-                        case .none:
-                            EmptyView()
-                        case .success:
-                            Text("履歴学習データをリセットしました")
-                                .foregroundColor(.green)
-                        case .error(let message):
-                            Text("エラー: \(message)")
-                                .foregroundColor(.red)
-                        }
-                    }
-                } label: {
-                    Text("履歴学習データ")
-                }
-            } header: {
-                Label("学習", systemImage: "memorychip")
-            }
-        }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    // MARK: - 詳細設定タブ
-    @ViewBuilder
-    private var advancedTabView: some View {
-        Form {
-            Section {
+                Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
                 Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
                     Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
                     Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
                     Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
                     Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
                 }
-            } header: {
-                Label("Zenzai設定", systemImage: "cpu")
-            }
-
-            Section {
-                Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
             } header: {
                 Label("開発者向け設定", systemImage: "hammer")
             }
