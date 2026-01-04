@@ -7,7 +7,7 @@ protocol BoolConfigItem: ConfigItem<Bool> {
 extension BoolConfigItem {
     public var value: Bool {
         get {
-            if let value = UserDefaults.standard.value(forKey: Self.key) {
+            if let value = UserDefaults.standard.object(forKey: Self.key) {
                 value as? Bool ?? Self.default
             } else {
                 Self.default

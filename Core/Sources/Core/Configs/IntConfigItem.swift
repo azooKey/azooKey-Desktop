@@ -7,7 +7,7 @@ protocol IntConfigItem: ConfigItem<Int> {
 extension IntConfigItem {
     public var value: Int {
         get {
-            if let value = UserDefaults.standard.value(forKey: Self.key) {
+            if let value = UserDefaults.standard.object(forKey: Self.key) {
                 value as? Int ?? Self.default
             } else {
                 Self.default

@@ -3,6 +3,13 @@
 
 import PackageDescription
 
+#if os(macOS)
+let kanaKanjiConverterTraits: Set<Package.Dependency.Trait> = ["Zenzai"]
+#else
+// for testing in Ubuntu environment.
+let kanaKanjiConverterTraits: Set<Package.Dependency.Trait> = []
+#endif
+
 let package = Package(
     name: "Core",
     platforms: [.macOS(.v13)],
@@ -14,7 +21,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "07486b32d4e22ff76f4c2167c38d08e1eb36de9a", traits: ["Zenzai"])
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "07486b32d4e22ff76f4c2167c38d08e1eb36de9a", traits: kanaKanjiConverterTraits)
     ],
     targets: [
         .executableTarget(
