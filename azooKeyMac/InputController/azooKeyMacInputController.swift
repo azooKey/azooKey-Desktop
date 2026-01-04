@@ -38,7 +38,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
-        self.segmentsManager = SegmentsManager()
+        self.segmentsManager = SegmentsManager(
+            kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter
+        )
 
         self.appMenu = NSMenu(title: "azooKey")
         self.liveConversionToggleMenuItem = NSMenuItem()
