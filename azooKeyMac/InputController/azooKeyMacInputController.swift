@@ -40,12 +40,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         let applicationDirectoryURL = if #available(macOS 13, *) {
             URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-                .appending(path: "memory", directoryHint: .isDirectory)
+            .appending(path: "azooKey", directoryHint: .isDirectory)
+            .appending(path: "memory", directoryHint: .isDirectory)
         } else {
             FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("azooKey", isDirectory: true)
-                .appendingPathComponent("memory", isDirectory: true)
+            .appendingPathComponent("azooKey", isDirectory: true)
+            .appendingPathComponent("memory", isDirectory: true)
         }
 
         let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac")
