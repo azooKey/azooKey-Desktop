@@ -209,7 +209,7 @@ extension Config {
         public static var `default`: Value {
             // Migration: If user had OpenAI API enabled, preserve that setting
             let legacyKey = Config.Deprecated.EnableOpenAiApiKey.key
-            if let legacyValue = UserDefaults.standard.value(forKey: legacyKey) as? Bool,
+            if let legacyValue = UserDefaults.standard.object(forKey: legacyKey) as? Bool,
                legacyValue {
                 return .openAI
             }

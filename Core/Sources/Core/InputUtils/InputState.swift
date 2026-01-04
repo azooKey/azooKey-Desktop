@@ -1,4 +1,4 @@
-import InputMethodKit
+import Foundation
 import KanaKanjiConverterModule
 
 public enum InputState: Sendable, Hashable {
@@ -10,29 +10,18 @@ public enum InputState: Sendable, Hashable {
     case replaceSuggestion
     case unicodeInput(String)
 
-    public struct EventCore: Sendable, Equatable {
-        public init(modifierFlags: NSEvent.ModifierFlags) {
-            self.modifierFlags = modifierFlags
-        }
-        var modifierFlags: NSEvent.ModifierFlags
+    public enum ModifierFlag: Sendable, Equatable, Hashable {
+        case option
+        case control
+        case command
+        case shift
     }
 
-    public func event(  // swiftlint:disable:this function_parameter_count
-        _ event: NSEvent!,
-        userAction: UserAction,
-        inputLanguage: InputLanguage,
-        liveConversionEnabled: Bool,
-        enableDebugWindow: Bool,
-        enableSuggestion: Bool
-    ) -> (ClientAction, ClientActionCallback) {
-        self.event(
-            eventCore: EventCore(modifierFlags: event.modifierFlags),
-            userAction: userAction,
-            inputLanguage: inputLanguage,
-            liveConversionEnabled: liveConversionEnabled,
-            enableDebugWindow: enableDebugWindow,
-            enableSuggestion: enableSuggestion
-        )
+    public struct EventCore: Sendable, Equatable {
+        public init(modifierFlags: [ModifierFlag]) {
+            self.modifierFlags = modifierFlags
+        }
+        var modifierFlags: [ModifierFlag]
     }
 
     // この種のコードは複雑にしかならないので、lintを無効にする
