@@ -1,4 +1,3 @@
-import InputMethodKit
 import KanaKanjiConverterModule
 
 public enum ClientAction {
