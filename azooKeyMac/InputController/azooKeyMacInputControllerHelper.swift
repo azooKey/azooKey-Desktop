@@ -1,4 +1,5 @@
 import Cocoa
+import Core
 import InputMethodKit
 
 extension azooKeyMacInputController {

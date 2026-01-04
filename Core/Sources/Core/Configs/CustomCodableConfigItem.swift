@@ -14,7 +14,7 @@ protocol CustomCodableConfigItem: ConfigItem {
 }
 
 extension CustomCodableConfigItem {
-    var value: Value {
+    public var value: Value {
         get {
             guard let data = UserDefaults.standard.data(forKey: Self.key) else {
                 print(#file, #line, "data is not set yet")
@@ -41,13 +41,13 @@ extension CustomCodableConfigItem {
 
 extension Config {
     /// ライブ変換を有効化する設定
-    struct Learning: CustomCodableConfigItem {
-        enum Value: String, Codable, Equatable, Hashable {
+    public struct Learning: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case inputAndOutput
             case onlyOutput
             case nothing
 
-            var learningType: LearningType {
+            public var learningType: LearningType {
                 switch self {
                 case .inputAndOutput:
                     .inputAndOutput
@@ -58,26 +58,28 @@ extension Config {
                 }
             }
         }
-        static var `default`: Value = .inputAndOutput
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.learning"
+
+        public init() {}
+        static let `default`: Value = .inputAndOutput
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.learning"
     }
 }
 
 extension Config {
-    struct UserDictionaryEntry: Sendable, Codable, Identifiable {
-        init(word: String, reading: String, hint: String? = nil) {
+    public struct UserDictionaryEntry: Sendable, Codable, Identifiable {
+        public init(word: String, reading: String, hint: String? = nil) {
             self.id = UUID()
             self.word = word
             self.reading = reading
             self.hint = hint
         }
 
-        var id: UUID
-        var word: String
-        var reading: String
+        public var id: UUID
+        public var word: String
+        public var reading: String
         var hint: String?
 
-        var nonNullHint: String {
+        public var nonNullHint: String {
             get {
                 hint ?? ""
             }
@@ -91,42 +93,50 @@ extension Config {
         }
     }
 
-    struct UserDictionary: CustomCodableConfigItem {
-        var items: Value = Self.default
-
-        struct Value: Codable {
-            var items: [UserDictionaryEntry]
+    public struct UserDictionary: CustomCodableConfigItem {
+        public struct Value: Codable, Sendable {
+            public var items: [UserDictionaryEntry]
         }
 
-        static let `default`: Value = .init(items: [
+        public var items: Value = Self.default
+
+        public init(items: Value = Self.default) {
+            self.items = items
+        }
+
+        public static let `default`: Value = .init(items: [
             .init(word: "azooKey", reading: "あずーきー", hint: "アプリ")
         ])
-        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.user_dictionary_temporal2"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.user_dictionary_temporal2"
     }
 
-    struct SystemUserDictionary: CustomCodableConfigItem {
-        var items: Value = Self.default
-
-        struct Value: Codable {
-            var lastUpdate: Date?
-            var items: [UserDictionaryEntry]
+    public struct SystemUserDictionary: CustomCodableConfigItem {
+        public struct Value: Codable, Sendable {
+            public var lastUpdate: Date?
+            public var items: [UserDictionaryEntry]
         }
 
-        static let `default`: Value = .init(items: [])
-        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.system_user_dictionary"
+        public var items: Value = Self.default
+
+        public init(items: Value = Self.default) {
+            self.items = items
+        }
+
+        public static let `default`: Value = .init(items: [])
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.system_user_dictionary"
     }
 }
 
 extension Config {
     /// Zenzaiのパーソナライズ強度
-    struct ZenzaiPersonalizationLevel: CustomCodableConfigItem {
-        enum Value: String, Codable, Equatable, Hashable {
+    public struct ZenzaiPersonalizationLevel: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case off
             case soft
             case normal
             case hard
 
-            var alpha: Float {
+            public var alpha: Float {
                 switch self {
                 case .off:
                     0
@@ -139,34 +149,38 @@ extension Config {
                 }
             }
         }
-        static var `default`: Value = .normal
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
+
+        public init() {}
+        public static let `default`: Value = .normal
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.zenzai.personalization_level"
     }
 }
 
 extension Config {
-    struct InputStyle: CustomCodableConfigItem {
-        enum Value: String, Codable, Equatable, Hashable {
+    public struct InputStyle: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case `default`
             case defaultAZIK
             case defaultKanaJIS
             case defaultKanaUS
             case custom
         }
-        static var `default`: Value = .default
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"
+
+        public init() {}
+        public static let `default`: Value = .default
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.input_style"
     }
 }
 
 extension Config {
     /// キーボードレイアウトの設定
-    struct KeyboardLayout: CustomCodableConfigItem {
-        enum Value: String, Codable, Equatable, Hashable {
+    public struct KeyboardLayout: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case qwerty
             case colemak
             case dvorak
 
-            var layoutIdentifier: String {
+            public var layoutIdentifier: String {
                 switch self {
                 case .qwerty:
                     return "com.apple.keylayout.US"
@@ -177,17 +191,22 @@ extension Config {
                 }
             }
         }
-        static var `default`: Value = .qwerty
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keyboard_layout"
+
+        public init() {}
+        public static let `default`: Value = .qwerty
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keyboard_layout"
     }
 
-    struct AIBackendPreference: CustomCodableConfigItem {
-        enum Value: String, Codable, Equatable, Hashable {
+    public struct AIBackendPreference: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case off = "Off"
             case foundationModels = "Foundation Models"
             case openAI = "OpenAI API"
         }
-        static var `default`: Value {
+
+        public init() {}
+
+        public static var `default`: Value {
             // Migration: If user had OpenAI API enabled, preserve that setting
             let legacyKey = Config.Deprecated.EnableOpenAiApiKey.key
             if let legacyValue = UserDefaults.standard.value(forKey: legacyKey) as? Bool,
@@ -196,6 +215,6 @@ extension Config {
             }
             return .off
         }
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
     }
 }

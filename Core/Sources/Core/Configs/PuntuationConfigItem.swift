@@ -1,20 +1,22 @@
 import Foundation
 
 extension Config {
-    struct PunctuationStyle: ConfigItem {
-        enum Value: Int, Codable, Equatable, Hashable {
+    public struct PunctuationStyle: ConfigItem {
+        public enum Value: Int, Codable, Equatable, Hashable, Sendable {
             case kutenAndToten = 1
             case kutenAndComma = 2
             case periodAndToten = 3
             case periodAndComma = 4
         }
-        static var `default`: Value = .`kutenAndToten`
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.punctuation_style"
+
+        public init() {}
+        public static let `default`: Value = .`kutenAndToten`
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.punctuation_style"
     }
 }
 
 extension Config.PunctuationStyle {
-    var value: Value {
+    public var value: Value {
         get {
             guard let data = UserDefaults.standard.data(forKey: Self.key) else {
                 print(#file, #line, "data is not set yet")

@@ -7,7 +7,7 @@ extension Config.Deprecated {
     /// - note: この設定はv0.1.2以降PunctuationStyleで置き換える
     struct TypeCommaAndPeriod: BoolConfigItem {
         static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeCommaAndPeriod"
+        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeCommaAndPeriod"
     }
 
     /// Zenzaiを利用する設定
@@ -15,7 +15,7 @@ extension Config.Deprecated {
     @available(*, deprecated, message: "ZenzaiIntegration.value is always true")
     struct ZenzaiIntegration: BoolConfigItem {
         static let `default` = true
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableZenzai"
+        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableZenzai"
     }
 
     /// OpenAI APIキー有効化設定
@@ -23,6 +23,6 @@ extension Config.Deprecated {
     @available(*, deprecated, message: "Use AIBackendPreference instead")
     struct EnableOpenAiApiKey: BoolConfigItem {
         static let `default` = false
-        static var key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
+        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableOpenAiApiKey"
     }
 }

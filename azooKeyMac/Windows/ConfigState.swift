@@ -1,21 +1,5 @@
-//
-//  ConfigItem.swift
-//  azooKeyMac
-//
-//  Created by miwa on 2024/04/27.
-//
-
-import Foundation
+import Core
 import SwiftUI
-
-/// namespace for `Config`
-enum Config {}
-
-protocol ConfigItem<Value> {
-    static var key: String { get }
-    associatedtype Value: Codable
-    var value: Value { get nonmutating set }
-}
 
 /// Wrapper of `State` for SwiftUI. By using this wrapper, you can update config and immediately get the view update.
 @propertyWrapper

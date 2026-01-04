@@ -5,6 +5,7 @@
 //  Created by miwa on 2024/09/22.
 //
 
+import Core
 import SwiftUI
 
 struct UserDictionaryEditorWindow: View {
