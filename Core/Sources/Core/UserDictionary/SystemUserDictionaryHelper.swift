@@ -1,7 +1,7 @@
 import Foundation
-import SQLite3
-#if canImport(AppKit)
+#if os(macOS)
 import AppKit
+import SQLite3
 #endif
 
 /// macOSのユーザ辞書データを取り出すためのヘルパー
@@ -12,7 +12,20 @@ import AppKit
 ///   sqlite3 -header -csv ~/Library/KeyboardServices/TextReplacements.db "SELECT ZSHORTCUT, ZPHRASE FROM ZTEXTREPLACEMENTENTRY"
 ///   ```
 public enum SystemUserDictionaryHelper: Sendable {
-    #if canImport(AppKit)
+    public struct Entry: Sendable {
+        public let shortcut: String
+        public let phrase: String
+    }
+
+    public enum FetchError: Sendable, Error {
+        case unsupportedOperatingSystem
+        case fileNotExist(String)
+        case fileNotReadable(String)
+        case failedToOpenDatabase(status: Int32)
+        case failedToPrepareStatement(status: Int32)
+    }
+
+    #if os(macOS)
     /// Delegate that allows the user to choose **only** a directory named "KeyboardServices".
     private final class KeyboardServicesDirectoryDelegate: NSObject, NSOpenSavePanelDelegate {
         private let allowedFolderName = "KeyboardServices"
@@ -37,21 +50,8 @@ public enum SystemUserDictionaryHelper: Sendable {
 
     /// A shared delegate instance that remains alive for the lifetime of the open panel.
     @MainActor private static let keyboardServicesDelegate = KeyboardServicesDirectoryDelegate()
-    #endif
 
-    public struct Entry: Sendable {
-        public let shortcut: String
-        public let phrase: String
-    }
-
-    public enum FetchError: Sendable, Error {
-        case fileNotExist(String)
-        case fileNotReadable(String)
-        case failedToOpenDatabase(status: Int32)
-        case failedToPrepareStatement(status: Int32)
-    }
-
-    @MainActor static func promptUserForTextReplacementDirectory() -> URL? {
+    @MainActor private static func promptUserForTextReplacementDirectory() -> URL? {
         let panel = NSOpenPanel()
         panel.title = "システムのユーザ辞書ディレクトリ（KeyboardServices）を選択してください"
         panel.message = "システムのユーザ辞書ディレクトリ（KeyboardServices）を選択してください"
@@ -59,15 +59,17 @@ public enum SystemUserDictionaryHelper: Sendable {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/KeyboardServices")
-        #if canImport(AppKit)
         panel.delegate = keyboardServicesDelegate
-        #endif
 
         let response = panel.runModal()
         return response == .OK ? panel.url : nil
     }
+    #endif
 
     @MainActor public static func fetchEntries() throws(FetchError) -> [Entry] {
+        #if !os(macOS)
+        throw .unsupportedOperatingSystem
+        #else
         let userName = NSUserName()
         var dbPath = "/Users/\(userName)/Library/KeyboardServices/TextReplacements.db"
         guard FileManager.default.fileExists(atPath: dbPath) else {
@@ -134,5 +136,6 @@ public enum SystemUserDictionaryHelper: Sendable {
         }
 
         return entries
+        #endif
     }
 }
