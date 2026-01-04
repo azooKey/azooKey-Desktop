@@ -17,7 +17,7 @@ public enum SystemUserDictionaryHelper: Sendable {
         public let phrase: String
     }
 
-    public enum FetchError: Sendable, Error {
+    public enum FetchError: Sendable, Error, Equatable {
         case unsupportedOperatingSystem
         case fileNotExist(String)
         case fileNotReadable(String)
