@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 import KanaKanjiConverterModule
 
 public enum CustomInputTableStore {
@@ -15,7 +18,11 @@ public enum CustomInputTableStore {
     }
 
     static var fileURL: URL {
-        directoryURL.appendingPathComponent(fileName, conformingTo: .text)
+        #if canImport(UniformTypeIdentifiers) && !os(Linux)
+        return directoryURL.appendingPathComponent(fileName, conformingTo: .text)
+        #else
+        return directoryURL.appendingPathComponent(fileName)
+        #endif
     }
 
     @discardableResult
