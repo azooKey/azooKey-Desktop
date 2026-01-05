@@ -15,42 +15,42 @@ struct CustomPromptShortcutsEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if shortcuts.isEmpty {
-                HStack {
-                    Text("ショートカットが設定されていません")
-                        .foregroundColor(.secondary)
-                        .font(.subheadline)
-                    Spacer()
-                    Button(action: {
-                        showingAddSheet = true
-                    }) {
-                        Label("追加", systemImage: "plus")
-                    }
-                }
-                .padding(.vertical, 4)
+                Text("ショートカットが設定されていません")
+                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
             } else {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        showingAddSheet = true
-                    }) {
-                        Label("追加", systemImage: "plus")
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(shortcuts) { shortcut in
+                            CustomPromptShortcutRow(
+                                shortcut: shortcut,
+                                onEdit: {
+                                    editingShortcut = shortcut
+                                },
+                                onDelete: {
+                                    shortcuts.removeAll { $0.id == shortcut.id }
+                                }
+                            )
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 10)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                            .cornerRadius(6)
+                        }
                     }
+                    .padding(.vertical, 2)
                 }
+                .frame(maxHeight: 200)
+            }
 
-                List {
-                    ForEach(shortcuts) { shortcut in
-                        CustomPromptShortcutRow(
-                            shortcut: shortcut,
-                            onEdit: {
-                                editingShortcut = shortcut
-                            },
-                            onDelete: {
-                                shortcuts.removeAll { $0.id == shortcut.id }
-                            }
-                        )
-                    }
+            HStack {
+                Spacer()
+                Button(action: {
+                    showingAddSheet = true
+                }) {
+                    Label("追加", systemImage: "plus")
                 }
-                .frame(minHeight: 150, maxHeight: 300)
             }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -92,12 +92,12 @@ struct CustomPromptShortcutRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(shortcut.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12))
                 Text(shortcut.prompt)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -105,28 +105,31 @@ struct CustomPromptShortcutRow: View {
             Spacer()
 
             Text(shortcut.shortcut.displayString)
-                .font(.system(size: 12, weight: .medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
                 .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                    RoundedRectangle(cornerRadius: 3)
+                        .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
 
             Button(action: onEdit) {
                 Image(systemName: "pencil")
+                    .font(.system(size: 11))
             }
             .buttonStyle(.plain)
+            .foregroundColor(.secondary)
             .help("編集")
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
+                    .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            .foregroundColor(.red)
+            .foregroundColor(.red.opacity(0.8))
             .help("削除")
         }
-        .padding(.vertical, 4)
     }
 }
 
