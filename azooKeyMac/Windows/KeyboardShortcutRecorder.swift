@@ -5,8 +5,8 @@
 //  Created by Claude Code
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// キーボードショートカットを記録するためのビュー
 struct KeyboardShortcutRecorder: NSViewRepresentable {
@@ -111,9 +111,9 @@ class ShortcutRecorderView: NSView {
 
         // 修飾キーがない場合は無視
         guard modifiers.contains(.control) ||
-              modifiers.contains(.option) ||
-              modifiers.contains(.shift) ||
-              modifiers.contains(.command) else {
+                modifiers.contains(.option) ||
+                modifiers.contains(.shift) ||
+                modifiers.contains(.command) else {
             return
         }
 

@@ -85,3 +85,37 @@ extension Config {
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.custom_prompt_shortcuts"
     }
 }
+
+protocol StringConfigItemWithDefault: ConfigItem<String> {
+    static var `default`: String { get }
+}
+
+extension StringConfigItemWithDefault {
+    public var value: String {
+        get {
+            let stored = UserDefaults.standard.string(forKey: Self.key) ?? ""
+            return stored.isEmpty ? Self.default : stored
+        }
+        nonmutating set {
+            UserDefaults.standard.set(newValue, forKey: Self.key)
+        }
+    }
+}
+
+extension Config {
+    /// 英数キーダブルタップのプロンプト
+    public struct EisuDoubleTapPrompt: StringConfigItemWithDefault {
+        public init() {}
+
+        public static let `default`: String = "english"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.eisu_double_tap_prompt"
+    }
+
+    /// かなキーダブルタップのプロンプト
+    public struct KanaDoubleTapPrompt: StringConfigItemWithDefault {
+        public init() {}
+
+        public static let `default`: String = "japanese"
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.kana_double_tap_prompt"
+    }
+}

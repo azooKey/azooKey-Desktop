@@ -260,7 +260,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    if self.triggerAiTranslation(initialPrompt: "english") {
+                    let prompt = Config.EisuDoubleTapPrompt().value
+                    if self.triggerAiTranslation(initialPrompt: prompt) {
                         return true
                     }
                 }
@@ -278,7 +279,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    if self.triggerAiTranslation(initialPrompt: "japanese") {
+                    let prompt = Config.KanaDoubleTapPrompt().value
+                    if self.triggerAiTranslation(initialPrompt: prompt) {
                         return true
                     }
                 }
