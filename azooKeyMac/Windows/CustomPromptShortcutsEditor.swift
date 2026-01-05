@@ -13,24 +13,30 @@ struct CustomPromptShortcutsEditor: View {
     @State private var showingAddSheet = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("カスタムプロンプトショートカット")
-                    .font(.headline)
-                Spacer()
-                Button(action: {
-                    showingAddSheet = true
-                }) {
-                    Label("追加", systemImage: "plus")
-                }
-            }
-
+        VStack(alignment: .leading, spacing: 8) {
             if shortcuts.isEmpty {
-                Text("カスタムプロンプトショートカットが設定されていません。")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                    .padding(.vertical, 8)
+                HStack {
+                    Text("ショートカットが設定されていません")
+                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                    Spacer()
+                    Button(action: {
+                        showingAddSheet = true
+                    }) {
+                        Label("追加", systemImage: "plus")
+                    }
+                }
+                .padding(.vertical, 4)
             } else {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        showingAddSheet = true
+                    }) {
+                        Label("追加", systemImage: "plus")
+                    }
+                }
+
                 List {
                     ForEach(shortcuts) { shortcut in
                         CustomPromptShortcutRow(
