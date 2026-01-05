@@ -5,6 +5,7 @@ disabled_rules:
   - file_length # ファイルの長さを気にするのは非本質的
   - function_body_length # 関数の実装の長さを気にするのも非本質的
   - type_body_length # 型の実装の長さを気にするのも非本質的
+  - todo # todoが書けない方が間違い
 
 identifier_name:
   min_length: 1

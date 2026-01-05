@@ -202,6 +202,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         return CharacterSet(text.unicodeScalars).isSubset(of: printable)
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
@@ -217,32 +218,31 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 102)
 
             if isDoubleTap {
-                // 【ダブルタップ時】marked textがある場合は全体をローマ字に変換して確定
-                if !self.segmentsManager.isEmpty {
-                    self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
-                        $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
-                    })
-                    self.switchInputLanguage(.english, client: client)
-                    self.inputState = .none
+                let selectedRange = client.selectedRange()
+                if selectedRange.length > 0 {
+                    if self.triggerAiTranslation(initialPrompt: "english") {
+                        return true
+                    }
                 }
-                // marked textがない場合は何もしない（シングルタップで確定しないため、復元すべきテキストがない）
-                return true
+                if !self.segmentsManager.isEmpty {
+                    _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
+                    self.switchInputLanguage(.english, client: client)
+                    return true
+                }
             }
+        }
 
-            // 【シングルタップ時】
-            if self.inputLanguage == .japanese,
-               self.inputState == .composing || self.inputState == .previewing || self.inputState == .selecting,
-               !self.segmentsManager.isEmpty {
-                // marked text を維持したまま、内部モードだけ英語に切り替え
-                // Google日本語入力と同様に、確定せずに英語入力を続けられるようにする
-                self.inputLanguage = .english
-                // inputStateは維持（.composing等のまま）
-            } else {
-                // 入力中ではない場合、または既に英語の場合：単なるモード切り替え
-                self.switchInputLanguage(.english, client: client)
-                self.inputState = .none
+        // かなキー（keyCode 104）の処理（ダブルタップで日本語への翻訳）
+        if event.keyCode == 104 {
+            let isDoubleTap = checkAndUpdateDoubleTap(keyCode: 104)
+            if isDoubleTap {
+                let selectedRange = client.selectedRange()
+                if selectedRange.length > 0 {
+                    if self.triggerAiTranslation(initialPrompt: "japanese") {
+                        return true
+                    }
+                }
             }
-            return true
         }
 
         // Check if AI backend is enabled

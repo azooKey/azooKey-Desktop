@@ -14,6 +14,7 @@ final class PromptInputWindow: NSWindow {
     private var previewCallback: ((String, @escaping (String) -> Void) -> Void)?
     private var applyCallback: ((String) -> Void)?
     private var isTextFieldCurrentlyFocused: Bool = false
+    private var initialPrompt: String?
 
     init() {
         super.init(
@@ -52,6 +53,7 @@ final class PromptInputWindow: NSWindow {
 
     private func setupUI() {
         let contentView = PromptInputView(
+            initialPrompt: initialPrompt,
             onSubmit: { [weak self] prompt in
                 self?.completion?(prompt)
                 self?.close()
@@ -79,6 +81,7 @@ final class PromptInputWindow: NSWindow {
 
     func showPromptInput(
         at cursorLocation: NSPoint,
+        initialPrompt: String? = nil,
         onPreview: @escaping (String, @escaping (String) -> Void) -> Void,
         onApply: @escaping (String) -> Void,
         completion: @escaping (String?) -> Void
@@ -86,6 +89,7 @@ final class PromptInputWindow: NSWindow {
         self.previewCallback = onPreview
         self.applyCallback = onApply
         self.completion = completion
+        self.initialPrompt = initialPrompt
 
         // Reset the window display state
         resetWindowState()
