@@ -321,7 +321,8 @@ struct ConfigWindow: View {
                         switch self.systemUserDictionaryUpdateMessage {
                         case .none:
                             if let updated = self.systemUserDictionary.value.lastUpdate {
-                                Text("最終更新: \(updated.formatted()) / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                                let date = updated.formatted(date: .omitted, time: .omitted)
+                                Text("最終更新: \(date) / \(self.systemUserDictionary.value.items.count)件のアイテム")
                             } else {
                                 Text("未設定")
                             }
@@ -357,6 +358,17 @@ struct ConfigWindow: View {
 
             Section {
                 Toggle("ライブ変換を有効化", isOn: $liveConversion)
+                HStack {
+                    TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
+                    helpButton(
+                        helpContent: """
+                    Zenzaiはあなたのプロフィールを考慮した変換を行うことができます。
+                    名前や仕事、趣味などを入力すると、それに合わせた変換が自動で推薦されます。
+                    （実験的な機能のため、精度が不十分な場合があります）
+                    """,
+                        isPresented: $zenzaiProfileHelpPopover
+                    )
+                }
             } header: {
                 Label("変換設定", systemImage: "brain")
             }
@@ -400,6 +412,7 @@ struct ConfigWindow: View {
                             Text("エラー: \(message)")
                                 .foregroundColor(.red)
                         }
+                        Spacer()
                         Button("リセット") {
                             showingLearningResetConfirmation = true
                         }
@@ -430,8 +443,12 @@ struct ConfigWindow: View {
                     Text("カスタム").tag(Config.InputStyle.Value.custom)
                 }
                 if inputStyle.value == .custom {
-                    Button("カスタム入力テーブルを編集") {
-                        showingRomajiTableEditor = true
+                    LabeledContent {
+                        Button("編集") {
+                            showingRomajiTableEditor = true
+                        }
+                    } label: {
+                        Text("カスタム入力テーブル")
                     }
                 }
             } header: {
