@@ -20,6 +20,8 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var transformShortcut = Config.TransformShortcut()
+    @ConfigState private var customPromptShortcuts = Config.CustomPromptShortcuts()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -463,6 +465,28 @@ struct ConfigWindow: View {
                 }
             } header: {
                 Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
+            }
+
+            Section {
+                LabeledContent {
+                    KeyboardShortcutRecorder(shortcut: $transformShortcut)
+                } label: {
+                    Text("いい感じ変換")
+                }
+            } header: {
+                Label("基本ショートカット", systemImage: "command")
+            } footer: {
+                Text("ショートカットをクリックして、新しいキーの組み合わせを入力してください。Deleteキーで初期設定に戻ります。")
+                    .font(.caption)
+            }
+
+            Section {
+                CustomPromptShortcutsEditor(shortcuts: $customPromptShortcuts)
+            } header: {
+                Label("カスタムプロンプトショートカット", systemImage: "wand.and.stars")
+            } footer: {
+                Text("選択したテキストに対して、カスタムプロンプトを実行するショートカットを設定できます。")
+                    .font(.caption)
             }
         }
         .formStyle(.grouped)

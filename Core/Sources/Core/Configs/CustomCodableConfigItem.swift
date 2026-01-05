@@ -218,3 +218,4 @@ extension Config {
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.aiBackend"
     }
 }
+

@@ -37,6 +37,26 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         return isDouble
     }
 
+    // MARK: - カスタムプロンプトショートカット検出
+    private func checkCustomPromptShortcut(event: NSEvent) -> CustomPromptShortcut? {
+        guard let characters = event.charactersIgnoringModifiers,
+              !characters.isEmpty else {
+            return nil
+        }
+
+        let key = characters.lowercased()
+
+        // 必要な修飾キーのみをマスクして取得
+        let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        let customShortcuts = Config.CustomPromptShortcuts().value
+        return customShortcuts.first { shortcut in
+            let shortcutModifiers = shortcut.shortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
+            return shortcut.shortcut.key == key && eventModifiers == shortcutModifiers
+        }
+    }
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         let applicationDirectoryURL = if #available(macOS 13, *) {
             URL.applicationSupportDirectory
@@ -209,6 +229,26 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         guard event.type == .keyDown else {
             return false
+        }
+
+        // カスタムプロンプトショートカットのチェック
+        if let matchedShortcut = checkCustomPromptShortcut(event: event) {
+            self.segmentsManager.appendDebugMessage("Custom shortcut matched: \(matchedShortcut.name) (\(matchedShortcut.prompt))")
+            let aiBackendEnabled = Config.AIBackendPreference().value != .off
+            if aiBackendEnabled && !self.isPromptWindowVisible {
+                let selectedRange = client.selectedRange()
+                self.segmentsManager.appendDebugMessage("Selected range: \(selectedRange)")
+                if selectedRange.length > 0 {
+                    if self.triggerAiTranslation(initialPrompt: matchedShortcut.prompt) {
+                        self.segmentsManager.appendDebugMessage("Custom shortcut triggered successfully")
+                        return true
+                    }
+                } else {
+                    self.segmentsManager.appendDebugMessage("No text selected, ignoring custom shortcut")
+                }
+            } else {
+                self.segmentsManager.appendDebugMessage("Custom shortcut ignored: aiBackend=\(aiBackendEnabled), promptWindowVisible=\(self.isPromptWindowVisible)")
+            }
         }
 
         let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
