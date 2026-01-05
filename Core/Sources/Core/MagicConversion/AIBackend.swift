@@ -32,4 +32,25 @@ public enum AIClient {
             return try await OpenAIClient.sendRequest(request, apiKey: apiKey, apiEndpoint: apiEndpoint, logger: logger)
         }
     }
+
+    public static func sendTextTransformRequest(
+        _ prompt: String,
+        backend: AIBackend,
+        modelName: String = "",
+        apiKey: String = "",
+        apiEndpoint: String = "",
+        logger: ((String) -> Void)? = nil
+    ) async throws -> String {
+        switch backend {
+        case .foundationModels:
+            return try await FoundationModelsClientCompat.sendTextTransformRequest(prompt, logger: logger)
+        case .openAI:
+            return try await OpenAIClient.sendTextTransformRequest(
+                prompt: prompt,
+                modelName: modelName,
+                apiKey: apiKey,
+                apiEndpoint: apiEndpoint
+            )
+        }
+    }
 }

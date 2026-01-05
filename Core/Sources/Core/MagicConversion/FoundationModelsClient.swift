@@ -88,6 +88,12 @@ public enum FoundationModelsClient {
         @Guide(description: "Array of prediction strings", .count(3...5))
         public var predictions: [String]
     }
+
+    @Generable
+    public struct TextTransformResponse: Codable {
+        @Guide(description: "The transformed text")
+        public var result: String
+    }
     #endif
 
     public static func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)? = nil) async throws -> [String] {
@@ -138,6 +144,43 @@ public enum FoundationModelsClient {
         throw FoundationModelsError.unavailable(.frameworkNotAvailable)
         #endif
     }
+
+    public static func sendTextTransformRequest(_ prompt: String, logger: ((String) -> Void)? = nil) async throws -> String {
+        #if canImport(FoundationModels)
+        logger?("Foundation Models text transform request started")
+
+        let systemModel = SystemLanguageModel.default
+
+        switch systemModel.availability {
+        case .available:
+            break
+        case .unavailable(let reason):
+            logger?("Foundation Models not available: \(reason)")
+            let mappedReason: FoundationModelsAvailability.UnavailabilityReason = switch reason {
+            case .deviceNotEligible:
+                .deviceNotEligible
+            case .appleIntelligenceNotEnabled:
+                .appleIntelligenceNotEnabled
+            case .modelNotReady:
+                .modelNotReady
+            @unknown default:
+                .deviceNotEligible
+            }
+            throw FoundationModelsError.unavailable(mappedReason)
+        @unknown default:
+            logger?("Foundation Models availability unknown")
+            throw FoundationModelsError.unavailable(.deviceNotEligible)
+        }
+
+        let session = LanguageModelSession(model: systemModel)
+        let response = try await session.respond(to: prompt, generating: TextTransformResponse.self)
+
+        logger?("Received structured response for text transform")
+        return response.content.result.trimmingCharacters(in: .whitespacesAndNewlines)
+        #else
+        throw FoundationModelsError.unavailable(.frameworkNotAvailable)
+        #endif
+    }
 }
 
 // Compatibility wrapper for older macOS versions
@@ -153,6 +196,14 @@ public enum FoundationModelsClientCompat {
     public static func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)? = nil) async throws -> [String] {
         if #available(macOS 26.0, *) {
             return try await FoundationModelsClient.sendRequest(request, logger: logger)
+        } else {
+            throw FoundationModelsError.unavailable(.osVersionTooOld)
+        }
+    }
+
+    public static func sendTextTransformRequest(_ prompt: String, logger: ((String) -> Void)? = nil) async throws -> String {
+        if #available(macOS 26.0, *) {
+            return try await FoundationModelsClient.sendTextTransformRequest(prompt, logger: logger)
         } else {
             throw FoundationModelsError.unavailable(.osVersionTooOld)
         }
