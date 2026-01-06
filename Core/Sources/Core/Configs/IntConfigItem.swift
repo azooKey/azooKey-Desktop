@@ -22,7 +22,7 @@ extension IntConfigItem {
 extension Config {
     public struct ZenzaiInferenceLimit: IntConfigItem {
         public init() {}
-        static let `default` = 1
+        static let `default` = 5
         public static let key = "dev.ensan.inputmethod.azooKeyMac.preference.zenzaiInferenceLimit"
     }
 }
