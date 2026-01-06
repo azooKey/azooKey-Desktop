@@ -475,17 +475,6 @@ struct ConfigWindow: View {
         Form {
             Section {
                 HStack {
-                    TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
-                    helpButton(
-                        helpContent: """
-                    Zenzaiはあなたのプロフィールを考慮した変換を行うことができます。
-                    名前や仕事、趣味などを入力すると、それに合わせた変換が自動で推薦されます。
-                    （実験的な機能のため、精度が不十分な場合があります）
-                    """,
-                        isPresented: $zenzaiProfileHelpPopover
-                    )
-                }
-                HStack {
                     TextField(
                         "Zenzaiの推論上限",
                         text: Binding(
