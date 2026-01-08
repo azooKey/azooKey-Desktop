@@ -11,6 +11,7 @@ struct PromptInputView: View {
     @State private var hoveredHistoryIndex: Int?
     @State private var isNavigatingHistory: Bool = false
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
+    @State private var editingShortcutFor: PromptHistoryItem?
     @FocusState private var isTextFieldFocused: Bool
 
     let initialPrompt: String?
@@ -167,6 +168,25 @@ struct PromptInputView: View {
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                     .help(item.isPinned ? "Unpin" : "Pin")
+
+                                    // Shortcut button (only for pinned items)
+                                    if item.isPinned {
+                                        Button {
+                                            editingShortcutFor = item
+                                        } label: {
+                                            if let shortcut = item.shortcut {
+                                                Text(shortcut.displayString)
+                                                    .font(.system(size: 8, weight: .medium))
+                                                    .foregroundColor(.accentColor)
+                                            } else {
+                                                Image(systemName: "command")
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary.opacity(0.4))
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help(item.shortcut == nil ? "Set shortcut" : "Edit shortcut")
+                                    }
 
                                     // Prompt text
                                     Text(item.prompt)
@@ -357,6 +377,18 @@ struct PromptInputView: View {
             hoveredHistoryIndex = nil
             isTextFieldFocused = true
         }
+        .sheet(item: $editingShortcutFor) { item in
+            ShortcutEditorSheet(
+                item: item,
+                onSave: { updatedItem in
+                    updateShortcut(for: updatedItem)
+                    editingShortcutFor = nil
+                },
+                onCancel: {
+                    editingShortcutFor = nil
+                }
+            )
+        }
     }
 
     private func requestPreview() {
@@ -452,8 +484,15 @@ struct PromptInputView: View {
     }
 
     private func togglePin(for item: PromptHistoryItem) {
-        if let index = promptHistory.firstIndex(where: { $0.prompt == item.prompt }) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
             promptHistory[index].isPinned.toggle()
+            savePinnedHistory()
+        }
+    }
+
+    private func updateShortcut(for item: PromptHistoryItem) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
+            promptHistory[index].shortcut = item.shortcut
             savePinnedHistory()
         }
     }
@@ -563,4 +602,55 @@ struct PromptInputView: View {
         }
     )
     .frame(width: 380)
+}
+
+// MARK: - Shortcut Editor Sheet
+struct ShortcutEditorSheet: View {
+    @State private var item: PromptHistoryItem
+    @State private var shortcut: KeyboardShortcut
+    let onSave: (PromptHistoryItem) -> Void
+    let onCancel: () -> Void
+
+    init(item: PromptHistoryItem, onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
+        self._item = State(initialValue: item)
+        self._shortcut = State(initialValue: item.shortcut ?? KeyboardShortcut(key: "a", modifiers: .control))
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Set Shortcut for \"\(item.prompt)\"")
+                .font(.headline)
+
+            KeyboardShortcutRecorder(shortcut: $shortcut)
+                .frame(height: 40)
+
+            HStack {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                if item.shortcut != nil {
+                    Button("Remove") {
+                        var updatedItem = item
+                        updatedItem.shortcut = nil
+                        onSave(updatedItem)
+                    }
+                }
+
+                Button("Save") {
+                    var updatedItem = item
+                    updatedItem.shortcut = shortcut
+                    onSave(updatedItem)
+                }
+                .keyboardShortcut(.return)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
 }

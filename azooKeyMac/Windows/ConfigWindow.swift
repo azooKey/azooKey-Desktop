@@ -21,7 +21,6 @@ struct ConfigWindow: View {
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
     @ConfigState private var transformShortcut = Config.TransformShortcut()
-    @ConfigState private var customPromptShortcuts = Config.CustomPromptShortcuts()
     @ConfigState private var eisuDoubleTapPrompt = Config.EisuDoubleTapPrompt()
     @ConfigState private var kanaDoubleTapPrompt = Config.KanaDoubleTapPrompt()
 
@@ -479,15 +478,6 @@ struct ConfigWindow: View {
                 Label("基本ショートカット", systemImage: "command")
             } footer: {
                 Text("ショートカットをクリックして、新しいキーの組み合わせを入力してください。Deleteキーで初期設定に戻ります。")
-                    .font(.caption)
-            }
-
-            Section {
-                CustomPromptShortcutsEditor(shortcuts: $customPromptShortcuts)
-            } header: {
-                Label("カスタムプロンプトショートカット", systemImage: "wand.and.stars")
-            } footer: {
-                Text("選択したテキストに対して、カスタムプロンプトを実行するショートカットを設定できます。")
                     .font(.caption)
             }
 

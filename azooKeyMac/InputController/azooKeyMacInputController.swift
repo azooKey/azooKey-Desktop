@@ -38,7 +38,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     // MARK: - カスタムプロンプトショートカット検出
-    private func checkCustomPromptShortcut(event: NSEvent) -> CustomPromptShortcut? {
+    private func checkCustomPromptShortcut(event: NSEvent) -> String? {
         guard let characters = event.charactersIgnoringModifiers,
               !characters.isEmpty else {
             return nil
@@ -50,11 +50,29 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
         let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
 
+        // Check pinned prompts with shortcuts
+        if let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+           let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
+            let pinnedWithShortcuts = history.filter { $0.isPinned && $0.shortcut != nil }
+            if let matched = pinnedWithShortcuts.first(where: { item in
+                guard let itemShortcut = item.shortcut else { return false }
+                let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
+                return itemShortcut.key == key && eventModifiers == shortcutModifiers
+            }) {
+                return matched.prompt
+            }
+        }
+
+        // Fallback to old custom shortcuts config (for backward compatibility)
         let customShortcuts = Config.CustomPromptShortcuts().value
-        return customShortcuts.first { shortcut in
+        if let matched = customShortcuts.first(where: { shortcut in
             let shortcutModifiers = shortcut.shortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
             return shortcut.shortcut.key == key && eventModifiers == shortcutModifiers
+        }) {
+            return matched.prompt
         }
+
+        return nil
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
@@ -232,14 +250,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         // カスタムプロンプトショートカットのチェック
-        if let matchedShortcut = checkCustomPromptShortcut(event: event) {
-            self.segmentsManager.appendDebugMessage("Custom shortcut matched: \(matchedShortcut.name) (\(matchedShortcut.prompt))")
+        if let matchedPrompt = checkCustomPromptShortcut(event: event) {
+            self.segmentsManager.appendDebugMessage("Custom shortcut matched: \(matchedPrompt)")
             let aiBackendEnabled = Config.AIBackendPreference().value != .off
             if aiBackendEnabled && !self.isPromptWindowVisible {
                 let selectedRange = client.selectedRange()
                 self.segmentsManager.appendDebugMessage("Selected range: \(selectedRange)")
                 if selectedRange.length > 0 {
-                    if self.triggerAiTranslation(initialPrompt: matchedShortcut.prompt) {
+                    if self.triggerAiTranslation(initialPrompt: matchedPrompt) {
                         self.segmentsManager.appendDebugMessage("Custom shortcut triggered successfully")
                         return true
                     }
