@@ -173,7 +173,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 if self.inputLanguage == .english {
                     self.inputLanguage = .japanese
                     let (clientAction, clientActionCallback) = self.inputState.event(
-                        eventCore: .init(modifierFlags: []),
+                        eventCore: .init(modifierFlags: [], characters: nil, charactersIgnoringModifiers: nil, keyCode: 0x00),
                         userAction: .かな,
                         inputLanguage: self.inputLanguage,
                         liveConversionEnabled: false,
@@ -211,7 +211,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return false
         }
 
-        let userAction = UserAction.getUserAction(event: event, inputLanguage: inputLanguage)
+        let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
 
         // 英数キー（keyCode 102）の処理
         if event.keyCode == 102 {
@@ -274,7 +274,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let (clientAction, clientActionCallback) = inputState.event(
-            event,
+            eventCore: event.keyEventCore,
             userAction: userAction,
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
