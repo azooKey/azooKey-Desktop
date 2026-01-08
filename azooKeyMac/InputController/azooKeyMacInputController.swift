@@ -37,6 +37,26 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         return isDouble
     }
 
+    // MARK: - ダブルタッププロンプト取得
+    private func getDoubleTapPrompt(isEisu: Bool) -> String? {
+        // Check pinned prompts first
+        if let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+           let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
+            if let matched = history.first(where: { $0.isPinned && (isEisu ? $0.isEisuDoubleTap : $0.isKanaDoubleTap) }) {
+                return matched.prompt
+            }
+        }
+
+        // Fallback to config
+        if isEisu {
+            let prompt = Config.EisuDoubleTapPrompt().value
+            return prompt.isEmpty ? nil : prompt
+        } else {
+            let prompt = Config.KanaDoubleTapPrompt().value
+            return prompt.isEmpty ? nil : prompt
+        }
+    }
+
     // MARK: - カスタムプロンプトショートカット検出
     private func checkCustomPromptShortcut(event: NSEvent) -> String? {
         guard let characters = event.charactersIgnoringModifiers,
@@ -278,9 +298,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    let prompt = Config.EisuDoubleTapPrompt().value
-                    if self.triggerAiTranslation(initialPrompt: prompt) {
-                        return true
+                    // Check pinned prompts for Eisu double-tap
+                    if let prompt = getDoubleTapPrompt(isEisu: true) {
+                        if self.triggerAiTranslation(initialPrompt: prompt) {
+                            return true
+                        }
                     }
                 }
                 if !self.segmentsManager.isEmpty {
@@ -297,9 +319,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    let prompt = Config.KanaDoubleTapPrompt().value
-                    if self.triggerAiTranslation(initialPrompt: prompt) {
-                        return true
+                    // Check pinned prompts for Kana double-tap
+                    if let prompt = getDoubleTapPrompt(isEisu: false) {
+                        if self.triggerAiTranslation(initialPrompt: prompt) {
+                            return true
+                        }
                     }
                 }
             }

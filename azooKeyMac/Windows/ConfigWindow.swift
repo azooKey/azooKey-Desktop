@@ -21,8 +21,6 @@ struct ConfigWindow: View {
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
     @ConfigState private var transformShortcut = Config.TransformShortcut()
-    @ConfigState private var eisuDoubleTapPrompt = Config.EisuDoubleTapPrompt()
-    @ConfigState private var kanaDoubleTapPrompt = Config.KanaDoubleTapPrompt()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -481,17 +479,6 @@ struct ConfigWindow: View {
                     .font(.caption)
             }
 
-            Section {
-                TextField("英数キーダブルタップ", text: $eisuDoubleTapPrompt, prompt: Text("例: english"))
-                    .help("英数キー（Eisu）をダブルタップしたときに実行されるプロンプト")
-                TextField("かなキーダブルタップ", text: $kanaDoubleTapPrompt, prompt: Text("例: japanese"))
-                    .help("かなキー（Kana）をダブルタップしたときに実行されるプロンプト")
-            } header: {
-                Label("ダブルタップアクション", systemImage: "hand.tap")
-            } footer: {
-                Text("テキスト選択時に英数キーまたはかなキーを素早く2回押すと、設定したプロンプトでいい感じ変換が実行されます。")
-                    .font(.caption)
-            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

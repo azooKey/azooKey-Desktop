@@ -194,6 +194,30 @@ struct PromptInputView: View {
                                         .foregroundColor(hoveredHistoryIndex == index ? .primary : .secondary)
                                         .lineLimit(1)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    // Double-tap badges (only for pinned items)
+                                    if item.isPinned {
+                                        HStack(spacing: 2) {
+                                            if item.isEisuDoubleTap {
+                                                Text("E")
+                                                    .font(.system(size: 7, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 3)
+                                                    .padding(.vertical, 1)
+                                                    .background(Color.blue)
+                                                    .cornerRadius(2)
+                                            }
+                                            if item.isKanaDoubleTap {
+                                                Text("J")
+                                                    .font(.system(size: 7, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 3)
+                                                    .padding(.vertical, 1)
+                                                    .background(Color.green)
+                                                    .cornerRadius(2)
+                                            }
+                                        }
+                                    }
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -380,6 +404,8 @@ struct PromptInputView: View {
         .sheet(item: $editingShortcutFor) { item in
             ShortcutEditorSheet(
                 item: item,
+                existingEisuPrompt: promptHistory.first(where: { $0.id != item.id && $0.isEisuDoubleTap })?.prompt,
+                existingKanaPrompt: promptHistory.first(where: { $0.id != item.id && $0.isKanaDoubleTap })?.prompt,
                 onSave: { updatedItem in
                     updateShortcut(for: updatedItem)
                     editingShortcutFor = nil
@@ -468,10 +494,13 @@ struct PromptInputView: View {
 
         // Add default pinned prompts if history is empty
         if promptHistory.isEmpty {
-            let defaultPinnedPrompts = ["elaborate", "rewrite", "formal", "english"]
-            promptHistory = defaultPinnedPrompts.map { prompt in
-                PromptHistoryItem(prompt: prompt, isPinned: true)
-            }
+            promptHistory = [
+                PromptHistoryItem(prompt: "elaborate", isPinned: true),
+                PromptHistoryItem(prompt: "rewrite", isPinned: true),
+                PromptHistoryItem(prompt: "formal", isPinned: true),
+                PromptHistoryItem(prompt: "english", isPinned: true, isEisuDoubleTap: true),
+                PromptHistoryItem(prompt: "japanese", isPinned: true, isKanaDoubleTap: true)
+            ]
             savePinnedHistory()
         }
     }
@@ -492,7 +521,22 @@ struct PromptInputView: View {
 
     private func updateShortcut(for item: PromptHistoryItem) {
         if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
+            // Clear double-tap flags from other items if this item is setting them
+            if item.isEisuDoubleTap {
+                for i in promptHistory.indices where i != index {
+                    promptHistory[i].isEisuDoubleTap = false
+                }
+            }
+            if item.isKanaDoubleTap {
+                for i in promptHistory.indices where i != index {
+                    promptHistory[i].isKanaDoubleTap = false
+                }
+            }
+
+            // Update the item
             promptHistory[index].shortcut = item.shortcut
+            promptHistory[index].isEisuDoubleTap = item.isEisuDoubleTap
+            promptHistory[index].isKanaDoubleTap = item.isKanaDoubleTap
             savePinnedHistory()
         }
     }
@@ -608,12 +652,22 @@ struct PromptInputView: View {
 struct ShortcutEditorSheet: View {
     @State private var item: PromptHistoryItem
     @State private var shortcut: KeyboardShortcut
+    @State private var hasShortcut: Bool
+    @State private var isEisuDoubleTap: Bool
+    @State private var isKanaDoubleTap: Bool
+    let existingEisuPrompt: String?
+    let existingKanaPrompt: String?
     let onSave: (PromptHistoryItem) -> Void
     let onCancel: () -> Void
 
-    init(item: PromptHistoryItem, onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
+    init(item: PromptHistoryItem, existingEisuPrompt: String?, existingKanaPrompt: String?, onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
         self._item = State(initialValue: item)
         self._shortcut = State(initialValue: item.shortcut ?? KeyboardShortcut(key: "a", modifiers: .control))
+        self._hasShortcut = State(initialValue: item.shortcut != nil)
+        self._isEisuDoubleTap = State(initialValue: item.isEisuDoubleTap)
+        self._isKanaDoubleTap = State(initialValue: item.isKanaDoubleTap)
+        self.existingEisuPrompt = existingEisuPrompt
+        self.existingKanaPrompt = existingKanaPrompt
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -623,8 +677,55 @@ struct ShortcutEditorSheet: View {
             Text("Set Shortcut for \"\(item.prompt)\"")
                 .font(.headline)
 
-            KeyboardShortcutRecorder(shortcut: $shortcut)
-                .frame(height: 40)
+            VStack(spacing: 12) {
+                // Keyboard shortcut
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Toggle("Keyboard Shortcut", isOn: $hasShortcut)
+                            .toggleStyle(.checkbox)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if hasShortcut {
+                        KeyboardShortcutRecorder(shortcut: $shortcut)
+                            .frame(height: 40)
+                    }
+                }
+
+                Divider()
+
+                // Double-tap settings
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Double-Tap Keys")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Eisu (英数) key double-tap", isOn: $isEisuDoubleTap)
+                            .toggleStyle(.checkbox)
+                            .font(.system(size: 11))
+
+                        if isEisuDoubleTap, let existing = existingEisuPrompt {
+                            Text("⚠️ Currently set to \"\(existing)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Kana (かな) key double-tap", isOn: $isKanaDoubleTap)
+                            .toggleStyle(.checkbox)
+                            .font(.system(size: 11))
+
+                        if isKanaDoubleTap, let existing = existingKanaPrompt {
+                            Text("⚠️ Currently set to \"\(existing)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+            }
 
             HStack {
                 Button("Cancel") {
@@ -634,23 +735,27 @@ struct ShortcutEditorSheet: View {
 
                 Spacer()
 
-                if item.shortcut != nil {
-                    Button("Remove") {
+                if hasShortcut || item.isEisuDoubleTap || item.isKanaDoubleTap {
+                    Button("Remove All") {
                         var updatedItem = item
                         updatedItem.shortcut = nil
+                        updatedItem.isEisuDoubleTap = false
+                        updatedItem.isKanaDoubleTap = false
                         onSave(updatedItem)
                     }
                 }
 
                 Button("Save") {
                     var updatedItem = item
-                    updatedItem.shortcut = shortcut
+                    updatedItem.shortcut = hasShortcut ? shortcut : nil
+                    updatedItem.isEisuDoubleTap = isEisuDoubleTap
+                    updatedItem.isKanaDoubleTap = isKanaDoubleTap
                     onSave(updatedItem)
                 }
                 .keyboardShortcut(.return)
             }
         }
         .padding(20)
-        .frame(width: 320)
+        .frame(width: 360)
     }
 }
