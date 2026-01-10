@@ -1,6 +1,6 @@
 import Foundation
 
-var tag = try? shell("git tag --points-at HEAD")
+var tag = try? shell("git for-each-ref refs/tags --points-at HEAD --sort=-creatordate --format='%(refname:short)' | head -n 1")
 var commit = try? shell("git rev-parse HEAD")
 if tag?.isEmpty == true {
     tag = nil
