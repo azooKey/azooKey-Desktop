@@ -71,23 +71,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
 
         // Check pinned prompts with shortcuts
-        if let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
-           let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
-            let pinnedWithShortcuts = history.filter { $0.isPinned && $0.shortcut != nil }
-            if let matched = pinnedWithShortcuts.first(where: { item in
-                guard let itemShortcut = item.shortcut else { return false }
-                let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
-                return itemShortcut.key == key && eventModifiers == shortcutModifiers
-            }) {
-                return matched.prompt
-            }
+        guard let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+              let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) else {
+            return nil
         }
 
-        // Fallback to old custom shortcuts config (for backward compatibility)
-        let customShortcuts = Config.CustomPromptShortcuts().value
-        if let matched = customShortcuts.first(where: { shortcut in
-            let shortcutModifiers = shortcut.shortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
-            return shortcut.shortcut.key == key && eventModifiers == shortcutModifiers
+        let pinnedWithShortcuts = history.filter { $0.isPinned && $0.shortcut != nil }
+        if let matched = pinnedWithShortcuts.first(where: { item in
+            guard let itemShortcut = item.shortcut else { return false }
+            let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
+            return itemShortcut.key == key && eventModifiers == shortcutModifiers
         }) {
             return matched.prompt
         }

@@ -45,35 +45,6 @@ public struct KeyboardShortcut: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// カスタムプロンプトとショートカットのペア
-public struct CustomPromptShortcut: Codable, Equatable, Hashable, Sendable, Identifiable {
-    public var id: UUID
-    public var name: String
-    public var prompt: String
-    public var shortcut: KeyboardShortcut
-
-    public init(id: UUID = UUID(), name: String, prompt: String, shortcut: KeyboardShortcut) {
-        self.id = id
-        self.name = name
-        self.prompt = prompt
-        self.shortcut = shortcut
-    }
-
-    /// デフォルトのカスタムプロンプトショートカット例
-    public static let examples: [CustomPromptShortcut] = [
-        CustomPromptShortcut(
-            name: "日本語に翻訳",
-            prompt: "japanese",
-            shortcut: KeyboardShortcut(key: "j", modifiers: .control)
-        ),
-        CustomPromptShortcut(
-            name: "英語に翻訳",
-            prompt: "english",
-            shortcut: KeyboardShortcut(key: "e", modifiers: .control)
-        )
-    ]
-}
-
 /// NSEvent.ModifierFlagsをCodable/Sendableにするためのラッパー
 public struct EventModifierFlags: Codable, Equatable, Hashable, Sendable {
     private var rawValue: UInt

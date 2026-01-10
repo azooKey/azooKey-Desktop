@@ -47,45 +47,6 @@ extension Config {
     }
 }
 
-protocol CustomPromptShortcutsConfigItem: ConfigItem<[CustomPromptShortcut]> {
-    static var `default`: [CustomPromptShortcut] { get }
-}
-
-extension CustomPromptShortcutsConfigItem {
-    public var value: [CustomPromptShortcut] {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: Self.key) else {
-                return Self.default
-            }
-            do {
-                let decoded = try JSONDecoder().decode([CustomPromptShortcut].self, from: data)
-                return decoded
-            } catch {
-                print(#file, #line, error)
-                return Self.default
-            }
-        }
-        nonmutating set {
-            do {
-                let encoded = try JSONEncoder().encode(newValue)
-                UserDefaults.standard.set(encoded, forKey: Self.key)
-            } catch {
-                print(#file, #line, error)
-            }
-        }
-    }
-}
-
-extension Config {
-    /// カスタムプロンプトショートカットのリスト
-    public struct CustomPromptShortcuts: CustomPromptShortcutsConfigItem {
-        public init() {}
-
-        public static let `default`: [CustomPromptShortcut] = []
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.custom_prompt_shortcuts"
-    }
-}
-
 protocol StringConfigItemWithDefault: ConfigItem<String> {
     static var `default`: String { get }
 }
