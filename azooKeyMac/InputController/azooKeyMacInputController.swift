@@ -78,7 +78,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         let pinnedWithShortcuts = history.filter { $0.isPinned && $0.shortcut != nil }
         if let matched = pinnedWithShortcuts.first(where: { item in
-            guard let itemShortcut = item.shortcut else { return false }
+            guard let itemShortcut = item.shortcut else {
+                return false
+            }
             let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
             return itemShortcut.key == key && eventModifiers == shortcutModifiers
         }) {

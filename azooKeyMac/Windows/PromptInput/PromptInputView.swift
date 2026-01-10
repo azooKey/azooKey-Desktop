@@ -695,7 +695,9 @@ struct ShortcutEditorSheet: View {
     ]
 
     private var conflictingPrompt: String? {
-        guard hasShortcut else { return nil }
+        guard hasShortcut else {
+            return nil
+        }
         return allItems.first(where: { otherItem in
             otherItem.id != item.id &&
             otherItem.shortcut == shortcut
@@ -703,7 +705,9 @@ struct ShortcutEditorSheet: View {
     }
 
     private var isSystemShortcut: Bool {
-        guard hasShortcut else { return false }
+        guard hasShortcut else {
+            return false
+        }
         return reservedShortcuts.contains(shortcut)
     }
 
