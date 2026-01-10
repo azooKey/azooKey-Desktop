@@ -10,20 +10,29 @@ struct ConfigWindow: View {
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
+    @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
+    @ConfigState private var openAiModelName = Config.OpenAiModelName()
+    @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
     @ConfigState private var learning = Config.Learning()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
+    @ConfigState private var aiBackend = Config.AIBackendPreference()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
+    @State private var openAiApiKeyPopover = false
+    @State private var connectionTestInProgress = false
     @State private var showingRomajiTableEditor = false
+    @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
     @State private var showingLearningResetConfirmation = false
     @State private var learningResetMessage: LearningResetMessage?
+    @State private var foundationModelsAvailability: FoundationModelsAvailability?
+    @State private var availabilityCheckDone = false
 
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
@@ -47,6 +56,64 @@ struct ConfigWindow: View {
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
         case successfulUpdate
+    }
+
+    private func getErrorMessage(for error: OpenAIError) -> String {
+        switch error {
+        case .invalidURL:
+            return "エラー: 無効なURL形式です"
+        case .noServerResponse:
+            return "エラー: サーバーから応答がありません"
+        case .invalidResponseStatus(let code, let body):
+            return getHTTPErrorMessage(code: code, body: body)
+        case .parseError(let message):
+            return "エラー: レスポンス解析失敗 - \(message)"
+        case .invalidResponseStructure:
+            return "エラー: 予期しないレスポンス形式"
+        }
+    }
+
+    private func getHTTPErrorMessage(code: Int, body: String) -> String {
+        switch code {
+        case 401:
+            return "エラー: APIキーが無効です"
+        case 403:
+            return "エラー: アクセスが拒否されました"
+        case 404:
+            return "エラー: エンドポイントが見つかりません"
+        case 429:
+            return "エラー: レート制限に達しました"
+        case 500...599:
+            return "エラー: サーバーエラー (コード: \(code))"
+        default:
+            return "エラー: HTTPステータス \(code)\n詳細: \(body.prefix(100))..."
+        }
+    }
+
+    func testConnection() async {
+        connectionTestInProgress = true
+        connectionTestResult = nil
+
+        do {
+            let testRequest = OpenAIRequest(
+                prompt: "テスト",
+                target: "",
+                modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value
+            )
+            _ = try await OpenAIClient.sendRequest(
+                testRequest,
+                apiKey: openAiApiKey.value,
+                apiEndpoint: openAiApiEndpoint.value
+            )
+
+            connectionTestResult = "接続成功"
+        } catch let error as OpenAIError {
+            connectionTestResult = getErrorMessage(for: error)
+        } catch {
+            connectionTestResult = "エラー: \(error.localizedDescription)"
+        }
+
+        connectionTestInProgress = false
     }
 
     @MainActor
@@ -163,6 +230,81 @@ struct ConfigWindow: View {
     @ViewBuilder
     private var basicTabView: some View {
         Form {
+            Section {
+                VStack(alignment: .leading) {
+                    Picker("いい感じ変換", selection: $aiBackend) {
+                        Text("オフ").tag(Config.AIBackendPreference.Value.off)
+
+                        if let availability = foundationModelsAvailability, availability.isAvailable {
+                            Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                        }
+
+                        Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
+                    }
+                    .onAppear {
+                        if !availabilityCheckDone {
+                            foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                            availabilityCheckDone = true
+
+                            let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                            if !hasSetAIBackend,
+                               aiBackend.value == .off,
+                               let availability = foundationModelsAvailability,
+                               availability.isAvailable {
+                                aiBackend.value = .foundationModels
+                                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                            }
+
+                            if aiBackend.value == .foundationModels,
+                               let availability = foundationModelsAvailability,
+                               !availability.isAvailable {
+                                aiBackend.value = .off
+                            }
+                        }
+                    }
+                    .onChange(of: aiBackend.value) { _ in
+                        UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                    }
+                }
+
+                if aiBackend.value == .openAI {
+                    HStack {
+                        SecureField("APIキー", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
+                        helpButton(
+                            helpContent: "OpenAI APIキーはローカルのみで管理され、外部に公開されることはありません。生成の際にAPIを利用するため、課金が発生します。",
+                            isPresented: $openAiApiKeyPopover
+                        )
+                    }
+                    TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+                    TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
+                        .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+
+                    HStack {
+                        Button("接続テスト") {
+                            Task {
+                                await testConnection()
+                            }
+                        }
+                        .disabled(connectionTestInProgress || openAiApiKey.value.isEmpty)
+
+                        if connectionTestInProgress {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                    }
+
+                    if let result = connectionTestResult {
+                        Text(result)
+                            .foregroundColor(result.contains("成功") ? .green : .red)
+                            .font(.caption)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } header: {
+                Label("いい感じ変換", systemImage: "sparkles")
+            }
+
             Section {
                 LabeledContent {
                     HStack {
