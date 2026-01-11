@@ -19,6 +19,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController
 
+    private var predictionWindow: NSWindow
+    private var predictionViewController: PredictionCandidatesViewController
+
     private var replaceSuggestionWindow: NSWindow
     private var replaceSuggestionsViewController: ReplaceSuggestionsViewController
 
@@ -74,6 +77,20 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesWindow.setIsVisible(false)
         self.candidatesWindow.orderOut(nil)
 
+        // Initialize the prediction window
+        self.predictionViewController = PredictionCandidatesViewController()
+        self.predictionWindow = NSWindow(contentViewController: self.predictionViewController)
+        self.predictionWindow.styleMask = [.borderless]
+        self.predictionWindow.level = .popUpMenu
+
+        if let client = inputClient as? IMKTextInput {
+            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        }
+        rect.size = .init(width: 400, height: 1000)
+        self.predictionWindow.setFrame(rect, display: true)
+        self.predictionWindow.setIsVisible(false)
+        self.predictionWindow.orderOut(nil)
+
         // ReplaceSuggestionsViewControllerの初期化
         self.replaceSuggestionsViewController = ReplaceSuggestionsViewController()
         self.replaceSuggestionWindow = NSWindow(contentViewController: self.replaceSuggestionsViewController)
@@ -120,12 +137,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: .zero)
         }
         self.refreshCandidateWindow()
+        self.refreshPredictionWindow()
     }
 
     @MainActor
     override func deactivateServer(_ sender: Any!) {
         self.segmentsManager.deactivate()
         self.candidatesWindow.orderOut(nil)
+        self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
         self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
@@ -149,6 +168,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.inputState = .none
         self.refreshMarkedText()
         self.refreshCandidateWindow()
+        self.refreshPredictionWindow()
     }
 
     // MARK: - setValue: 状態同期のみ
@@ -397,6 +417,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             // 「つづき」を直接入力し、コンテキストを渡す
             self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: self.inputStyle)
             self.requestReplaceSuggestion()
+        case .acceptPredictionCandidate:
+            self.acceptPredictionCandidate()
         // ReplaceSuggestion
         case .requestReplaceSuggestion:
             self.requestReplaceSuggestion()
@@ -469,6 +491,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         self.refreshMarkedText()
         self.refreshCandidateWindow()
+        self.refreshPredictionWindow()
         return true
     }
 
@@ -503,6 +526,102 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.candidatesWindow.orderOut(nil)
             self.candidatesViewController.hide()
         }
+    }
+
+    func refreshPredictionWindow() {
+        guard self.inputState == .composing else {
+            self.hidePredictionWindow()
+            return
+        }
+
+        let predictions = self.segmentsManager.requestPredictionCandidates()
+        guard !predictions.isEmpty else {
+            self.hidePredictionWindow()
+            return
+        }
+
+        let candidates = predictions.map { prediction in
+            Candidate(
+                text: prediction.displayText,
+                value: 0,
+                composingCount: .surfaceCount(prediction.displayText.count),
+                lastMid: 0,
+                data: []
+            )
+        }
+
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.predictionViewController.updateCandidates(candidates, selectionIndex: nil, cursorLocation: rect.origin)
+
+        if Config.LiveConversion().value {
+            self.predictionWindow.orderFront(nil)
+            return
+        }
+
+        if self.candidatesWindow.isVisible {
+            self.positionPredictionWindowRightOfCandidateWindow()
+        }
+        self.predictionWindow.orderFront(nil)
+    }
+
+    private func positionPredictionWindowRightOfCandidateWindow(gap: CGFloat = 8) {
+        guard let screen = self.predictionWindow.screen ?? self.candidatesWindow.screen else {
+            return
+        }
+
+        let anchorFrame = self.candidatesWindow.frame
+        var frame = self.predictionWindow.frame
+        frame.origin.x = anchorFrame.maxX + gap
+        frame.origin.y = anchorFrame.origin.y
+
+        let visibleFrame = screen.visibleFrame
+        if frame.minX < visibleFrame.minX {
+            frame.origin.x = visibleFrame.minX
+        } else if frame.maxX > visibleFrame.maxX {
+            frame.origin.x = visibleFrame.maxX - frame.width
+        }
+
+        if frame.minY < visibleFrame.minY {
+            frame.origin.y = visibleFrame.minY
+        } else if frame.maxY > visibleFrame.maxY {
+            frame.origin.y = visibleFrame.maxY - frame.height
+        }
+
+        self.predictionWindow.setFrame(frame, display: true)
+    }
+
+    private func hidePredictionWindow() {
+        self.predictionWindow.setIsVisible(false)
+        self.predictionWindow.orderOut(nil)
+    }
+
+    @MainActor
+    private func acceptPredictionCandidate() {
+        let predictions = self.segmentsManager.requestPredictionCandidates()
+        guard let prediction = predictions.first else {
+            return
+        }
+
+        let currentTarget = self.segmentsManager.convertTarget
+        var matchTarget = currentTarget
+        if let last = matchTarget.last,
+           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
+            matchTarget.removeLast()
+            self.segmentsManager.deleteBackwardFromCursorPosition(count: 1)
+        }
+
+        guard !matchTarget.isEmpty else {
+            return
+        }
+
+        let appendText = prediction.appendText
+
+        guard !appendText.isEmpty else {
+            return
+        }
+
+        self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
     }
 
     var retryCount = 0
