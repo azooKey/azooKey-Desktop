@@ -80,19 +80,28 @@ public enum UserAction {
         }
     }
 
-    private static func intention(_ c: Character) -> Character? {
+    private static func intention(_ c: Character, invertPunctuation: Bool) -> Character? {
         switch c {
         case ",":
-            switch Config.PunctuationStyle().value {
+            let normal: Character = switch Config.PunctuationStyle().value {
             case .kutenAndComma, .periodAndComma: "，"
-            default: KeyMap.h2zMap(c)
+            default: KeyMap.h2zMap(c) ?? "、"
             }
+            if invertPunctuation {
+                return normal == "，" ? "、" : "，"
+            }
+            return normal
         case ".":
-            switch Config.PunctuationStyle().value {
+            let normal: Character = switch Config.PunctuationStyle().value {
             case .periodAndToten, .periodAndComma: "．"
-            default: KeyMap.h2zMap(c)
+            default: KeyMap.h2zMap(c) ?? "。"
             }
-        default: KeyMap.h2zMap(c)
+            if invertPunctuation {
+                return normal == "．" ? "。" : "．"
+            }
+            return normal
+        default:
+            return KeyMap.h2zMap(c)
         }
     }
 
@@ -100,12 +109,13 @@ public enum UserAction {
     // swiftlint:disable:next cyclomatic_complexity
     public static func getUserAction(eventCore: KeyEventCore, inputLanguage: InputLanguage) -> UserAction {
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
-        let keyMap: (String) -> [InputPiece] = switch inputLanguage {
-        case .english: { string in string.map { .character($0) } }
-        case .japanese:
-            { string in
-                string.map {
-                    .key(intention: intention($0), input: $0, modifiers: [])
+        func keyMap(_ string: String, invertPunctuation: Bool = false) -> [InputPiece] {
+            switch inputLanguage {
+            case .english:
+                return string.map { .character($0) }
+            case .japanese:
+                return string.map {
+                    .key(intention: intention($0, invertPunctuation: invertPunctuation), input: $0, modifiers: [])
                 }
             }
         }
@@ -168,6 +178,18 @@ public enum UserAction {
                 return .input(keyMap("?"))
             case ("/", [.option]) where inputLanguage == .japanese:
                 return .input(keyMap("／"))
+            case ("[", [.option]) where inputLanguage == .japanese:
+                return .input(keyMap("［"))
+            case ("[", [.shift, .option]) where inputLanguage == .japanese:
+                return .input(keyMap("｛"))
+            case ("]", [.option]) where inputLanguage == .japanese:
+                return .input(keyMap("］"))
+            case ("]", [.shift, .option]) where inputLanguage == .japanese:
+                return .input(keyMap("｝"))
+            case (",", [.option]) where inputLanguage == .japanese:
+                return .input(keyMap(",", invertPunctuation: true))
+            case (".", [.option]) where inputLanguage == .japanese:
+                return .input(keyMap(".", invertPunctuation: true))
             default:
                 break
             }
