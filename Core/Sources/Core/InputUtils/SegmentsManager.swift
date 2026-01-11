@@ -131,10 +131,10 @@ public final class SegmentsManager {
     }
 
     private func options(
-        leftSideContext: String? = nil,
-        requestRichCandidates: Bool = false,
-        requireJapanesePrediction: Bool = false,
-        requireEnglishPrediction: Bool = false
+        leftSideContext: String?,
+        requestRichCandidates: Bool,
+        requireJapanesePrediction: ConvertRequestOptions.PredictionMode,
+        requireEnglishPrediction: ConvertRequestOptions.PredictionMode
     ) -> ConvertRequestOptions {
         .init(
             requireJapanesePrediction: requireJapanesePrediction,
@@ -375,7 +375,15 @@ public final class SegmentsManager {
 
         let prefixComposingText = self.composingText.prefixToCursorPosition()
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
-        let result = self.kanaKanjiConverter.requestCandidates(prefixComposingText, options: options(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates))
+        let result = self.kanaKanjiConverter.requestCandidates(
+            prefixComposingText,
+            options: options(
+                leftSideContext: leftSideContext,
+                requestRichCandidates: requestRichCandidates,
+                requireJapanesePrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled,
+                requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
+            )
+        )
         self.rawCandidates = result
     }
 
@@ -590,18 +598,11 @@ public final class SegmentsManager {
         }
         matchTarget = matchTarget.toHiragana()
 
-        let prefixComposingText = self.composingText.prefixToCursorPosition()
-        let leftSideContext = self.getCleanLeftSideContext(maxCount: 30)
+        guard let rawCandidates else {
+            return []
+        }
 
-        let predictionOptions = options(
-            leftSideContext: leftSideContext,
-            requestRichCandidates: false,
-            requireJapanesePrediction: true,
-            requireEnglishPrediction: false
-        )
-        let predictionResult = self.kanaKanjiConverter.requestCandidates(prefixComposingText, options: predictionOptions)
-
-        for candidate in predictionResult.mainResults {
+        for candidate in rawCandidates.predictionResults {
             let reading = candidateReading(candidate)
             guard !reading.isEmpty else {
                 continue
