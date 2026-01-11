@@ -179,6 +179,7 @@ extension Config {
             case qwerty
             case colemak
             case dvorak
+            case dvorakQwertyCommand
 
             public var layoutIdentifier: String {
                 switch self {
@@ -188,6 +189,8 @@ extension Config {
                     return "com.apple.keylayout.Colemak"
                 case .dvorak:
                     return "com.apple.keylayout.Dvorak"
+                case .dvorakQwertyCommand:
+                    return "com.apple.keylayout.DVORAK-QWERTYCMD"
                 }
             }
         }
