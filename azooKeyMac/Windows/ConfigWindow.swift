@@ -460,6 +460,7 @@ struct ConfigWindow: View {
                     Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
                     Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
                     Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                    Text("Dvorak - QWERTY ⌘").tag(Config.KeyboardLayout.Value.dvorakQwertyCommand)
                 }
             } header: {
                 Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
