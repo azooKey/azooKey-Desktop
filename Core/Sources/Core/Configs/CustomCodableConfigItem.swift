@@ -173,26 +173,26 @@ extension Config {
 }
 
 extension Config {
-        /// キーボードレイアウトの設定
-        public struct KeyboardLayout: CustomCodableConfigItem {
-            public enum Value: String, Codable, Equatable, Hashable, Sendable {
-                case qwerty
-                case australian
-                case colemak
-                case dvorak
-                case dvorakQwertyCommand
+    /// キーボードレイアウトの設定
+    public struct KeyboardLayout: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
+            case qwerty
+            case australian
+            case colemak
+            case dvorak
+            case dvorakQwertyCommand
 
-                public var layoutIdentifier: String {
-                    switch self {
-                    case .qwerty:
-                        return "com.apple.keylayout.US"
-                    case .australian:
-                        return "com.apple.keylayout.Australian"
-                    case .colemak:
-                        return "com.apple.keylayout.Colemak"
-                    case .dvorak:
-                        return "com.apple.keylayout.Dvorak"
-                    case .dvorakQwertyCommand:
+            public var layoutIdentifier: String {
+                switch self {
+                case .qwerty:
+                    return "com.apple.keylayout.US"
+                case .australian:
+                    return "com.apple.keylayout.Australian"
+                case .colemak:
+                    return "com.apple.keylayout.Colemak"
+                case .dvorak:
+                    return "com.apple.keylayout.Dvorak"
+                case .dvorakQwertyCommand:
                     return "com.apple.keylayout.DVORAK-QWERTYCMD"
                 }
             }
