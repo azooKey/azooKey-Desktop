@@ -579,25 +579,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        let anchorFrame = self.candidatesWindow.frame
-        var frame = self.predictionWindow.frame
-        frame.origin.x = anchorFrame.maxX + gap
-        frame.origin.y = anchorFrame.origin.y
-
-        let visibleFrame = screen.visibleFrame
-        if frame.minX < visibleFrame.minX {
-            frame.origin.x = visibleFrame.minX
-        } else if frame.maxX > visibleFrame.maxX {
-            frame.origin.x = visibleFrame.maxX - frame.width
-        }
-
-        if frame.minY < visibleFrame.minY {
-            frame.origin.y = visibleFrame.minY
-        } else if frame.maxY > visibleFrame.maxY {
-            frame.origin.y = visibleFrame.maxY - frame.height
-        }
-
-        self.predictionWindow.setFrame(frame, display: true)
+        let frame = WindowPositioning.frameRightOfAnchor(
+            currentFrame: WindowPositioning.Rect(self.predictionWindow.frame),
+            anchorFrame: WindowPositioning.Rect(self.candidatesWindow.frame),
+            screenRect: WindowPositioning.Rect(screen.visibleFrame),
+            gap: Double(gap)
+        )
+        self.predictionWindow.setFrame(frame.cgRect, display: true)
     }
 
     private func showCachedPredictionWindow() {
