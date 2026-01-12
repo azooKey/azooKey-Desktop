@@ -356,7 +356,7 @@ public final class SegmentsManager {
         /// 日付・時刻変換を事前に入れておく
         let dynamicShortcuts: [DicdataElement] =
             // 西暦フォーマット
-            [("MM/dd", -18), ("yyyy/MM/dd", -18.1), ("yyyy-MM-dd", -18.15), ("MM月dd日（E）", -18.2), ("yyyy年MM月dd日", -18.3), ("yyyy年M月d日", -18.35)].flatMap { (format, value: PValue) in
+            [("MM/dd", -18), ("yyyy/MM/dd", -18.1), ("yyyy-MM-dd", -18.15), ("MM月dd日（E）", -18.2), ("yyyy年M月d日", -18.3)].flatMap { (format, value: PValue) in
                 [
                     .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
                     .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
