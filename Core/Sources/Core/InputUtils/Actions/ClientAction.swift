@@ -49,6 +49,7 @@ public enum ClientAction {
 
     // PredictiveSuggestion
     case requestPredictiveSuggestion
+    case acceptPredictionCandidate
 
     // ReplaceSuggestion
     case requestReplaceSuggestion

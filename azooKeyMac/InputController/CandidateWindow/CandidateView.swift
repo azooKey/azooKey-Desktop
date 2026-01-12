@@ -80,3 +80,54 @@ class CandidatesViewController: BaseCandidateViewController {
         }
     }
 }
+
+class PredictionCandidatesViewController: BaseCandidateViewController {
+    private let prefixTabStop: CGFloat = 24
+    private let prefixSymbolName = "arrow.forward.to.line.compact"
+    private let prefixFontSize: CGFloat = 12
+
+    override var numberOfVisibleRows: Int {
+        min(3, self.tableView.numberOfRows)
+    }
+
+    override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
+        let candidateText = candidates[row].text
+        let attributedString = NSMutableAttributedString()
+
+        let isSelected = currentSelectedRow == row
+        let candidateColor = isSelected ? NSColor.white : NSColor.labelColor
+
+        if let symbol = NSImage(systemSymbolName: prefixSymbolName, accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: prefixFontSize, weight: .regular)
+            let configured = symbol.withSymbolConfiguration(config) ?? symbol
+            let attachment = NSTextAttachment()
+            attachment.image = configured
+            attachment.bounds = NSRect(x: 0, y: -2, width: prefixFontSize + 2, height: prefixFontSize + 2)
+            attributedString.append(NSAttributedString(attachment: attachment))
+        }
+        attributedString.append(NSAttributedString(string: "\t"))
+        let candidateAttributed = NSAttributedString(
+            string: candidateText,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 18),
+                .foregroundColor: candidateColor
+            ]
+        )
+        attributedString.append(candidateAttributed)
+
+        let fullRange = NSRange(location: 0, length: attributedString.length)
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.tabStops = [
+            NSTextTab(textAlignment: .left, location: prefixTabStop, options: [:])
+        ]
+        paragraphStyle.defaultTabInterval = prefixTabStop
+        attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
+
+        cell.candidateTextField.attributedStringValue = attributedString
+    }
+
+    override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
+        maxContentWidth + prefixTabStop + 20
+    }
+}

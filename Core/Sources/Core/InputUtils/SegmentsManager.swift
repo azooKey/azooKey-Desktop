@@ -44,6 +44,15 @@ public final class SegmentsManager {
     private var replaceSuggestions: [Candidate] = []
     private var suggestSelectionIndex: Int?
 
+    public struct PredictionCandidate: Sendable {
+        public var displayText: String
+        public var appendText: String
+    }
+
+    private func candidateReading(_ candidate: Candidate) -> String {
+        candidate.data.map(\.ruby).joined()
+    }
+
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
 
     private func getZenzaiPersonalizationMode() -> ConvertRequestOptions.ZenzaiMode.PersonalizationMode? {
@@ -121,10 +130,15 @@ public final class SegmentsManager {
         }
     }
 
-    private func options(leftSideContext: String? = nil, requestRichCandidates: Bool = false) -> ConvertRequestOptions {
+    private func options(
+        leftSideContext: String?,
+        requestRichCandidates: Bool,
+        requireJapanesePrediction: ConvertRequestOptions.PredictionMode,
+        requireEnglishPrediction: ConvertRequestOptions.PredictionMode
+    ) -> ConvertRequestOptions {
         .init(
-            requireJapanesePrediction: false,
-            requireEnglishPrediction: false,
+            requireJapanesePrediction: requireJapanesePrediction,
+            requireEnglishPrediction: requireEnglishPrediction,
             keyboardLanguage: .ja_JP,
             englishCandidateInRoman2KanaInput: false,
             fullWidthRomanCandidate: true,
@@ -361,7 +375,15 @@ public final class SegmentsManager {
 
         let prefixComposingText = self.composingText.prefixToCursorPosition()
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
-        let result = self.kanaKanjiConverter.requestCandidates(prefixComposingText, options: options(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates))
+        let result = self.kanaKanjiConverter.requestCandidates(
+            prefixComposingText,
+            options: options(
+                leftSideContext: leftSideContext,
+                requestRichCandidates: requestRichCandidates,
+                requireJapanesePrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled,
+                requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
+            )
+        )
         self.rawCandidates = result
     }
 
@@ -554,6 +576,52 @@ public final class SegmentsManager {
     // サジェスト候補の選択状態をリセット
     public func resetSuggestionSelection() {
         suggestSelectionIndex = nil
+    }
+
+    public func requestPredictionCandidates() -> [PredictionCandidate] {
+        guard Config.DebugPredictiveTyping().value else {
+            return []
+        }
+
+        let target = self.composingText.convertTarget
+        guard !target.isEmpty else {
+            return []
+        }
+
+        var matchTarget = target
+        if let last = matchTarget.last,
+           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
+            matchTarget.removeLast()
+        }
+        guard matchTarget.count >= 2 else {
+            return []
+        }
+        matchTarget = matchTarget.toHiragana()
+
+        guard let rawCandidates else {
+            return []
+        }
+
+        for candidate in rawCandidates.predictionResults {
+            let reading = candidateReading(candidate)
+            guard !reading.isEmpty else {
+                continue
+            }
+            let readingHiragana = reading.toHiragana()
+            guard readingHiragana.hasPrefix(matchTarget) else {
+                continue
+            }
+            guard matchTarget.count < readingHiragana.count else {
+                continue
+            }
+            let appendText = String(readingHiragana.dropFirst(matchTarget.count))
+            guard !appendText.isEmpty else {
+                continue
+            }
+            return [.init(displayText: candidate.text, appendText: appendText)]
+        }
+
+        return []
     }
 
     // swiftlint:disable:next cyclomatic_complexity
