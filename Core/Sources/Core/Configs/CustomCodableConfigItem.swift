@@ -177,6 +177,7 @@ extension Config {
     public struct KeyboardLayout: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case qwerty
+            case australian
             case colemak
             case dvorak
             case dvorakQwertyCommand
@@ -185,6 +186,8 @@ extension Config {
                 switch self {
                 case .qwerty:
                     return "com.apple.keylayout.US"
+                case .australian:
+                    return "com.apple.keylayout.Australian"
                 case .colemak:
                     return "com.apple.keylayout.Colemak"
                 case .dvorak:

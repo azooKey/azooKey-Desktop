@@ -459,6 +459,7 @@ struct ConfigWindow: View {
             Section {
                 Picker("キーボード配列", selection: $keyboardLayout) {
                     Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                    Text("Australian").tag(Config.KeyboardLayout.Value.australian)
                     Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
                     Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
                     Text("Dvorak - QWERTY ⌘").tag(Config.KeyboardLayout.Value.dvorakQwertyCommand)
