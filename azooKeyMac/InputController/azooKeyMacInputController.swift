@@ -21,6 +21,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     private var predictionWindow: NSWindow
     private var predictionViewController: PredictionCandidatesViewController
+    private var lastPredictionCandidates: [String] = []
+    private var lastPredictionUpdateTime: TimeInterval = 0
+    private var predictionHideWorkItem: DispatchWorkItem?
 
     private var replaceSuggestionWindow: NSWindow
     private var replaceSuggestionsViewController: ReplaceSuggestionsViewController
@@ -535,11 +538,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let predictions = self.segmentsManager.requestPredictionCandidates()
-        guard !predictions.isEmpty else {
+        if predictions.isEmpty {
+            let now = Date().timeIntervalSince1970
+            let elapsed = now - self.lastPredictionUpdateTime
+            if elapsed < 1.0, !self.lastPredictionCandidates.isEmpty {
+                self.showCachedPredictionWindow()
+                self.schedulePredictionHide(after: max(0, 1.0 - elapsed))
+                return
+            }
             self.hidePredictionWindow()
             return
         }
 
+        self.predictionHideWorkItem?.cancel()
         let candidates = predictions.map { prediction in
             Candidate(
                 text: prediction.displayText,
@@ -549,6 +560,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 data: []
             )
         }
+
+        self.lastPredictionCandidates = candidates.map(\.text)
+        self.lastPredictionUpdateTime = Date().timeIntervalSince1970
 
         var rect: NSRect = .zero
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
@@ -591,9 +605,47 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.setFrame(frame, display: true)
     }
 
+    private func showCachedPredictionWindow() {
+        let candidates = self.lastPredictionCandidates.map { text in
+            Candidate(
+                text: text,
+                value: 0,
+                composingCount: .surfaceCount(text.count),
+                lastMid: 0,
+                data: []
+            )
+        }
+        guard !candidates.isEmpty else {
+            return
+        }
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.predictionViewController.updateCandidates(candidates, selectionIndex: nil, cursorLocation: rect.origin)
+        self.predictionWindow.orderFront(nil)
+    }
+
+    private func schedulePredictionHide(after delay: TimeInterval) {
+        self.predictionHideWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else {
+                return
+            }
+            let now = Date().timeIntervalSince1970
+            if now - self.lastPredictionUpdateTime >= 1.0 {
+                self.hidePredictionWindow()
+            }
+        }
+        self.predictionHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
     private func hidePredictionWindow() {
         self.predictionWindow.setIsVisible(false)
         self.predictionWindow.orderOut(nil)
+        self.lastPredictionCandidates = []
+        self.lastPredictionUpdateTime = 0
+        self.predictionHideWorkItem?.cancel()
+        self.predictionHideWorkItem = nil
     }
 
     @MainActor
