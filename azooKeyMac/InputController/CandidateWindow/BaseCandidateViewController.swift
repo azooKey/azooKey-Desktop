@@ -1,4 +1,5 @@
 import Cocoa
+import Core
 import KanaKanjiConverterModule
 
 class NonClickableTableView: NSTableView {
@@ -160,28 +161,6 @@ class BaseCandidateViewController: NSViewController {
         }
     }
 
-    func getNewWindowFrame(currentFrame: NSRect, screenRect: NSRect, cursorLocation: CGPoint, desiredSize: CGSize, cursorHeight: CGFloat = 16) -> NSRect {
-        var newWindowFrame = currentFrame
-        newWindowFrame.size = desiredSize
-
-        // 画面のサイズを取得
-        let cursorY = cursorLocation.y
-
-        // カーソルの高さを考慮してウィンドウ位置を調整
-        // ウィンドウをカーソルの下に表示
-        if cursorY - desiredSize.height < screenRect.origin.y {
-            newWindowFrame.origin = CGPoint(x: cursorLocation.x, y: cursorLocation.y + cursorHeight)
-        } else {
-            newWindowFrame.origin = CGPoint(x: cursorLocation.x, y: cursorLocation.y - desiredSize.height - cursorHeight)
-        }
-
-        // 右端でウィンドウが画面外に出る場合は左にシフト
-        if newWindowFrame.maxX > screenRect.maxX {
-            newWindowFrame.origin.x = screenRect.maxX - newWindowFrame.width
-        }
-        return newWindowFrame
-    }
-
     func getMaxTextWidth(candidates: some Sequence<String>, font: NSFont = .systemFont(ofSize: 18)) -> CGFloat {
         candidates.reduce(0) { maxWidth, candidate in
             let attributedString = NSAttributedString(
@@ -214,13 +193,12 @@ class BaseCandidateViewController: NSViewController {
 
         let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.text })
         let windowWidth = self.getWindowWidth(maxContentWidth: maxWidth)
-
-        let newWindowFrame = self.getNewWindowFrame(
-            currentFrame: window.frame,
-            screenRect: screen.visibleFrame,
-            cursorLocation: cursorLocation,
-            desiredSize: CGSize(width: windowWidth, height: tableViewHeight)
-        )
+        let newWindowFrame = WindowPositioning.frameNearCursor(
+            currentFrame: .init(window.frame),
+            screenRect: .init(screen.visibleFrame),
+            cursorLocation: .init(cursorLocation),
+            desiredSize: .init(width: windowWidth, height: tableViewHeight),
+        ).cgRect
         if newWindowFrame != window.frame {
             window.setFrame(newWindowFrame, display: true, animate: false)
         }

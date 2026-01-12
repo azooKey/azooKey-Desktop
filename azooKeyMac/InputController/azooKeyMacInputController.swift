@@ -34,6 +34,21 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     // ダブルタップ検出用
     private var lastKey: (time: TimeInterval, code: UInt16) = (0, 0)
     private static let doubleTapInterval: TimeInterval = 0.5
+    private static let candidateWindowInitialSize = CGSize(width: 400, height: 1000)
+
+    private static func makeCandidateWindow(contentViewController: NSViewController, inputClient: IMKTextInput?) -> NSWindow {
+        let window = NSWindow(contentViewController: contentViewController)
+        window.styleMask = [.borderless]
+        window.level = .popUpMenu
+
+        var rect: NSRect = .zero
+        inputClient?.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        rect.size = candidateWindowInitialSize
+        window.setFrame(rect, display: true)
+        window.setIsVisible(false)
+        window.orderOut(nil)
+        return window
+    }
 
     // MARK: - ダブルタップ検出
     private func checkAndUpdateDoubleTap(keyCode: UInt16) -> Bool {
@@ -65,48 +80,28 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.liveConversionToggleMenuItem = NSMenuItem()
         self.transformSelectedTextMenuItem = NSMenuItem()
 
-        // Initialize the candidates window
-        self.candidatesViewController = CandidatesViewController()
-        self.candidatesWindow = NSWindow(contentViewController: self.candidatesViewController)
-        self.candidatesWindow.styleMask = [.borderless]
-        self.candidatesWindow.level = .popUpMenu
+        let textInputClient = inputClient as? IMKTextInput
 
-        var rect: NSRect = .zero
-        if let client = inputClient as? IMKTextInput {
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        }
-        rect.size = .init(width: 400, height: 1000)
-        self.candidatesWindow.setFrame(rect, display: true)
-        self.candidatesWindow.setIsVisible(false)
-        self.candidatesWindow.orderOut(nil)
+        let candidatesViewController = CandidatesViewController()
+        let predictionViewController = PredictionCandidatesViewController()
+        let replaceSuggestionsViewController = ReplaceSuggestionsViewController()
 
-        // Initialize the prediction window
-        self.predictionViewController = PredictionCandidatesViewController()
-        self.predictionWindow = NSWindow(contentViewController: self.predictionViewController)
-        self.predictionWindow.styleMask = [.borderless]
-        self.predictionWindow.level = .popUpMenu
+        self.candidatesViewController = candidatesViewController
+        self.predictionViewController = predictionViewController
+        self.replaceSuggestionsViewController = replaceSuggestionsViewController
 
-        if let client = inputClient as? IMKTextInput {
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        }
-        rect.size = .init(width: 400, height: 1000)
-        self.predictionWindow.setFrame(rect, display: true)
-        self.predictionWindow.setIsVisible(false)
-        self.predictionWindow.orderOut(nil)
-
-        // ReplaceSuggestionsViewControllerの初期化
-        self.replaceSuggestionsViewController = ReplaceSuggestionsViewController()
-        self.replaceSuggestionWindow = NSWindow(contentViewController: self.replaceSuggestionsViewController)
-        self.replaceSuggestionWindow.styleMask = [.borderless]
-        self.replaceSuggestionWindow.level = .popUpMenu
-
-        if let client = inputClient as? IMKTextInput {
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        }
-        rect.size = .init(width: 400, height: 1000)
-        self.replaceSuggestionWindow.setFrame(rect, display: true)
-        self.replaceSuggestionWindow.setIsVisible(false)
-        self.replaceSuggestionWindow.orderOut(nil)
+        self.candidatesWindow = Self.makeCandidateWindow(
+            contentViewController: candidatesViewController,
+            inputClient: textInputClient
+        )
+        self.predictionWindow = Self.makeCandidateWindow(
+            contentViewController: predictionViewController,
+            inputClient: textInputClient
+        )
+        self.replaceSuggestionWindow = Self.makeCandidateWindow(
+            contentViewController: replaceSuggestionsViewController,
+            inputClient: textInputClient
+        )
 
         // PromptInputWindowの初期化
         self.promptInputWindow = PromptInputWindow()
@@ -584,25 +579,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        let anchorFrame = self.candidatesWindow.frame
-        var frame = self.predictionWindow.frame
-        frame.origin.x = anchorFrame.maxX + gap
-        frame.origin.y = anchorFrame.origin.y
-
-        let visibleFrame = screen.visibleFrame
-        if frame.minX < visibleFrame.minX {
-            frame.origin.x = visibleFrame.minX
-        } else if frame.maxX > visibleFrame.maxX {
-            frame.origin.x = visibleFrame.maxX - frame.width
-        }
-
-        if frame.minY < visibleFrame.minY {
-            frame.origin.y = visibleFrame.minY
-        } else if frame.maxY > visibleFrame.maxY {
-            frame.origin.y = visibleFrame.maxY - frame.height
-        }
-
-        self.predictionWindow.setFrame(frame, display: true)
+        let frame = WindowPositioning.frameRightOfAnchor(
+            currentFrame: WindowPositioning.Rect(self.predictionWindow.frame),
+            anchorFrame: WindowPositioning.Rect(self.candidatesWindow.frame),
+            screenRect: WindowPositioning.Rect(screen.visibleFrame),
+            gap: Double(gap)
+        )
+        self.predictionWindow.setFrame(frame.cgRect, display: true)
     }
 
     private func showCachedPredictionWindow() {
@@ -792,25 +775,6 @@ extension azooKeyMacInputController: ReplaceSuggestionsViewControllerDelegate {
 
 // Suggest Candidate
 extension azooKeyMacInputController {
-    // MARK: - Window Setup
-    func setupReplaceSuggestionWindow() {
-        self.replaceSuggestionsViewController = ReplaceSuggestionsViewController()
-        self.replaceSuggestionWindow = NSWindow(contentViewController: self.replaceSuggestionsViewController)
-        self.replaceSuggestionWindow.styleMask = [.borderless]
-        self.replaceSuggestionWindow.level = .popUpMenu
-
-        var rect: NSRect = .zero
-        if let client = self.client() {
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        }
-        rect.size = .init(width: 400, height: 1000)
-        self.replaceSuggestionWindow.setFrame(rect, display: true)
-        self.replaceSuggestionWindow.setIsVisible(false)
-        self.replaceSuggestionWindow.orderOut(nil)
-
-        self.replaceSuggestionsViewController.delegate = self
-    }
-
     // MARK: - Replace Suggestion Request Handling
     @MainActor func requestReplaceSuggestion() {
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 開始")
