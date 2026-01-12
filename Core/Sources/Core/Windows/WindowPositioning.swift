@@ -95,4 +95,39 @@ public enum WindowPositioning {
 
         return frame
     }
+
+    public static func promptWindowOrigin(
+        cursorLocation: Point,
+        windowSize: Size,
+        screenRect: Rect,
+        offsetX: Double = 10,
+        belowOffset: Double = 20,
+        aboveOffset: Double = 30,
+        padding: Double = 20
+    ) -> Point {
+        var origin = cursorLocation
+        origin.x += offsetX
+        origin.y -= windowSize.height + belowOffset
+
+        if origin.x + windowSize.width + padding > screenRect.maxX {
+            origin.x = screenRect.maxX - windowSize.width - padding
+        }
+
+        if origin.x < screenRect.minX + padding {
+            origin.x = screenRect.minX + padding
+        }
+
+        if origin.y < screenRect.minY + padding {
+            origin.y = cursorLocation.y + aboveOffset
+            if origin.y + windowSize.height + padding > screenRect.maxY {
+                origin.y = screenRect.maxY - windowSize.height - padding
+            }
+        }
+
+        if origin.y + windowSize.height + padding > screenRect.maxY {
+            origin.y = screenRect.maxY - windowSize.height - padding
+        }
+
+        return origin
+    }
 }

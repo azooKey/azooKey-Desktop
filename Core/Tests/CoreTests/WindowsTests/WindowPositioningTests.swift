@@ -70,3 +70,37 @@ import Testing
     #expect(frame.origin == WindowPositioning.Point(x: 70, y: 10))
     #expect(frame.size == currentFrame.size)
 }
+
+@Test func testPromptWindowOriginMovesAboveWhenBelowWouldOverflow() async throws {
+    let screenRect = WindowPositioning.Rect(
+        origin: .init(x: 0, y: 0),
+        size: .init(width: 100, height: 100)
+    )
+    let cursorLocation = WindowPositioning.Point(x: 10, y: 10)
+    let windowSize = WindowPositioning.Size(width: 40, height: 30)
+
+    let origin = WindowPositioning.promptWindowOrigin(
+        cursorLocation: cursorLocation,
+        windowSize: windowSize,
+        screenRect: screenRect
+    )
+
+    #expect(origin == WindowPositioning.Point(x: 20, y: 40))
+}
+
+@Test func testPromptWindowOriginClampsToRightEdge() async throws {
+    let screenRect = WindowPositioning.Rect(
+        origin: .init(x: 0, y: 0),
+        size: .init(width: 100, height: 100)
+    )
+    let cursorLocation = WindowPositioning.Point(x: 95, y: 50)
+    let windowSize = WindowPositioning.Size(width: 40, height: 30)
+
+    let origin = WindowPositioning.promptWindowOrigin(
+        cursorLocation: cursorLocation,
+        windowSize: windowSize,
+        screenRect: screenRect
+    )
+
+    #expect(origin == WindowPositioning.Point(x: 40, y: 50))
+}
