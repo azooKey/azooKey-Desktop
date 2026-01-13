@@ -358,11 +358,11 @@ public final class SegmentsManager {
             [
                 ("M/d", -18, DateTemplateLiteral.CalendarType.western),
                 ("yyyy/MM/dd", -18.1, .western),
-                ("yyyy-MM-dd", -18.15, .western),
-                ("M月d日（E）", -18.2, .western),
-                ("yyyy年M月d日", -18.3, .western),
-                ("Gyyyy年M月d日", -18.4, .japanese),
-                ("E曜日", -18.5, .western)
+                ("yyyy-MM-dd", -18.2, .western),
+                ("M月d日（E）", -18.3, .western),
+                ("yyyy年M月d日", -18.4, .western),
+                ("Gyyyy年M月d日", -18.5, .japanese),
+                ("E曜日", -18.6, .western)
             ].flatMap { (format, value: PValue, type) in
                 [
                     .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
