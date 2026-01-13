@@ -70,6 +70,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
         let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
 
+        // 修飾キーがない場合は早期リターン（通常の入力）
+        if eventModifiers.isEmpty {
+            return nil
+        }
+
         // Check pinned prompts with shortcuts
         guard let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
               let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) else {

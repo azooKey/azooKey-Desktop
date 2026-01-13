@@ -1,10 +1,3 @@
-//
-//  KeyboardShortcutConfigItem.swift
-//  azooKeyMac
-//
-//  Created by Claude Code
-//
-
 @_spi(Core) import Core
 import Foundation
 

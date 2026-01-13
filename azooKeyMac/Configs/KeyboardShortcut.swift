@@ -1,10 +1,3 @@
-//
-//  KeyboardShortcut.swift
-//  azooKeyMac
-//
-//  Created by Claude Code
-//
-
 import Cocoa
 
 /// キーボードショートカットを表す構造体

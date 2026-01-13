@@ -1,10 +1,3 @@
-//
-//  KeyboardShortcutRecorder.swift
-//  azooKeyMac
-//
-//  Created by Claude Code
-//
-
 import AppKit
 import SwiftUI
 

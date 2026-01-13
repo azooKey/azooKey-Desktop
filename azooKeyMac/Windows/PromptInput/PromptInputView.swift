@@ -700,7 +700,7 @@ struct ShortcutEditorSheet: View {
         }
         return allItems.first(where: { otherItem in
             otherItem.id != item.id &&
-            otherItem.shortcut == shortcut
+                otherItem.shortcut == shortcut
         })?.prompt
     }
 
@@ -869,7 +869,7 @@ struct MagicConversionSettingsSheet: View {
         }
     }
 
-    private func testConnection() async {
+    func testConnection() async {
         connectionTestInProgress = true
         connectionTestResult = nil
 
