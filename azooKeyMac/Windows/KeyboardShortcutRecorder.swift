@@ -80,14 +80,12 @@ class ShortcutRecorderView: NSView {
             return
         }
 
-        // Escapeキーで録音をキャンセル
-        if event.keyCode == 53 { // ESC
+        if event.keyCode == 53 {
             window?.makeFirstResponder(nil)
             return
         }
 
-        // Deleteキーでショートカットをクリア
-        if event.keyCode == 51 || event.keyCode == 117 { // Delete or Forward Delete
+        if event.keyCode == 51 || event.keyCode == 117 {
             shortcut = .defaultTransformShortcut
             onShortcutChanged?(shortcut)
             window?.makeFirstResponder(nil)
@@ -102,7 +100,6 @@ class ShortcutRecorderView: NSView {
         let key = characters.lowercased()
         let modifiers = EventModifierFlags(from: event.modifierFlags)
 
-        // 修飾キーがない場合は無視
         guard modifiers.contains(.control) ||
                 modifiers.contains(.option) ||
                 modifiers.contains(.shift) ||
@@ -119,12 +116,10 @@ class ShortcutRecorderView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        // 背景
         let backgroundColor: NSColor = isRecording ? .controlAccentColor.withAlphaComponent(0.1) : .controlBackgroundColor
         backgroundColor.setFill()
         bounds.fill()
 
-        // テキスト
         let text: String
         let textColor: NSColor
 
@@ -152,7 +147,6 @@ class ShortcutRecorderView: NSView {
 
         attributedString.draw(in: textRect)
 
-        // フォーカスリング
         if isRecording {
             NSGraphicsContext.saveGraphicsState()
             NSFocusRingPlacement.only.set()
