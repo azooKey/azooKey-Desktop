@@ -10,24 +10,10 @@ public enum InputState: Sendable, Hashable {
     case replaceSuggestion
     case unicodeInput(String)
 
-    public enum ModifierFlag: Sendable, Equatable, Hashable {
-        case option
-        case control
-        case command
-        case shift
-    }
-
-    public struct EventCore: Sendable, Equatable {
-        public init(modifierFlags: [ModifierFlag]) {
-            self.modifierFlags = modifierFlags
-        }
-        var modifierFlags: [ModifierFlag]
-    }
-
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     public func event(  // swiftlint:disable:this function_parameter_count
-        eventCore event: EventCore,
+        eventCore event: KeyEventCore,
         userAction: UserAction,
         inputLanguage: InputLanguage,
         liveConversionEnabled: Bool,
@@ -153,8 +139,10 @@ public enum InputState: Sendable, Hashable {
                 case .ten:
                     return (.submitHalfWidthRomanCandidate, .transition(.none))
                 }
-            case .forget, .tab:
+            case .forget:
                 return (.consume, .fallthrough)
+            case .tab:
+                return (.acceptPredictionCandidate, .fallthrough)
             case .英数:
                 return (.selectInputLanguage(.english), .fallthrough)
             case .かな:

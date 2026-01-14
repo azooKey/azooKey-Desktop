@@ -16,6 +16,7 @@ struct ConfigWindow: View {
     @ConfigState private var learning = Config.Learning()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
+    @ConfigState private var debugPredictiveTyping = Config.DebugPredictiveTyping()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
@@ -458,8 +459,10 @@ struct ConfigWindow: View {
             Section {
                 Picker("キーボード配列", selection: $keyboardLayout) {
                     Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                    Text("Australian").tag(Config.KeyboardLayout.Value.australian)
                     Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
                     Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                    Text("Dvorak - QWERTY ⌘").tag(Config.KeyboardLayout.Value.dvorakQwertyCommand)
                 }
             } header: {
                 Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
@@ -509,6 +512,7 @@ struct ConfigWindow: View {
 
             Section {
                 Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
+                Toggle("開発中の予測入力を有効化", isOn: $debugPredictiveTyping)
                 Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
                     Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
                     Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
