@@ -355,13 +355,21 @@ public final class SegmentsManager {
 
         /// 日付・時刻変換を事前に入れておく
         let dynamicShortcuts: [DicdataElement] =
-            [("MM/dd", -18), ("yyyy/MM/dd", -18.1), ("MM月dd日（E）", -18.2), ("yyyy年MM月dd日", -18.3)].flatMap { (format, value: PValue) in
+            [
+                ("M/d", -18, DateTemplateLiteral.CalendarType.western),
+                ("yyyy/MM/dd", -18.1, .western),
+                ("yyyy-MM-dd", -18.2, .western),
+                ("M月d日（E）", -18.3, .western),
+                ("yyyy年M月d日", -18.4, .western),
+                ("Gyyyy年M月d日", -18.5, .japanese),
+                ("E曜日", -18.6, .western)
+            ].flatMap { (format, value: PValue, type) in
                 [
-                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: .western, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
+                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
                 ]
             } + [
                 // 月
