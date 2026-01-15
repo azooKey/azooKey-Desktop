@@ -15,7 +15,6 @@ extension KeyboardShortcutConfigItem {
                 let decoded = try JSONDecoder().decode(KeyboardShortcut.self, from: data)
                 return decoded
             } catch {
-                print(#file, #line, error)
                 return Self.default
             }
         }
@@ -24,7 +23,7 @@ extension KeyboardShortcutConfigItem {
                 let encoded = try JSONEncoder().encode(newValue)
                 UserDefaults.standard.set(encoded, forKey: Self.key)
             } catch {
-                print(#file, #line, error)
+                // エンコード失敗時は何もしない
             }
         }
     }

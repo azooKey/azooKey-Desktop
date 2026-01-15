@@ -289,21 +289,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         // カスタムプロンプトショートカットのチェック
         if let matchedPrompt = checkCustomPromptShortcut(event: event) {
-            self.segmentsManager.appendDebugMessage("Custom shortcut matched: \(matchedPrompt)")
             let aiBackendEnabled = Config.AIBackendPreference().value != .off
             if aiBackendEnabled && !self.isPromptWindowVisible {
                 let selectedRange = client.selectedRange()
-                self.segmentsManager.appendDebugMessage("Selected range: \(selectedRange)")
                 if selectedRange.length > 0 {
                     if self.triggerAiTranslation(initialPrompt: matchedPrompt) {
-                        self.segmentsManager.appendDebugMessage("Custom shortcut triggered successfully")
                         return true
                     }
-                } else {
-                    self.segmentsManager.appendDebugMessage("No text selected, ignoring custom shortcut")
                 }
-            } else {
-                self.segmentsManager.appendDebugMessage("Custom shortcut ignored: aiBackend=\(aiBackendEnabled), promptWindowVisible=\(self.isPromptWindowVisible)")
             }
         }
 
