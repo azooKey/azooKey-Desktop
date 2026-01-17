@@ -116,6 +116,9 @@ struct PromptInputView: View {
                 onUpArrow: {
                     // Handle up arrow for history navigation
                     navigateHistory(direction: .up)
+                },
+                onCancel: {
+                    onCancel()
                 }
             )
             .onChange(of: isTextFieldFocused) { isFocused in

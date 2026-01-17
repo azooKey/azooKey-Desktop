@@ -166,13 +166,6 @@ final class PromptInputWindow: NSWindow {
             completion(nil)
         }
 
-        // Restore focus to the previous application
-        DispatchQueue.main.async {
-            if let previousApp = NSWorkspace.shared.frontmostApplication {
-                previousApp.activate(options: [])
-            }
-        }
-
         super.close()
         self.completion = nil
         self.previewCallback = nil
