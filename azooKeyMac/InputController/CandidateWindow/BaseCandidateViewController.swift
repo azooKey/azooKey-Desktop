@@ -197,7 +197,7 @@ class BaseCandidateViewController: NSViewController {
             currentFrame: .init(window.frame),
             screenRect: .init(screen.visibleFrame),
             cursorLocation: .init(cursorLocation),
-            desiredSize: .init(width: windowWidth, height: tableViewHeight),
+            desiredSize: .init(width: windowWidth, height: tableViewHeight)
         ).cgRect
         if newWindowFrame != window.frame {
             window.setFrame(newWindowFrame, display: true, animate: false)
