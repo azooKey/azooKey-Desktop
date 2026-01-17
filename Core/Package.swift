@@ -21,7 +21,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "d1e9bfb50b7090a7a0a994ce3fd53b7cf9cd806b", traits: kanaKanjiConverterTraits)
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "c439533b39d5913dbca05633c7b8c2aa4414db35", traits: kanaKanjiConverterTraits)
     ],
     targets: [
         .executableTarget(
