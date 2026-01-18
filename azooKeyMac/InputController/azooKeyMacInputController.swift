@@ -58,6 +58,64 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         return isDouble
     }
 
+    // MARK: - ダブルタッププロンプト取得
+    private func getDoubleTapPrompt(isEisu: Bool) -> String? {
+        // Check pinned prompts first
+        if let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+           let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
+            if let matched = history.first(where: { $0.isPinned && (isEisu ? $0.isEisuDoubleTap : $0.isKanaDoubleTap) }) {
+                return matched.prompt
+            }
+        }
+
+        // Fallback to config
+        if isEisu {
+            let prompt = Config.EisuDoubleTapPrompt().value
+            return prompt.isEmpty ? nil : prompt
+        } else {
+            let prompt = Config.KanaDoubleTapPrompt().value
+            return prompt.isEmpty ? nil : prompt
+        }
+    }
+
+    // MARK: - カスタムプロンプトショートカット検出
+    private func checkCustomPromptShortcut(event: NSEvent) -> String? {
+        guard let characters = event.charactersIgnoringModifiers,
+              !characters.isEmpty else {
+            return nil
+        }
+
+        let key = characters.lowercased()
+
+        // 必要な修飾キーのみをマスクして取得
+        let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        // 修飾キーがない場合は早期リターン（通常の入力）
+        if eventModifiers.isEmpty {
+            return nil
+        }
+
+        // Check pinned prompts with shortcuts
+        guard let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+              let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) else {
+            return nil
+        }
+
+        let pinnedWithShortcuts = history.filter { $0.isPinned && $0.shortcut != nil }
+        if let matched = pinnedWithShortcuts.first(where: { item in
+            guard let itemShortcut = item.shortcut else {
+                return false
+            }
+            let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
+            return itemShortcut.key == key && eventModifiers == shortcutModifiers
+        }) {
+            return matched.prompt
+        }
+
+        return nil
+    }
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         let applicationDirectoryURL = if #available(macOS 13, *) {
             URL.applicationSupportDirectory
@@ -229,6 +287,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return false
         }
 
+        // カスタムプロンプトショートカットのチェック
+        if let matchedPrompt = checkCustomPromptShortcut(event: event) {
+            let aiBackendEnabled = Config.AIBackendPreference().value != .off
+            if aiBackendEnabled && !self.isPromptWindowVisible {
+                let selectedRange = client.selectedRange()
+                if selectedRange.length > 0 {
+                    if self.triggerAiTranslation(initialPrompt: matchedPrompt) {
+                        return true
+                    }
+                }
+            }
+        }
+
         let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
 
         // 英数キー（keyCode 102）の処理
@@ -238,8 +309,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    if self.triggerAiTranslation(initialPrompt: "english") {
-                        return true
+                    // Check pinned prompts for Eisu double-tap
+                    if let prompt = getDoubleTapPrompt(isEisu: true) {
+                        if self.triggerAiTranslation(initialPrompt: prompt) {
+                            return true
+                        }
                     }
                 }
                 if !self.segmentsManager.isEmpty {
@@ -256,8 +330,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if isDoubleTap {
                 let selectedRange = client.selectedRange()
                 if selectedRange.length > 0 {
-                    if self.triggerAiTranslation(initialPrompt: "japanese") {
-                        return true
+                    // Check pinned prompts for Kana double-tap
+                    if let prompt = getDoubleTapPrompt(isEisu: false) {
+                        if self.triggerAiTranslation(initialPrompt: prompt) {
+                            return true
+                        }
                     }
                 }
             }

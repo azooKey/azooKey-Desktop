@@ -11,6 +11,8 @@ struct PromptInputView: View {
     @State private var hoveredHistoryIndex: Int?
     @State private var isNavigatingHistory: Bool = false
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
+    @State private var editingShortcutFor: PromptHistoryItem?
+    @State private var showingSettings: Bool = false
     @FocusState private var isTextFieldFocused: Bool
 
     let initialPrompt: String?
@@ -73,6 +75,16 @@ struct PromptInputView: View {
                 }
 
                 Spacer()
+
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Settings")
 
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
@@ -171,12 +183,55 @@ struct PromptInputView: View {
                                     .buttonStyle(PlainButtonStyle())
                                     .help(item.isPinned ? "Unpin" : "Pin")
 
+                                    // Shortcut button (only for pinned items)
+                                    if item.isPinned {
+                                        Button {
+                                            editingShortcutFor = item
+                                        } label: {
+                                            if let shortcut = item.shortcut {
+                                                Text(shortcut.displayString)
+                                                    .font(.system(size: 8, weight: .medium))
+                                                    .foregroundColor(.accentColor)
+                                            } else {
+                                                Image(systemName: "command")
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary.opacity(0.4))
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help(item.shortcut == nil ? "Set shortcut" : "Edit shortcut")
+                                    }
+
                                     // Prompt text
                                     Text(item.prompt)
                                         .font(.system(size: 11))
                                         .foregroundColor(hoveredHistoryIndex == index ? .primary : .secondary)
                                         .lineLimit(1)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    // Double-tap badges (only for pinned items)
+                                    if item.isPinned {
+                                        HStack(spacing: 2) {
+                                            if item.isEisuDoubleTap {
+                                                Text("E")
+                                                    .font(.system(size: 7, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 3)
+                                                    .padding(.vertical, 1)
+                                                    .background(Color.blue)
+                                                    .cornerRadius(2)
+                                            }
+                                            if item.isKanaDoubleTap {
+                                                Text("J")
+                                                    .font(.system(size: 7, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 3)
+                                                    .padding(.vertical, 1)
+                                                    .background(Color.green)
+                                                    .cornerRadius(2)
+                                            }
+                                        }
+                                    }
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -360,6 +415,28 @@ struct PromptInputView: View {
             hoveredHistoryIndex = nil
             isTextFieldFocused = true
         }
+        .sheet(item: $editingShortcutFor) { item in
+            ShortcutEditorSheet(
+                item: item,
+                existingEisuPrompt: promptHistory.first(where: { $0.id != item.id && $0.isEisuDoubleTap })?.prompt,
+                existingKanaPrompt: promptHistory.first(where: { $0.id != item.id && $0.isKanaDoubleTap })?.prompt,
+                allItems: promptHistory,
+                onSave: { updatedItem in
+                    updateShortcut(for: updatedItem)
+                    editingShortcutFor = nil
+                },
+                onCancel: {
+                    editingShortcutFor = nil
+                }
+            )
+        }
+        .sheet(isPresented: $showingSettings) {
+            MagicConversionSettingsSheet(
+                onClose: {
+                    showingSettings = false
+                }
+            )
+        }
     }
 
     private func requestPreview() {
@@ -439,10 +516,13 @@ struct PromptInputView: View {
 
         // Add default pinned prompts if history is empty
         if promptHistory.isEmpty {
-            let defaultPinnedPrompts = ["elaborate", "rewrite", "formal", "english"]
-            promptHistory = defaultPinnedPrompts.map { prompt in
-                PromptHistoryItem(prompt: prompt, isPinned: true)
-            }
+            promptHistory = [
+                PromptHistoryItem(prompt: "elaborate", isPinned: true),
+                PromptHistoryItem(prompt: "rewrite", isPinned: true),
+                PromptHistoryItem(prompt: "formal", isPinned: true),
+                PromptHistoryItem(prompt: "english", isPinned: true, isEisuDoubleTap: true),
+                PromptHistoryItem(prompt: "japanese", isPinned: true, isKanaDoubleTap: true)
+            ]
             savePinnedHistory()
         }
     }
@@ -455,8 +535,39 @@ struct PromptInputView: View {
     }
 
     private func togglePin(for item: PromptHistoryItem) {
-        if let index = promptHistory.firstIndex(where: { $0.prompt == item.prompt }) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
             promptHistory[index].isPinned.toggle()
+            savePinnedHistory()
+        }
+    }
+
+    private func updateShortcut(for item: PromptHistoryItem) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
+            // Clear double-tap flags from other items if this item is setting them
+            if item.isEisuDoubleTap {
+                for i in promptHistory.indices where i != index {
+                    promptHistory[i].isEisuDoubleTap = false
+                }
+            }
+            if item.isKanaDoubleTap {
+                for i in promptHistory.indices where i != index {
+                    promptHistory[i].isKanaDoubleTap = false
+                }
+            }
+
+            // Clear conflicting keyboard shortcuts from other items
+            if let newShortcut = item.shortcut {
+                for i in promptHistory.indices where i != index {
+                    if promptHistory[i].shortcut == newShortcut {
+                        promptHistory[i].shortcut = nil
+                    }
+                }
+            }
+
+            // Update the item
+            promptHistory[index].shortcut = item.shortcut
+            promptHistory[index].isEisuDoubleTap = item.isEisuDoubleTap
+            promptHistory[index].isKanaDoubleTap = item.isKanaDoubleTap
             savePinnedHistory()
         }
     }
@@ -566,4 +677,344 @@ struct PromptInputView: View {
         }
     )
     .frame(width: 380)
+}
+
+// MARK: - Shortcut Editor Sheet
+struct ShortcutEditorSheet: View {
+    @State private var item: PromptHistoryItem
+    @State private var shortcut: KeyboardShortcut
+    @State private var hasShortcut: Bool
+    @State private var isEisuDoubleTap: Bool
+    @State private var isKanaDoubleTap: Bool
+    let existingEisuPrompt: String?
+    let existingKanaPrompt: String?
+    let allItems: [PromptHistoryItem]
+    let onSave: (PromptHistoryItem) -> Void
+    let onCancel: () -> Void
+
+    // Reserved system shortcuts
+    private let reservedShortcuts: [KeyboardShortcut] = [
+        Config.TransformShortcut().value  // いい感じ変換のショートカット
+    ]
+
+    private var conflictingPrompt: String? {
+        guard hasShortcut else {
+            return nil
+        }
+        return allItems.first(where: { otherItem in
+            otherItem.id != item.id &&
+                otherItem.shortcut == shortcut
+        })?.prompt
+    }
+
+    private var isSystemShortcut: Bool {
+        guard hasShortcut else {
+            return false
+        }
+        return reservedShortcuts.contains(shortcut)
+    }
+
+    init(item: PromptHistoryItem, existingEisuPrompt: String?, existingKanaPrompt: String?, allItems: [PromptHistoryItem], onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
+        self._item = State(initialValue: item)
+        self._shortcut = State(initialValue: item.shortcut ?? KeyboardShortcut(key: "a", modifiers: .control))
+        self._hasShortcut = State(initialValue: item.shortcut != nil)
+        self._isEisuDoubleTap = State(initialValue: item.isEisuDoubleTap)
+        self._isKanaDoubleTap = State(initialValue: item.isKanaDoubleTap)
+        self.existingEisuPrompt = existingEisuPrompt
+        self.existingKanaPrompt = existingKanaPrompt
+        self.allItems = allItems
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Set Shortcut for \"\(item.prompt)\"")
+                .font(.headline)
+
+            VStack(spacing: 12) {
+                // Keyboard shortcut
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Toggle("Keyboard Shortcut", isOn: $hasShortcut)
+                            .toggleStyle(.checkbox)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if hasShortcut {
+                        KeyboardShortcutRecorder(shortcut: $shortcut)
+                            .frame(height: 40)
+
+                        // Conflict warnings
+                        if isSystemShortcut {
+                            Text("⚠️ This shortcut is reserved for system function")
+                                .font(.system(size: 9))
+                                .foregroundColor(.red)
+                        } else if let conflicting = conflictingPrompt {
+                            Text("⚠️ Already used by \"\(conflicting)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+
+                Divider()
+
+                // Double-tap settings
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Double-Tap Keys")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Eisu (英数) key double-tap", isOn: $isEisuDoubleTap)
+                            .toggleStyle(.checkbox)
+                            .font(.system(size: 11))
+
+                        if isEisuDoubleTap, let existing = existingEisuPrompt {
+                            Text("⚠️ Currently set to \"\(existing)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Kana (かな) key double-tap", isOn: $isKanaDoubleTap)
+                            .toggleStyle(.checkbox)
+                            .font(.system(size: 11))
+
+                        if isKanaDoubleTap, let existing = existingKanaPrompt {
+                            Text("⚠️ Currently set to \"\(existing)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                if hasShortcut || item.isEisuDoubleTap || item.isKanaDoubleTap {
+                    Button("Remove All") {
+                        var updatedItem = item
+                        updatedItem.shortcut = nil
+                        updatedItem.isEisuDoubleTap = false
+                        updatedItem.isKanaDoubleTap = false
+                        onSave(updatedItem)
+                    }
+                }
+
+                Button("Save") {
+                    var updatedItem = item
+                    updatedItem.shortcut = hasShortcut ? shortcut : nil
+                    updatedItem.isEisuDoubleTap = isEisuDoubleTap
+                    updatedItem.isKanaDoubleTap = isKanaDoubleTap
+                    onSave(updatedItem)
+                }
+                .keyboardShortcut(.return)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
+}
+
+// MARK: - Magic Conversion Settings Sheet
+struct MagicConversionSettingsSheet: View {
+    @State private var transformShortcut: KeyboardShortcut = Config.TransformShortcut().value
+    @State private var aiBackend: Config.AIBackendPreference.Value = Config.AIBackendPreference().value
+    @State private var openAiApiKey: String = Config.OpenAiApiKey().value
+    @State private var openAiModelName: String = Config.OpenAiModelName().value
+    @State private var openAiApiEndpoint: String = Config.OpenAiApiEndpoint().value
+    @State private var connectionTestInProgress = false
+    @State private var connectionTestResult: String?
+    @State private var foundationModelsAvailability: FoundationModelsAvailability?
+    @State private var availabilityCheckDone = false
+
+    let onClose: () -> Void
+
+    private func getErrorMessage(for error: OpenAIError) -> String {
+        switch error {
+        case .invalidURL:
+            return "エラー: 無効なURL形式です"
+        case .noServerResponse:
+            return "エラー: サーバーから応答がありません"
+        case .invalidResponseStatus(let code, let body):
+            return getHTTPErrorMessage(code: code, body: body)
+        case .parseError(let message):
+            return "エラー: レスポンス解析失敗 - \(message)"
+        case .invalidResponseStructure:
+            return "エラー: 予期しないレスポンス形式"
+        }
+    }
+
+    private func getHTTPErrorMessage(code: Int, body: String) -> String {
+        switch code {
+        case 401:
+            return "エラー: APIキーが無効です"
+        case 403:
+            return "エラー: アクセスが拒否されました"
+        case 404:
+            return "エラー: エンドポイントが見つかりません"
+        case 429:
+            return "エラー: レート制限に達しました"
+        case 500...599:
+            return "エラー: サーバーエラー (コード: \(code))"
+        default:
+            return "エラー: HTTPステータス \(code)\n詳細: \(body.prefix(100))..."
+        }
+    }
+
+    func testConnection() async {
+        connectionTestInProgress = true
+        connectionTestResult = nil
+
+        do {
+            let testRequest = OpenAIRequest(
+                prompt: "テスト",
+                target: "",
+                modelName: openAiModelName.isEmpty ? Config.OpenAiModelName.default : openAiModelName
+            )
+            _ = try await OpenAIClient.sendRequest(
+                testRequest,
+                apiKey: openAiApiKey,
+                apiEndpoint: openAiApiEndpoint
+            )
+
+            connectionTestResult = "接続成功"
+        } catch let error as OpenAIError {
+            connectionTestResult = getErrorMessage(for: error)
+        } catch {
+            connectionTestResult = "エラー: \(error.localizedDescription)"
+        }
+
+        connectionTestInProgress = false
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Magic Conversion Settings")
+                .font(.headline)
+
+            Form {
+                // Shortcut section
+                Section {
+                    LabeledContent {
+                        KeyboardShortcutRecorder(shortcut: $transformShortcut)
+                            .onChange(of: transformShortcut) { newValue in
+                                Config.TransformShortcut().value = newValue
+                            }
+                    } label: {
+                        Text("Shortcut")
+                    }
+                } header: {
+                    Label("Keyboard Shortcut", systemImage: "command")
+                } footer: {
+                    Text("Click to record a new shortcut. Press Delete to reset to default.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // AI Backend section
+                Section {
+                    Picker("Backend", selection: $aiBackend) {
+                        Text("Off").tag(Config.AIBackendPreference.Value.off)
+
+                        if let availability = foundationModelsAvailability, availability.isAvailable {
+                            Text("Foundation Models").tag(Config.AIBackendPreference.Value.foundationModels)
+                        }
+
+                        Text("OpenAI API").tag(Config.AIBackendPreference.Value.openAI)
+                    }
+                    .onChange(of: aiBackend) { newValue in
+                        Config.AIBackendPreference().value = newValue
+                        UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                    }
+
+                    if aiBackend == .openAI {
+                        SecureField("API Key", text: $openAiApiKey, prompt: Text("e.g. sk-xxxxxxxxxxx"))
+                            .onChange(of: openAiApiKey) { newValue in
+                                Config.OpenAiApiKey().value = newValue
+                            }
+                        TextField("Model Name", text: $openAiModelName, prompt: Text("e.g. gpt-4o-mini"))
+                            .onChange(of: openAiModelName) { newValue in
+                                Config.OpenAiModelName().value = newValue
+                            }
+                        TextField("Endpoint", text: $openAiApiEndpoint, prompt: Text("e.g. https://api.openai.com/v1/chat/completions"))
+                            .onChange(of: openAiApiEndpoint) { newValue in
+                                Config.OpenAiApiEndpoint().value = newValue
+                            }
+                            .help("e.g. https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+
+                        HStack {
+                            Button("Test Connection") {
+                                Task {
+                                    await testConnection()
+                                }
+                            }
+                            .disabled(connectionTestInProgress || openAiApiKey.isEmpty)
+
+                            if connectionTestInProgress {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            }
+                        }
+
+                        if let result = connectionTestResult {
+                            Text(result)
+                                .foregroundColor(result.contains("成功") ? .green : .red)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                        }
+                    }
+                } header: {
+                    Label("AI Backend", systemImage: "sparkles")
+                }
+            }
+            .formStyle(.grouped)
+            .frame(height: 320)
+
+            HStack {
+                Spacer()
+                Button("Close") {
+                    onClose()
+                }
+                .keyboardShortcut(.escape)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
+        .onAppear {
+            if !availabilityCheckDone {
+                foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
+                availabilityCheckDone = true
+
+                // Auto-select Foundation Models if available and not manually set
+                let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                if !hasSetAIBackend,
+                   aiBackend == .off,
+                   let availability = foundationModelsAvailability,
+                   availability.isAvailable {
+                    aiBackend = .foundationModels
+                    Config.AIBackendPreference().value = .foundationModels
+                    UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                }
+
+                // Fallback if Foundation Models not available
+                if aiBackend == .foundationModels,
+                   let availability = foundationModelsAvailability,
+                   !availability.isAvailable {
+                    aiBackend = .off
+                    Config.AIBackendPreference().value = .off
+                }
+            }
+        }
+    }
 }
