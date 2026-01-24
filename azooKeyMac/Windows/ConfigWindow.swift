@@ -21,6 +21,7 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var keyBindings = Config.KeyBindings()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -28,6 +29,7 @@ struct ConfigWindow: View {
     @State private var openAiApiKeyPopover = false
     @State private var connectionTestInProgress = false
     @State private var showingRomajiTableEditor = false
+    @State private var showingKeyBindingEditor = false
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
     @State private var showingLearningResetConfirmation = false
@@ -467,9 +469,26 @@ struct ConfigWindow: View {
             } header: {
                 Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
             }
+
+            Section {
+                LabeledContent {
+                    Button("編集") {
+                        showingKeyBindingEditor = true
+                    }
+                } label: {
+                    Text("キーバインド")
+                }
+            } header: {
+                Label("キーバインド", systemImage: "command")
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .sheet(isPresented: $showingKeyBindingEditor) {
+            KeyBindingEditorWindow(bindings: keyBindings.value.bindings) { newBindings in
+                keyBindings.value.bindings = newBindings
+            }
+        }
     }
 
     // MARK: - 詳細設定タブ

@@ -119,44 +119,21 @@ public enum UserAction {
                 }
             }
         }
-        // Resolve action based on logical key character (ignoring modifiers)
         if let logicalKey = eventCore.charactersIgnoringModifiers?.lowercased() {
+            if eventCore.modifierFlags == [.option]
+                && DiacriticAttacher.deadKeyList.contains(logicalKey) && inputLanguage == .english {
+                return .deadKey(logicalKey)
+            }
+
+            if let bindingAction = Config.KeyBindings().findAction(
+                key: logicalKey,
+                modifierFlags: eventCore.modifierFlags
+            ),
+               let userAction = bindingAction.toUserAction() {
+                return userAction
+            }
+
             switch (logicalKey, eventCore.modifierFlags) {
-            case (let key, [.option])
-                    where DiacriticAttacher.deadKeyList.contains(key) && inputLanguage == .english:
-                return .deadKey(key)
-
-            case ("h", [.control]): // Control + h
-                return .backspace
-            case ("p", [.control]): // Control + p
-                return .navigation(.up)
-            case ("m", [.control]): // Control + m
-                return .enter
-            case ("n", [.control]): // Control + n
-                return .navigation(.down)
-            case ("f", [.control]): // Control + f
-                return .navigation(.right)
-            case ("i", [.control]): // Control + i
-                return .editSegment(-1)  // Shift segment cursor left
-            case ("o", [.control]): // Control + o
-                return .editSegment(1)  // Shift segment cursor right
-            case ("l", [.control]): // Control + l
-                return .function(.nine)
-            case ("j", [.control]): // Control + j
-                return .function(.six)
-            case ("k", [.control]): // Control + k
-                return .function(.seven)
-            case (";", [.control]): // Control + ;
-                return .function(.eight)
-            case (":", [.control]): // Control + :
-                return .function(.ten)
-            case ("'", [.control]): // Control + '
-                return .function(.ten)
-            case ("s", [.control]): // Control + s
-                return .suggest
-            case ("u", [.control, .shift]): // Shift + Control + u
-                return .startUnicodeInput
-
             case ("¥", [.shift, .option]), ("¥", [.shift]), ("\\", [.shift, .option]), ("\\", [.shift]):
                 return .input(keyMap("|"))
             case ("¥", []), ("\\", []):

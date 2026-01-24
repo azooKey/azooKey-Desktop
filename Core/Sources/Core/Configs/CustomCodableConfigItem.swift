@@ -157,6 +157,138 @@ extension Config {
 }
 
 extension Config {
+    public struct KeyBindings: CustomCodableConfigItem {
+        public enum KeyBindingAction: String, Codable, Sendable, Equatable, Hashable {
+            case backspace
+            case enter
+            case navigationUp
+            case navigationDown
+            case navigationRight
+            case navigationLeft
+            case editSegmentLeft
+            case editSegmentRight
+            case functionSix
+            case functionSeven
+            case functionEight
+            case functionNine
+            case functionTen
+            case suggest
+            case startUnicodeInput
+
+            public func toUserAction() -> UserAction? {
+                switch self {
+                case .backspace:
+                    return .backspace
+                case .enter:
+                    return .enter
+                case .navigationUp:
+                    return .navigation(.up)
+                case .navigationDown:
+                    return .navigation(.down)
+                case .navigationRight:
+                    return .navigation(.right)
+                case .navigationLeft:
+                    return .navigation(.left)
+                case .editSegmentLeft:
+                    return .editSegment(-1)
+                case .editSegmentRight:
+                    return .editSegment(1)
+                case .functionSix:
+                    return .function(.six)
+                case .functionSeven:
+                    return .function(.seven)
+                case .functionEight:
+                    return .function(.eight)
+                case .functionNine:
+                    return .function(.nine)
+                case .functionTen:
+                    return .function(.ten)
+                case .suggest:
+                    return .suggest
+                case .startUnicodeInput:
+                    return .startUnicodeInput
+                }
+            }
+        }
+
+        public enum Modifier: String, Codable, Sendable, Equatable, Hashable {
+            case control
+            case shift
+            case option
+            case command
+
+            public func toModifierFlag() -> KeyEventCore.ModifierFlag {
+                switch self {
+                case .control: return .control
+                case .shift: return .shift
+                case .option: return .option
+                case .command: return .command
+                }
+            }
+
+            public static func modifierFlagsFromArray(_ modifiers: [Modifier]) -> KeyEventCore.ModifierFlag {
+                modifiers.reduce(into: KeyEventCore.ModifierFlag()) { result, modifier in
+                    result.insert(modifier.toModifierFlag())
+                }
+            }
+        }
+
+        public struct KeyBinding: Codable, Sendable, Equatable, Hashable {
+            public var key: String
+            public var modifiers: [Modifier]
+            public var action: KeyBindingAction
+
+            public init(key: String, modifiers: [Modifier], action: KeyBindingAction) {
+                self.key = key
+                self.modifiers = modifiers
+                self.action = action
+            }
+        }
+
+        public struct Value: Codable, Sendable, Equatable {
+            public var bindings: [KeyBinding]
+
+            public init(bindings: [KeyBinding]) {
+                self.bindings = bindings
+            }
+        }
+
+        public init() {}
+
+        public static let `default`: Value = .init(bindings: [
+            .init(key: "h", modifiers: [.control], action: .backspace),
+            .init(key: "p", modifiers: [.control], action: .navigationUp),
+            .init(key: "m", modifiers: [.control], action: .enter),
+            .init(key: "n", modifiers: [.control], action: .navigationDown),
+            .init(key: "f", modifiers: [.control], action: .navigationRight),
+            .init(key: "i", modifiers: [.control], action: .editSegmentLeft),
+            .init(key: "o", modifiers: [.control], action: .editSegmentRight),
+            .init(key: "l", modifiers: [.control], action: .functionNine),
+            .init(key: "j", modifiers: [.control], action: .functionSix),
+            .init(key: "k", modifiers: [.control], action: .functionSeven),
+            .init(key: ";", modifiers: [.control], action: .functionEight),
+            .init(key: ":", modifiers: [.control], action: .functionTen),
+            .init(key: "'", modifiers: [.control], action: .functionTen),
+            .init(key: "s", modifiers: [.control], action: .suggest),
+            .init(key: "u", modifiers: [.control, .shift], action: .startUnicodeInput)
+        ])
+
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.key_bindings"
+
+        public func findAction(key: String, modifierFlags: KeyEventCore.ModifierFlag) -> KeyBindingAction? {
+            let bindings = self.value.bindings
+            for binding in bindings {
+                let bindingModifiers = Modifier.modifierFlagsFromArray(binding.modifiers)
+                if binding.key.lowercased() == key.lowercased() && bindingModifiers == modifierFlags {
+                    return binding.action
+                }
+            }
+            return nil
+        }
+    }
+}
+
+extension Config {
     public struct InputStyle: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case `default`
