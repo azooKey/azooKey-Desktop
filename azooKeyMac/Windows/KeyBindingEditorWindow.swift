@@ -257,7 +257,7 @@ class KeyRecorderNSView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
+        if event.keyCode == UInt16(kVK_Escape) {
             onCancel?()
             return
         }
