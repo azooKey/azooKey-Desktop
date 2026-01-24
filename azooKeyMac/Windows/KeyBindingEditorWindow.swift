@@ -133,6 +133,7 @@ struct KeyBindingEditorWindow: View {
     }
 
     private func setBinding(for action: KeyBindingAction, key: String, modifiers: [Modifier]) {
+        bindings.removeAll { $0.key == key && Set($0.modifiers) == Set(modifiers) }
         bindings.removeAll { $0.action == action }
         bindings.append(KeyBinding(key: key, modifiers: modifiers, action: action))
     }
