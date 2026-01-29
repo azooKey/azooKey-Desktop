@@ -128,30 +128,46 @@ public enum UserAction {
 
             case ("h", [.control]): // Control + h
                 return .backspace
-            case ("p", [.control]): // Control + p
-                return .navigation(.up)
+            //            case ("p", [.control]): // Control + p
+            //                return .navigation(.up)
             case ("m", [.control]): // Control + m
                 return .enter
-            case ("n", [.control]): // Control + n
-                return .navigation(.down)
-            case ("f", [.control]): // Control + f
-                return .navigation(.right)
-            case ("i", [.control]): // Control + i
-                return .editSegment(-1)  // Shift segment cursor left
-            case ("o", [.control]): // Control + o
-                return .editSegment(1)  // Shift segment cursor right
-            case ("l", [.control]): // Control + l
+            //            case ("n", [.control]): // Control + n
+            //                return .navigation(.down)
+            //            case ("f", [.control]): // Control + f
+            //                return .navigation(.right)
+            //            case ("i", [.control]): // Control + i
+            //                return .editSegment(-1)  // Shift segment cursor left
+            //            case ("o", [.control]): // Control + o
+            //                return .editSegment(1)  // Shift segment cursor right
+
+            //            case ("l", [.control]): // Control + l 全角ローマ字 MSIME ctrl-p
+            //                return .function(.nine)
+            case ("p", [.control]): // Control + l 全角ローマ字 MSIME ctrl-p
                 return .function(.nine)
-            case ("j", [.control]): // Control + j
+
+            //            case ("j", [.control]): // Control + j ひらがな
+            //                return .function(.six)
+            case ("u", [.control]): // Control + j ひらがな MSIME ctrl-u
                 return .function(.six)
-            case ("k", [.control]): // Control + k
+
+            //            case ("k", [.control]): // Control + k カタカナ
+            //                return .function(.seven)
+            case ("i", [.control]): // MSIME ctrl-i
                 return .function(.seven)
-            case (";", [.control]): // Control + ;
+
+            //            case (";", [.control]): // Control + ; 半角カタカナ MSIME ctrl-o
+            //                return .function(.eight)
+            case ("o", [.control]):
                 return .function(.eight)
-            case (":", [.control]): // Control + :
+
+            //            case (":", [.control]): // Control + : ローマ字 MSIME ctrl-t
+            //                return .function(.ten)
+            //            case ("'", [.control]): // Control + ' ローマ字 MSIME ctrl-t
+            //                return .function(.ten)
+            case ("t", [.control]):
                 return .function(.ten)
-            case ("'", [.control]): // Control + '
-                return .function(.ten)
+
             case ("s", [.control]): // Control + s
                 return .suggest
             case ("u", [.control, .shift]): // Shift + Control + u

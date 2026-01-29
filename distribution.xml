@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="1">
-    <pkg-ref id="dev.ensan.inputmethod.azooKeyMac"/>
+    <pkg-ref id="dev.shintok.inputmethod.azooKeyMac"/>
     <title>azooKey</title>
     <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
     <choices-outline>
         <line choice="default">
-            <line choice="dev.ensan.inputmethod.azooKeyMac"/>
+            <line choice="dev.shintok.inputmethod.azooKeyMac"/>
         </line>
     </choices-outline>
     <choice id="default"/>
-    <choice id="dev.ensan.inputmethod.azooKeyMac" visible="false">
-        <pkg-ref id="dev.ensan.inputmethod.azooKeyMac"/>
+    <choice id="dev.shintok.inputmethod.azooKeyMac" visible="false">
+        <pkg-ref id="dev.shintok.inputmethod.azooKeyMac"/>
     </choice>
-    <pkg-ref id="dev.ensan.inputmethod.azooKeyMac" version="0" onConclusion="none">azooKey-tmp.pkg</pkg-ref>
+    <pkg-ref id="dev.shintok.inputmethod.azooKeyMac" version="0" onConclusion="none">azooKey-tmp.pkg</pkg-ref>
 </installer-gui-script>

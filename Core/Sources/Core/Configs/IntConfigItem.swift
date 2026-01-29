@@ -23,6 +23,6 @@ extension Config {
     public struct ZenzaiInferenceLimit: IntConfigItem {
         public init() {}
         static let `default` = 5
-        public static let key = "dev.ensan.inputmethod.azooKeyMac.preference.zenzaiInferenceLimit"
+        public static let key = "dev.shintok.inputmethod.azooKeyMac.preference.zenzaiInferenceLimit"
     }
 }

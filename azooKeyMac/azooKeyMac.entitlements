@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.dev.ensan.inputmethod.azooKeyMac</string>
+		<string>group.dev.shintok.inputmethod.azooKeyMac</string>
 	</array>
 	<key>com.apple.security.network.client</key>
 	<true/>

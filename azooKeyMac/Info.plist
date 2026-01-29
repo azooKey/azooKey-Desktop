@@ -16,7 +16,7 @@
 			<key>com.apple.inputmethod.Roman</key>
 			<dict>
 				<key>TISInputSourceID</key>
-				<string>dev.ensan.inputmethod.azooKeyMac.Roman</string>
+				<string>dev.shintok.inputmethod.azooKeyMac.Roman</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<false/>
 				<key>tsInputModeScriptKey</key>
@@ -47,7 +47,7 @@
 				<key>tsInputModeKeyEquivalentKey</key>
 				<string>J</string>
 				<key>TISInputSourceID</key>
-				<string>dev.ensan.inputmethod.azooKeyMac.Japanese</string>
+				<string>dev.shintok.inputmethod.azooKeyMac.Japanese</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<true/>
 				<key>tsInputModeScriptKey</key>

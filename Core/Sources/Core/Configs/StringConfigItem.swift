@@ -24,7 +24,7 @@ extension Config {
     public struct ZenzaiProfile: StringConfigItem {
         public init() {}
 
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.ZenzaiProfile"
+        public static let key: String = "dev.shintok.inputmethod.azooKeyMac.preference.ZenzaiProfile"
     }
 }
 
@@ -34,7 +34,7 @@ extension Config {
         public init() {}
 
         public static let `default`: String = "gpt-4o-mini"
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
+        public static let key: String = "dev.shintok.inputmethod.azooKeyMac.preference.OpenAiModelName"
     }
 
     /// OpenAI API エンドポイント
@@ -42,7 +42,7 @@ extension Config {
         public init() {}
 
         public static let `default` = "https://api.openai.com/v1/chat/completions"
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiApiEndpoint"
+        public static let key: String = "dev.shintok.inputmethod.azooKeyMac.preference.OpenAiApiEndpoint"
 
         public var value: String {
             get {
@@ -57,6 +57,6 @@ extension Config {
 
     /// プロンプト履歴（JSON形式で保存）
     struct PromptHistory: StringConfigItem {
-        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
+        static let key: String = "dev.shintok.inputmethod.azooKeyMac.preference.PromptHistory"
     }
 }

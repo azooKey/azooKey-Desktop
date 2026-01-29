@@ -11,7 +11,7 @@ extension Config {
 
         public init() {}
         public static let `default`: Value = .`kutenAndToten`
-        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.punctuation_style"
+        public static let key: String = "dev.shintok.inputmethod.azooKeyMac.preference.punctuation_style"
     }
 }
 
