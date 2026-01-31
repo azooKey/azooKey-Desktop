@@ -819,6 +819,41 @@ public final class SegmentsManager {
         // 生のローマ字入力文字列を取得（英字読みマッチ用）
         let rawInputString = self.getRawInputString().lowercased()
 
+        // ユーザー辞書から直接英字読みのエントリを検索（最優先）
+        // (変換エンジンはひらがな入力から英字読みにマッチできないため、先に検索する)
+        if rawInputString.count >= 2 {
+            let allUserDictionaryItems = userDictionary.items + systemUserDictionary.items
+            for entry in allUserDictionaryItems {
+                guard results.count < maxPredictionCount else {
+                    break
+                }
+
+                let reading = entry.reading
+                // 読みが全てASCIIの場合のみ
+                guard reading.unicodeScalars.allSatisfy({ $0.isASCII }) else {
+                    continue
+                }
+
+                let readingLower = reading.lowercased()
+                guard readingLower.hasPrefix(rawInputString),
+                      rawInputString.count < readingLower.count,
+                      !seenDisplayTexts.contains(entry.word) else {
+                    continue
+                }
+
+                let appendText = String(readingLower.dropFirst(rawInputString.count))
+                if !appendText.isEmpty {
+                    results.append(.init(
+                        displayText: entry.word,
+                        appendText: appendText,
+                        isEnglishReading: true,
+                        fullText: entry.word
+                    ))
+                    seenDisplayTexts.insert(entry.word)
+                }
+            }
+        }
+
         // 候補処理のヘルパー関数
         func processCandidates(_ candidates: [Candidate]) {
             for candidate in candidates {
@@ -870,47 +905,12 @@ public final class SegmentsManager {
             }
         }
 
-        // predictionResults を先に処理
+        // predictionResults を処理
         processCandidates(rawCandidates.predictionResults)
 
         // mainResults からも候補を検索（ユーザー辞書エントリを含む）
         if results.count < maxPredictionCount {
             processCandidates(rawCandidates.mainResults)
-        }
-
-        // ユーザー辞書から直接英字読みのエントリを検索
-        // (変換エンジンはひらがな入力から英字読みにマッチできないため)
-        if results.count < maxPredictionCount && rawInputString.count >= 2 {
-            let allUserDictionaryItems = userDictionary.items + systemUserDictionary.items
-            for entry in allUserDictionaryItems {
-                guard results.count < maxPredictionCount else {
-                    break
-                }
-
-                let reading = entry.reading
-                // 読みが全てASCIIの場合のみ
-                guard reading.unicodeScalars.allSatisfy({ $0.isASCII }) else {
-                    continue
-                }
-
-                let readingLower = reading.lowercased()
-                guard readingLower.hasPrefix(rawInputString),
-                      rawInputString.count < readingLower.count,
-                      !seenDisplayTexts.contains(entry.word) else {
-                    continue
-                }
-
-                let appendText = String(readingLower.dropFirst(rawInputString.count))
-                if !appendText.isEmpty {
-                    results.append(.init(
-                        displayText: entry.word,
-                        appendText: appendText,
-                        isEnglishReading: true,
-                        fullText: entry.word
-                    ))
-                    seenDisplayTexts.insert(entry.word)
-                }
-            }
         }
 
         return results
