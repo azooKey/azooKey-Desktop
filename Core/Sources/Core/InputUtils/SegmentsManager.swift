@@ -148,7 +148,7 @@ public final class SegmentsManager {
             textReplacer: .withDefaultEmojiDictionary(),
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates),
-            experimentalZenzaiPredictiveInput: true,g
+            experimentalZenzaiPredictiveInput: true,
             metadata: self.metadata
         )
     }
