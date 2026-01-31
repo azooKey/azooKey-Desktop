@@ -803,7 +803,7 @@ public final class SegmentsManager {
            last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
             matchTarget.removeLast()
         }
-        guard matchTarget.count >= 2 else {
+        guard matchTarget.count >= 1 else {
             return []
         }
         matchTarget = matchTarget.toHiragana()
