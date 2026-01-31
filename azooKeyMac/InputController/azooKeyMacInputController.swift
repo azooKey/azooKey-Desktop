@@ -394,7 +394,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             })
         case .submitHalfWidthRomanCandidate:
             self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
-                $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+                let halfWidth = $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
+                // 全角記号を英数キー配列に対応した半角文字に変換
+                return halfWidth
+                    .replacingOccurrences(of: "･", with: "/")
+                    .replacingOccurrences(of: "､", with: ",")
+                    .replacingOccurrences(of: "｡", with: ".")
+                    .replacingOccurrences(of: "｢", with: "[")
+                    .replacingOccurrences(of: "｣", with: "]")
+                    .replacingOccurrences(of: ";", with: ";")
+                    .replacingOccurrences(of: ":", with: ":")
+                    .replacingOccurrences(of: "ｰ", with: "-")
             })
         case .enableDebugWindow:
             self.segmentsManager.requestDebugWindowMode(enabled: true)
