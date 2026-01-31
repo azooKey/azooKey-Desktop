@@ -147,7 +147,7 @@ public enum UserAction {
             case ("k", [.control]): // Control + k
                 return .function(.seven)
             case (";", [.control]): // Control + ;
-                return .function(.eight)
+                return .function(.ten)
             case (":", [.control]): // Control + :
                 return .function(.ten)
             case ("'", [.control]): // Control + '
