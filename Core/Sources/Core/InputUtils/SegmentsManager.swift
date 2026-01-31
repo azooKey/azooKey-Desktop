@@ -62,6 +62,8 @@ public final class SegmentsManager {
     private var replaceSuggestions: [Candidate] = []
     private var suggestSelectionIndex: Int?
 
+    private var predictionSelectionIndex: Int?
+
     public struct PredictionCandidate: Sendable {
         public var displayText: String
         public var appendText: String
@@ -205,6 +207,7 @@ public final class SegmentsManager {
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
+        self.predictionSelectionIndex = nil
     }
 
     @MainActor
@@ -218,6 +221,7 @@ public final class SegmentsManager {
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
+        self.predictionSelectionIndex = nil
     }
 
     @MainActor
@@ -230,6 +234,7 @@ public final class SegmentsManager {
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
+        self.predictionSelectionIndex = nil
     }
 
     /// 変換キーを押したタイミングで入力の区切りを示す
@@ -728,6 +733,46 @@ public final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
+    // MARK: - Prediction Selection
+
+    /// 現在選択されている予測候補のインデックス
+    public var selectedPredictionIndex: Int? {
+        predictionSelectionIndex
+    }
+
+    /// 次の予測候補を選択
+    /// - Parameter count: 予測候補の総数
+    public func requestSelectingNextPrediction(count: Int) {
+        guard count > 0 else {
+            return
+        }
+        if let current = predictionSelectionIndex {
+            // 範囲外の場合は最後の候補にとどまる
+            predictionSelectionIndex = min(current + 1, count - 1)
+        } else {
+            predictionSelectionIndex = 0
+        }
+    }
+
+    /// 前の予測候補を選択
+    public func requestSelectingPrevPrediction() {
+        guard let current = predictionSelectionIndex else {
+            // nilからはnilのまま
+            return
+        }
+        if current <= 0 {
+            // 0以下の場合はnilにリセット
+            predictionSelectionIndex = nil
+        } else {
+            predictionSelectionIndex = current - 1
+        }
+    }
+
+    /// 予測候補の選択状態をリセット
+    public func resetPredictionSelection() {
+        predictionSelectionIndex = nil
+    }
+
     public func requestPredictionCandidates() -> [PredictionCandidate] {
         guard Config.DebugPredictiveTyping().value else {
             return []
@@ -752,6 +797,9 @@ public final class SegmentsManager {
             return []
         }
 
+        let maxPredictionCount = 5
+        var results: [PredictionCandidate] = []
+
         for candidate in rawCandidates.predictionResults {
             let reading = candidateReading(candidate)
             guard !reading.isEmpty else {
@@ -768,10 +816,13 @@ public final class SegmentsManager {
             guard !appendText.isEmpty else {
                 continue
             }
-            return [.init(displayText: candidate.text, appendText: appendText)]
+            results.append(.init(displayText: candidate.text, appendText: appendText))
+            if results.count >= maxPredictionCount {
+                break
+            }
         }
 
-        return []
+        return results
     }
 
     // swiftlint:disable:next cyclomatic_complexity

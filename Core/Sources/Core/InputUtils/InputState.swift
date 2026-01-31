@@ -172,7 +172,11 @@ public enum InputState: Sendable, Hashable {
                 return (.selectInputLanguage(.japanese), .fallthrough)
             case .navigation(let direction):
                 if direction == .down {
-                    return (.enterCandidateSelectionMode, .transition(.selecting))
+                    // 予測候補を選択
+                    return (.selectNextPredictionCandidate, .fallthrough)
+                } else if direction == .up {
+                    // 前の予測候補を選択
+                    return (.selectPrevPredictionCandidate, .fallthrough)
                 } else if direction == .right && event.modifierFlags.contains(.shift) {
                     return (.editSegment(1), .transition(.selecting))
                 } else if direction == .left && event.modifierFlags.contains(.shift) {

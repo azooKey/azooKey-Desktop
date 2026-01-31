@@ -110,7 +110,7 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
     private let prefixFontSize: CGFloat = 12
 
     override var numberOfVisibleRows: Int {
-        min(3, self.tableView.numberOfRows)
+        min(5, self.tableView.numberOfRows)
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {

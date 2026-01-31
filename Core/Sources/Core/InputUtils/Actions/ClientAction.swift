@@ -50,6 +50,8 @@ public enum ClientAction {
     // PredictiveSuggestion
     case requestPredictiveSuggestion
     case acceptPredictionCandidate
+    case selectNextPredictionCandidate
+    case selectPrevPredictionCandidate
 
     // ReplaceSuggestion
     case requestReplaceSuggestion

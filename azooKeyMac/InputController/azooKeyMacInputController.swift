@@ -427,6 +427,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.requestReplaceSuggestion()
         case .acceptPredictionCandidate:
             self.acceptPredictionCandidate()
+        case .selectNextPredictionCandidate:
+            let predictions = self.segmentsManager.requestPredictionCandidates()
+            self.segmentsManager.requestSelectingNextPrediction(count: predictions.count)
+            self.refreshPredictionWindow()
+        case .selectPrevPredictionCandidate:
+            self.segmentsManager.requestSelectingPrevPrediction()
+            self.refreshPredictionWindow()
         // ReplaceSuggestion
         case .requestReplaceSuggestion:
             self.requestReplaceSuggestion()
@@ -583,7 +590,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
-            selectionIndex: nil,
+            selectionIndex: self.segmentsManager.selectedPredictionIndex,
             cursorLocation: rect.origin
         )
 
@@ -629,7 +636,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
-            selectionIndex: nil,
+            selectionIndex: self.segmentsManager.selectedPredictionIndex,
             cursorLocation: rect.origin
         )
         self.predictionWindow.orderFront(nil)
@@ -662,9 +669,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     @MainActor
     private func acceptPredictionCandidate() {
         let predictions = self.segmentsManager.requestPredictionCandidates()
-        guard let prediction = predictions.first else {
+
+        // 選択中の候補を取得、なければ先頭候補（インデックス0）
+        let selectedIndex = self.segmentsManager.selectedPredictionIndex ?? 0
+        guard selectedIndex < predictions.count else {
             return
         }
+        let prediction = predictions[selectedIndex]
 
         let currentTarget = self.segmentsManager.convertTarget
         var matchTarget = currentTarget
@@ -685,6 +696,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
+
+        // 候補受け入れ後、選択状態をリセット
+        self.segmentsManager.resetPredictionSelection()
     }
 
     var retryCount = 0
