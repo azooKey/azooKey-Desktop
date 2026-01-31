@@ -67,6 +67,10 @@ public final class SegmentsManager {
     public struct PredictionCandidate: Sendable {
         public var displayText: String
         public var appendText: String
+        /// 英字読みの候補かどうか（全体置換が必要）
+        public var isEnglishReading: Bool
+        /// 候補の完全なテキスト（英字読みの場合に使用）
+        public var fullText: String
     }
 
     private func candidateReading(_ candidate: Candidate) -> String {
@@ -640,6 +644,17 @@ public final class SegmentsManager {
         )
     }
 
+    /// composingText.input から生のローマ字入力文字列を取得する
+    private func getRawInputString() -> String {
+        String(self.composingText.input.compactMap {
+            switch $0.piece {
+            case .compositionSeparator: nil
+            case .character(let c): c
+            case .key(intention: _, input: let input, modifiers: _): input
+            }
+        })
+    }
+
     @MainActor
     public func getModifiedRomanCandidate(inputState: InputState = .composing, _ transform: (String) -> String) -> Candidate {
         let targetComposingText: ComposingText
@@ -799,26 +814,102 @@ public final class SegmentsManager {
 
         let maxPredictionCount = 5
         var results: [PredictionCandidate] = []
+        var seenDisplayTexts: Set<String> = []
 
-        for candidate in rawCandidates.predictionResults {
-            let reading = candidateReading(candidate)
-            guard !reading.isEmpty else {
-                continue
+        // 生のローマ字入力文字列を取得（英字読みマッチ用）
+        let rawInputString = self.getRawInputString().lowercased()
+
+        // 候補処理のヘルパー関数
+        func processCandidates(_ candidates: [Candidate]) {
+            for candidate in candidates {
+                guard results.count < maxPredictionCount else {
+                    return
+                }
+
+                let reading = candidateReading(candidate)
+                guard !reading.isEmpty else {
+                    continue
+                }
+
+                // 1. 既存のひらがなマッチロジック
+                let readingHiragana = reading.toHiragana()
+                if readingHiragana.hasPrefix(matchTarget), matchTarget.count < readingHiragana.count {
+                    let appendText = String(readingHiragana.dropFirst(matchTarget.count))
+                    if !appendText.isEmpty && !seenDisplayTexts.contains(candidate.text) {
+                        results.append(.init(
+                            displayText: candidate.text,
+                            appendText: appendText,
+                            isEnglishReading: false,
+                            fullText: candidate.text
+                        ))
+                        seenDisplayTexts.insert(candidate.text)
+                        continue
+                    }
+                }
+
+                // 2. 生のローマ字入力での英字読みマッチ
+                // readingが全てASCIIの場合のみマッチを試みる
+                if reading.unicodeScalars.allSatisfy({ $0.isASCII }) {
+                    let readingLower = reading.lowercased()
+                    if rawInputString.count >= 2,
+                       readingLower.hasPrefix(rawInputString),
+                       rawInputString.count < readingLower.count,
+                       !seenDisplayTexts.contains(candidate.text) {
+                        let appendText = String(readingLower.dropFirst(rawInputString.count))
+                        if !appendText.isEmpty {
+                            results.append(.init(
+                                displayText: candidate.text,
+                                appendText: appendText,
+                                isEnglishReading: true,
+                                fullText: candidate.text
+                            ))
+                            seenDisplayTexts.insert(candidate.text)
+                        }
+                    }
+                }
             }
-            let readingHiragana = reading.toHiragana()
-            guard readingHiragana.hasPrefix(matchTarget) else {
-                continue
-            }
-            guard matchTarget.count < readingHiragana.count else {
-                continue
-            }
-            let appendText = String(readingHiragana.dropFirst(matchTarget.count))
-            guard !appendText.isEmpty else {
-                continue
-            }
-            results.append(.init(displayText: candidate.text, appendText: appendText))
-            if results.count >= maxPredictionCount {
-                break
+        }
+
+        // predictionResults を先に処理
+        processCandidates(rawCandidates.predictionResults)
+
+        // mainResults からも候補を検索（ユーザー辞書エントリを含む）
+        if results.count < maxPredictionCount {
+            processCandidates(rawCandidates.mainResults)
+        }
+
+        // ユーザー辞書から直接英字読みのエントリを検索
+        // (変換エンジンはひらがな入力から英字読みにマッチできないため)
+        if results.count < maxPredictionCount && rawInputString.count >= 2 {
+            let allUserDictionaryItems = userDictionary.items + systemUserDictionary.items
+            for entry in allUserDictionaryItems {
+                guard results.count < maxPredictionCount else {
+                    break
+                }
+
+                let reading = entry.reading
+                // 読みが全てASCIIの場合のみ
+                guard reading.unicodeScalars.allSatisfy({ $0.isASCII }) else {
+                    continue
+                }
+
+                let readingLower = reading.lowercased()
+                guard readingLower.hasPrefix(rawInputString),
+                      rawInputString.count < readingLower.count,
+                      !seenDisplayTexts.contains(entry.word) else {
+                    continue
+                }
+
+                let appendText = String(readingLower.dropFirst(rawInputString.count))
+                if !appendText.isEmpty {
+                    results.append(.init(
+                        displayText: entry.word,
+                        appendText: appendText,
+                        isEnglishReading: true,
+                        fullText: entry.word
+                    ))
+                    seenDisplayTexts.insert(entry.word)
+                }
             }
         }
 

@@ -678,6 +678,20 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let prediction = predictions[selectedIndex]
 
         let currentTarget = self.segmentsManager.convertTarget
+
+        // 英字読みの場合は全体置換
+        if prediction.isEnglishReading {
+            // 現在のcomposingTextを全削除してfullTextを挿入
+            let deleteCount = currentTarget.count
+            if deleteCount > 0 {
+                self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
+            }
+            self.segmentsManager.insertAtCursorPosition(prediction.fullText, inputStyle: .direct)
+            self.segmentsManager.resetPredictionSelection()
+            return
+        }
+
+        // ひらがな読みの場合は従来の処理（appendText追加）
         var matchTarget = currentTarget
         if let last = matchTarget.last,
            last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
