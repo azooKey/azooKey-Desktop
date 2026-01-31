@@ -679,37 +679,15 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         let currentTarget = self.segmentsManager.convertTarget
 
-        // 英字読みの場合は全体置換
-        if prediction.isEnglishReading {
-            // 現在のcomposingTextを全削除してfullTextを挿入
-            let deleteCount = currentTarget.count
-            if deleteCount > 0 {
-                self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
-            }
-            self.segmentsManager.insertAtCursorPosition(prediction.fullText, inputStyle: .direct)
-            self.segmentsManager.resetPredictionSelection()
-            return
+        // 現在のcomposingTextを全削除してfullTextを挿入（全体置換）
+        // 英字読み・ひらがな読みともに同じ処理を行う
+        // 理由: 読みと表示が異なる場合（例: 読み「・・」→ 表示「……」）、
+        //       appendTextを追加するだけでは正しい結果にならない
+        let deleteCount = currentTarget.count
+        if deleteCount > 0 {
+            self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
         }
-
-        // ひらがな読みの場合は従来の処理（appendText追加）
-        var matchTarget = currentTarget
-        if let last = matchTarget.last,
-           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
-            matchTarget.removeLast()
-            self.segmentsManager.deleteBackwardFromCursorPosition(count: 1)
-        }
-
-        guard !matchTarget.isEmpty else {
-            return
-        }
-
-        let appendText = prediction.appendText
-
-        guard !appendText.isEmpty else {
-            return
-        }
-
-        self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
+        self.segmentsManager.insertAtCursorPosition(prediction.fullText, inputStyle: .direct)
 
         // 候補受け入れ後、選択状態をリセット
         self.segmentsManager.resetPredictionSelection()
