@@ -35,12 +35,8 @@ public final class SegmentsManager {
     private var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
-    private var userDictionary: Config.UserDictionary.Value {
-        Config.UserDictionary().value
-    }
-    private var systemUserDictionary: Config.SystemUserDictionary.Value {
-        Config.SystemUserDictionary().value
-    }
+    private var cachedUserDictionary: Config.UserDictionary.Value = .init(items: [])
+    private var cachedSystemUserDictionary: Config.SystemUserDictionary.Value = .init(items: [])
     private var zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value {
         Config.ZenzaiPersonalizationLevel().value
     }
@@ -88,6 +84,34 @@ public final class SegmentsManager {
     }
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
+
+    private var cachedDynamicShortcuts: [DicdataElement] = []
+
+    private static func buildDynamicShortcuts() -> [DicdataElement] {
+        [
+            ("M/d", -18, DateTemplateLiteral.CalendarType.western),
+            ("yyyy/MM/dd", -18.1, .western),
+            ("yyyy-MM-dd", -18.2, .western),
+            ("M月d日（E）", -18.3, .western),
+            ("yyyy年M月d日", -18.4, .western),
+            ("Gyyyy年M月d日", -18.5, .japanese),
+            ("E曜日", -18.6, .western)
+        ].flatMap { (format, value: PValue, type) in
+            [
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
+            ]
+        } + [
+            // 月
+            .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            // 年
+            .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1)
+        ]
+    }
 
     // MARK: - Learning Data Async Processing
 
@@ -231,11 +255,19 @@ public final class SegmentsManager {
     public func activate() {
         self.shouldShowCandidateWindow = false
         self.zenzaiPersonalizationMode = self.getZenzaiPersonalizationMode()
+        self.cachedUserDictionary = Config.UserDictionary().value
+        self.cachedSystemUserDictionary = Config.SystemUserDictionary().value
+        self.cachedDynamicShortcuts = Self.buildDynamicShortcuts()
     }
 
     @MainActor
     public func deactivate() {
-        self.kanaKanjiConverter.stopComposition()
+        // composingText が空でない場合のみ stopComposition を呼ぶ。
+        // commitMarkedText() → stopComposition() で既にクリア済みの場合、
+        // 重い kanaKanjiConverter.stopComposition()（Zenzai コンテキスト再作成）を回避する。
+        if !self.composingText.isEmpty {
+            self.kanaKanjiConverter.stopComposition()
+        }
         self.flushLearningDataSafely()
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
@@ -449,41 +481,18 @@ public final class SegmentsManager {
             return
         }
         // ユーザ辞書情報の更新
-        var userDictionary: [DicdataElement] = userDictionary.items.map {
+        var userDictionary: [DicdataElement] = cachedUserDictionary.items.map {
             .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
         }
         self.appendDebugMessage("userDictionaryCount: \(userDictionary.count)")
-        let systemUserDictionary: [DicdataElement] = systemUserDictionary.items.map {
+        let systemUserDictionary: [DicdataElement] = cachedSystemUserDictionary.items.map {
             .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
         }
         self.appendDebugMessage("systemUserDictionaryCount: \(systemUserDictionary.count)")
         userDictionary.append(contentsOf: consume systemUserDictionary)
 
-        /// 日付・時刻変換を事前に入れておく
-        let dynamicShortcuts: [DicdataElement] =
-            [
-                ("M/d", -18, DateTemplateLiteral.CalendarType.western),
-                ("yyyy/MM/dd", -18.1, .western),
-                ("yyyy-MM-dd", -18.2, .western),
-                ("M月d日（E）", -18.3, .western),
-                ("yyyy年M月d日", -18.4, .western),
-                ("Gyyyy年M月d日", -18.5, .japanese),
-                ("E曜日", -18.6, .western)
-            ].flatMap { (format, value: PValue, type) in
-                [
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
-                ]
-            } + [
-                // 月
-                .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                // 年
-                .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1)
-            ]
+        /// 日付・時刻変換を事前に入れておく（テンプレートリテラルはキャッシュ済み）
+        let dynamicShortcuts = self.cachedDynamicShortcuts
 
         self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary, shortcuts: dynamicShortcuts)
 
@@ -764,7 +773,10 @@ public final class SegmentsManager {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}
         if let candidate = self.candidates?.first(where: {$0.text == text}) {
-            self.prefixCandidateCommited(candidate, leftSideContext: "")
+            // 学習データのみ更新し、prefixCandidateCommited は呼ばない。
+            // 直後に stopComposition() するため、updateRawCandidate の結果は使われない。
+            self.kanaKanjiConverter.setCompletedData(candidate)
+            self.updateLearningDataAsync(candidate)
         }
         self.stopComposition()
         return text
@@ -855,7 +867,7 @@ public final class SegmentsManager {
         // ユーザー辞書から直接英字読みのエントリを検索（最優先）
         // (変換エンジンはひらがな入力から英字読みにマッチできないため、先に検索する)
         if rawInputString.count >= 2 {
-            let allUserDictionaryItems = userDictionary.items + systemUserDictionary.items
+            let allUserDictionaryItems = cachedUserDictionary.items + cachedSystemUserDictionary.items
             for entry in allUserDictionaryItems {
                 guard results.count < maxPredictionCount else {
                     break

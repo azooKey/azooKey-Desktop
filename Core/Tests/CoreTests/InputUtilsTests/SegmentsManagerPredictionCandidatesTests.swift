@@ -162,13 +162,16 @@ struct SegmentsManagerPredictionCandidatesTests {
 
     // MARK: - Helper
 
+    @MainActor
     private func makeSegmentsManager() -> SegmentsManager {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        return SegmentsManager(
+        let manager = SegmentsManager(
             kanaKanjiConverter: .withDefaultDictionary(),
             applicationDirectoryURL: tempDir,
             containerURL: nil
         )
+        manager.activate()
+        return manager
     }
 }
