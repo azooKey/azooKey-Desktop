@@ -29,7 +29,6 @@ public final class SegmentsManager {
     private let applicationDirectoryURL: URL
     private let containerURL: URL?
     private let context: Context
-    private var savingTask: Task<Void, Never>?
 
     private var composingText: ComposingText = ComposingText()
 
@@ -89,6 +88,39 @@ public final class SegmentsManager {
     }
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
+
+    // MARK: - Learning Data Async Processing
+
+    /// Sendable 境界を超えるためのラッパー
+    private struct UnsafeSendableConverter: @unchecked Sendable {
+        let converter: KanaKanjiConverter
+    }
+
+    /// 非同期で学習データを更新
+    private func updateLearningDataAsync(_ candidate: Candidate) {
+        let wrapper = UnsafeSendableConverter(converter: self.kanaKanjiConverter)
+        Task.detached(priority: .utility) {
+            await wrapper.converter.updateLearningDataAsync(candidate)
+        }
+    }
+
+    /// 非同期で学習データの更新をコミット
+    private func commitUpdateLearningDataAsync() {
+        let wrapper = UnsafeSendableConverter(converter: self.kanaKanjiConverter)
+        Task.detached(priority: .utility) {
+            await wrapper.converter.commitLearningDataAsync()
+        }
+    }
+
+    /// アプリ非アクティブ時の安全な学習データ保存
+    private func flushLearningDataSafely() {
+        let wrapper = UnsafeSendableConverter(converter: self.kanaKanjiConverter)
+        Task.detached(priority: .background) {
+            // わずかな遅延でUI処理を優先
+            try? await Task.sleep(for: .milliseconds(50))
+            await wrapper.converter.commitLearningDataAsync()
+        }
+    }
 
     private func getZenzaiPersonalizationMode() -> ConvertRequestOptions.ZenzaiMode.PersonalizationMode? {
         let alpha = self.zenzaiPersonalizationLevel.alpha
@@ -204,10 +236,7 @@ public final class SegmentsManager {
     @MainActor
     public func deactivate() {
         self.kanaKanjiConverter.stopComposition()
-        self.savingTask?.cancel()
-        self.savingTask = Task { @MainActor in
-            self.kanaKanjiConverter.commitUpdateLearningData()
-        }
+        self.flushLearningDataSafely()
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
@@ -238,10 +267,7 @@ public final class SegmentsManager {
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
-        self.savingTask?.cancel()
-        self.savingTask = Task { @MainActor in
-            self.kanaKanjiConverter.commitUpdateLearningData()
-        }
+        self.commitUpdateLearningDataAsync()
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
@@ -483,7 +509,7 @@ public final class SegmentsManager {
     /// - note: 画面更新との整合性を保つため、この関数の実行前に左文脈を取得し、これを引数として与える
     @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
         self.kanaKanjiConverter.setCompletedData(candidate)
-        self.kanaKanjiConverter.updateLearningData(candidate)
+        self.updateLearningDataAsync(candidate)
         self.composingText.prefixComplete(composingCount: candidate.composingCount)
 
         if !self.composingText.isEmpty {
