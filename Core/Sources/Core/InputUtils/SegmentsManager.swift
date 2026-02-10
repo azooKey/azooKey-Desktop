@@ -29,6 +29,7 @@ public final class SegmentsManager {
     private let applicationDirectoryURL: URL
     private let containerURL: URL?
     private let context: Context
+    private var savingTask: Task<Void, Never>?
 
     private var composingText: ComposingText = ComposingText()
 
@@ -203,7 +204,10 @@ public final class SegmentsManager {
     @MainActor
     public func deactivate() {
         self.kanaKanjiConverter.stopComposition()
-        self.kanaKanjiConverter.commitUpdateLearningData()
+        self.savingTask?.cancel()
+        self.savingTask = Task { @MainActor in
+            self.kanaKanjiConverter.commitUpdateLearningData()
+        }
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
@@ -234,7 +238,10 @@ public final class SegmentsManager {
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
-        self.kanaKanjiConverter.commitUpdateLearningData()
+        self.savingTask?.cancel()
+        self.savingTask = Task { @MainActor in
+            self.kanaKanjiConverter.commitUpdateLearningData()
+        }
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
