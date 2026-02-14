@@ -267,8 +267,11 @@ struct RomajiTableEditorWindow: View {
                         clearAllMappings()
                     }
                     Divider()
-                    Button("ファイルに書き出し") {
+                    Button("ファイルに書き出す") {
                         exportToFile()
+                    }
+                    Button("ファイルから読み込む") {
+                        importFromFile()
                     }
                 }
                 .padding()
