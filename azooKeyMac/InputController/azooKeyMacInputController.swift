@@ -667,6 +667,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.lastPredictionUpdateTime = 0
         self.predictionHideWorkItem?.cancel()
         self.predictionHideWorkItem = nil
+        self.predictionViewController.lastDirection = nil
     }
 
     @MainActor

@@ -88,6 +88,7 @@ class CandidatesViewController: BaseCandidateViewController {
     func hide() {
         self.currentSelectedRow = -1
         self.showedRows = 0...8
+        self.lastDirection = nil
     }
 
     override var numberOfVisibleRows: Int {

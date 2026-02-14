@@ -1,4 +1,21 @@
 public enum WindowPositioning {
+    /// 候補ウィンドウの配置方向
+    public enum Direction: Equatable {
+        case above  // カーソルの上（macOS座標で y が大きい方向）
+        case below  // カーソルの下（macOS座標で y が小さい方向）
+    }
+
+    /// frameNearCursor の戻り値（位置 + 実際に選択された配置方向）
+    public struct PositionResult: Equatable {
+        public var frame: Rect
+        public var direction: Direction
+
+        public init(frame: Rect, direction: Direction) {
+            self.frame = frame
+            self.direction = direction
+        }
+    }
+
     public struct Point: Equatable {
         public var x: Double
         public var y: Double
@@ -55,20 +72,89 @@ public enum WindowPositioning {
         desiredSize: Size,
         cursorHeight: Double = 16
     ) -> Rect {
+        frameNearCursor(
+            currentFrame: currentFrame,
+            screenRect: screenRect,
+            cursorLocation: cursorLocation,
+            desiredSize: desiredSize,
+            cursorHeight: cursorHeight,
+            preferredDirection: nil
+        ).frame
+    }
+
+    public static func frameNearCursor(
+        currentFrame: Rect,
+        screenRect: Rect,
+        cursorLocation: Point,
+        desiredSize: Size,
+        cursorHeight: Double = 16,
+        preferredDirection: Direction?
+    ) -> PositionResult {
         var newWindowFrame = currentFrame
         newWindowFrame.size = desiredSize
 
         let cursorY = cursorLocation.y
-        if cursorY - desiredSize.height < screenRect.origin.y {
-            newWindowFrame.origin = Point(x: cursorLocation.x, y: cursorLocation.y + cursorHeight)
+
+        // 各方向に収まるかの判定
+        let fitsBelow = (cursorY - desiredSize.height - cursorHeight) >= screenRect.origin.y
+        let fitsAbove = (cursorY + cursorHeight + desiredSize.height) <= screenRect.maxY
+
+        // 方向の決定（ヒステリシス付き）
+        let direction: Direction
+        if let preferred = preferredDirection {
+            // 前回の方向に収まるならそのまま維持（ヒステリシス）
+            switch preferred {
+            case .below where fitsBelow:
+                direction = .below
+            case .above where fitsAbove:
+                direction = .above
+            default:
+                // 前回の方向に収まらない → フォールバック
+                if fitsBelow {
+                    direction = .below
+                } else if fitsAbove {
+                    direction = .above
+                } else {
+                    // どちらにも収まらない → スペースが広い方
+                    let spaceBelow = cursorY - cursorHeight - screenRect.origin.y
+                    let spaceAbove = screenRect.maxY - (cursorY + cursorHeight)
+                    direction = spaceBelow >= spaceAbove ? .below : .above
+                }
+            }
         } else {
+            // 初回（preferredDirection == nil）→ 既存ロジックと同一
+            if cursorY - desiredSize.height < screenRect.origin.y {
+                direction = .above
+            } else {
+                direction = .below
+            }
+        }
+
+        // 配置位置の計算
+        switch direction {
+        case .above:
+            newWindowFrame.origin = Point(x: cursorLocation.x, y: cursorLocation.y + cursorHeight)
+        case .below:
             newWindowFrame.origin = Point(x: cursorLocation.x, y: cursorLocation.y - desiredSize.height - cursorHeight)
         }
 
+        // 水平クランプ
         if newWindowFrame.maxX > screenRect.maxX {
             newWindowFrame.origin.x = screenRect.maxX - newWindowFrame.width
         }
-        return newWindowFrame
+        if newWindowFrame.minX < screenRect.minX {
+            newWindowFrame.origin.x = screenRect.minX
+        }
+
+        // 垂直クランプ（両方向を順に適用。ウィンドウが画面より大きい場合は minY を優先）
+        if newWindowFrame.maxY > screenRect.maxY {
+            newWindowFrame.origin.y = screenRect.maxY - newWindowFrame.height
+        }
+        if newWindowFrame.minY < screenRect.minY {
+            newWindowFrame.origin.y = screenRect.minY
+        }
+
+        return PositionResult(frame: newWindowFrame, direction: direction)
     }
 
     public static func frameRightOfAnchor(

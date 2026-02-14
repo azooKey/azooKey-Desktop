@@ -94,6 +94,8 @@ class BaseCandidateViewController: NSViewController {
     internal var candidates: [CandidatePresentation] = []
     internal var tableView: NSTableView!
     internal var currentSelectedRow: Int = -1
+    /// ヒステリシス用: 前回の配置方向を保持
+    internal var lastDirection: WindowPositioning.Direction?
 
     override func loadView() {
         // 親ビュー（ZStackのような役割）
@@ -241,12 +243,15 @@ class BaseCandidateViewController: NSViewController {
 
         let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.candidate.text })
         let windowWidth = self.getWindowWidth(maxContentWidth: maxWidth)
-        let newWindowFrame = WindowPositioning.frameNearCursor(
+        let result = WindowPositioning.frameNearCursor(
             currentFrame: .init(window.frame),
             screenRect: .init(screen.visibleFrame),
             cursorLocation: .init(cursorLocation),
-            desiredSize: .init(width: windowWidth, height: tableViewHeight)
-        ).cgRect
+            desiredSize: .init(width: windowWidth, height: tableViewHeight),
+            preferredDirection: self.lastDirection
+        )
+        self.lastDirection = result.direction
+        let newWindowFrame = result.frame.cgRect
         if newWindowFrame != window.frame {
             window.setFrame(newWindowFrame, display: true, animate: false)
         }
