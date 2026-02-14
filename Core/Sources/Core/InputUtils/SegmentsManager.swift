@@ -46,6 +46,7 @@ public final class SegmentsManager {
     private var didExperienceSegmentEdition = false
     private var lastOperation: Operation = .other
     private var shouldShowCandidateWindow = false
+    private var conversionTask: Task<Void, Never>?
 
     private var isShowingAdditionalCandidates = false
     private var additionalCandidates: [CandidatePresentation] = []
@@ -262,6 +263,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func deactivate() {
+        self.conversionTask?.cancel()
         // composingText が空でない場合のみ stopComposition を呼ぶ。
         // commitMarkedText() → stopComposition() で既にクリア済みの場合、
         // 重い kanaKanjiConverter.stopComposition()（Zenzai コンテキスト再作成）を回避する。
@@ -282,6 +284,7 @@ public final class SegmentsManager {
     @MainActor
     /// この入力を打ち切る
     public func stopComposition() {
+        self.conversionTask?.cancel()
         self.composingText.stopComposition()
         self.kanaKanjiConverter.stopComposition()
         self.rawCandidates = nil
@@ -326,7 +329,7 @@ public final class SegmentsManager {
         self.lastOperation = .insert
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
-        self.updateRawCandidate()
+        self.deferredUpdateRawCandidate()
     }
 
     @MainActor
@@ -335,7 +338,7 @@ public final class SegmentsManager {
         self.lastOperation = .insert
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
-        self.updateRawCandidate()
+        self.deferredUpdateRawCandidate()
     }
 
     @MainActor
@@ -381,7 +384,7 @@ public final class SegmentsManager {
         self.lastOperation = .delete
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
-        self.updateRawCandidate()
+        self.deferredUpdateRawCandidate()
     }
 
     @MainActor
@@ -457,6 +460,21 @@ public final class SegmentsManager {
                 last = last.dropFirst()
             }
             return String(last)
+        }
+    }
+
+    /// 変換処理を遅延実行する。高速タイピング時はキャンセル＆再スケジュールでデバウンスする。
+    @MainActor private func deferredUpdateRawCandidate(requestRichCandidates: Bool = false, forcedLeftSideContext: String? = nil) {
+        // 前回の変換タスクをキャンセル
+        self.conversionTask?.cancel()
+        // 前回の変換結果はクリアせず保持し、新結果が来るまで表示を維持する（ちらつき防止）
+
+        self.conversionTask = Task { @MainActor in
+            // RunLoopに制御を戻してUI更新を先行させる
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self.updateRawCandidate(requestRichCandidates: requestRichCandidates, forcedLeftSideContext: forcedLeftSideContext)
+            self.delegate?.conversionCompleted()
         }
     }
 
@@ -1029,6 +1047,7 @@ public final class SegmentsManager {
 
 public protocol SegmentManagerDelegate: AnyObject {
     func getLeftSideContext(maxCount: Int) -> String?
+    @MainActor func conversionCompleted()
 }
 
 private extension ComposingText {

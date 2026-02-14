@@ -126,6 +126,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.updateTransformSelectedTextMenuItemEnabledState()
         self.segmentsManager.activate()
 
+        // Zenzai モデルをバックグラウンドで事前ロード
+        self.preWarmZenzaiModel()
+
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             var rect: NSRect = .zero
@@ -693,6 +696,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.segmentsManager.resetPredictionSelection()
     }
 
+    /// Zenzaiモデルをバックグラウンドで事前にロードする
+    private func preWarmZenzaiModel() {
+        let modelURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/ggml-model-Q5_K_M.gguf", isDirectory: false)
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+            return
+        }
+        // KanaKanjiConverterはSendableではないため、UnsafeSendableラッパーを使用
+        struct UnsafeSendableConverter: @unchecked Sendable {
+            let converter: KanaKanjiConverter
+        }
+        let wrapper = UnsafeSendableConverter(converter: appDelegate.kanaKanjiConverter)
+        Task.detached(priority: .userInitiated) {
+            wrapper.converter.warmUp(zenzaiModelURL: modelURL)
+        }
+    }
+
     var retryCount = 0
     let maxRetries = 3
 
@@ -782,6 +801,12 @@ extension azooKeyMacInputController: SegmentManagerDelegate {
         let leftSideContext = self.client().string(from: leftRange, actualRange: &actual)
         self.segmentsManager.appendDebugMessage("\(#function): leftSideContext=\(leftSideContext ?? "nil")")
         return leftSideContext
+    }
+
+    @MainActor func conversionCompleted() {
+        self.refreshMarkedText()
+        self.refreshCandidateWindow()
+        self.refreshPredictionWindow()
     }
 }
 
