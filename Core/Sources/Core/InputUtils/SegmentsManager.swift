@@ -40,7 +40,20 @@ public final class SegmentsManager {
     private var zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value {
         Config.ZenzaiPersonalizationLevel().value
     }
+    /// rawCandidates と生成時の convertTarget はペアで管理する。
+    /// 更新時は必ず clearRawCandidates() / setRawCandidates(_:) を使うこと。
     private var rawCandidates: ConversionResult?
+    private var rawCandidatesConvertTarget: String?
+
+    private func clearRawCandidates() {
+        self.rawCandidates = nil
+        self.rawCandidatesConvertTarget = nil
+    }
+
+    private func setRawCandidates(_ result: ConversionResult) {
+        self.rawCandidates = result
+        self.rawCandidatesConvertTarget = self.composingText.convertTarget
+    }
 
     private var selectionIndex: Int?
     private var didExperienceSegmentEdition = false
@@ -271,7 +284,7 @@ public final class SegmentsManager {
             self.kanaKanjiConverter.stopComposition()
         }
         self.flushLearningDataSafely()
-        self.rawCandidates = nil
+        self.clearRawCandidates()
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
         self.composingText.stopComposition()
@@ -287,7 +300,7 @@ public final class SegmentsManager {
         self.conversionTask?.cancel()
         self.composingText.stopComposition()
         self.kanaKanjiConverter.stopComposition()
-        self.rawCandidates = nil
+        self.clearRawCandidates()
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
         self.shouldShowCandidateWindow = false
@@ -299,7 +312,7 @@ public final class SegmentsManager {
     @MainActor
     /// 日本語入力自体をやめる
     public func stopJapaneseInput() {
-        self.rawCandidates = nil
+        self.clearRawCandidates()
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
         self.commitUpdateLearningDataAsync()
@@ -494,7 +507,7 @@ public final class SegmentsManager {
         self.resetAdditionalCandidates()
         // 不要
         if composingText.isEmpty {
-            self.rawCandidates = nil
+            self.clearRawCandidates()
             self.kanaKanjiConverter.stopComposition()
             return
         }
@@ -525,7 +538,7 @@ public final class SegmentsManager {
                 requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
             )
         )
-        self.rawCandidates = result
+        self.setRawCandidates(result)
     }
 
     @MainActor public func update(requestRichCandidates: Bool) {
@@ -985,17 +998,39 @@ public final class SegmentsManager {
         case .none, .attachDiacritic:
             return MarkedText(text: [], selectionRange: .notFound)
         case .composing:
-            let text = if self.lastOperation == .delete {
+            let text: String
+            if self.lastOperation == .delete {
                 // 削除のあとは常にひらがなを示す
-                self.composingText.convertTarget
+                text = self.composingText.convertTarget
             } else if self.liveConversionEnabled,
                       self.composingText.convertTarget.count > 1,
                       let firstCandidate = self.rawCandidates?.mainResults.first {
-                // それ以外の場合、ライブ変換が有効なら
-                firstCandidate.text
+                let currentTarget = self.composingText.convertTarget
+                if currentTarget == self.rawCandidatesConvertTarget {
+                    // Fresh: rawCandidates は現在の入力に対して生成されたもの
+                    text = firstCandidate.text
+                } else if let staleTarget = self.rawCandidatesConvertTarget {
+                    // Stale: 末尾の未確定ローマ字を除去して確定済みかな部分で比較
+                    let settledStale = staleTarget.droppingTrailingRomanLetters()
+                    let settledCurrent = currentTarget.droppingTrailingRomanLetters()
+                    if !settledStale.isEmpty, settledCurrent.hasPrefix(settledStale) {
+                        // 確定済みかな部分に前方一致 → ハイブリッド表示
+                        // 候補テキストの末尾ローマ字も除去する（例: "会g" → "会"）
+                        let candidateBase = firstCandidate.text.droppingTrailingRomanLetters()
+                        let kanaSuffix = String(settledCurrent.dropFirst(settledStale.count))
+                        let trailingRoman = String(currentTarget.dropFirst(settledCurrent.count))
+                        text = candidateBase + kanaSuffix + trailingRoman
+                    } else {
+                        // 前方一致しない → ひらがなフォールバック
+                        text = currentTarget
+                    }
+                } else {
+                    // rawCandidatesConvertTarget が nil → ひらがなフォールバック
+                    text = currentTarget
+                }
             } else {
                 // それ以外
-                self.composingText.convertTarget
+                text = self.composingText.convertTarget
             }
             return MarkedText(text: [.init(content: text, focus: .none)], selectionRange: .notFound)
         case .previewing:
@@ -1055,5 +1090,16 @@ private extension ComposingText {
         var c = self
         c.prefixComplete(composingCount: composingCount)
         return c.isEmpty
+    }
+}
+
+private extension String {
+    /// 末尾の未確定ローマ字（ASCII英字）を除去した文字列を返す
+    func droppingTrailingRomanLetters() -> String {
+        var result = self
+        while let last = result.last, last.isASCII, last.isLetter {
+            result.removeLast()
+        }
+        return result
     }
 }
