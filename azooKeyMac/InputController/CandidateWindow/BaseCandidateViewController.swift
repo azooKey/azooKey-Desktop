@@ -101,12 +101,9 @@ class CandidateTableCellView: NSTableCellView {
 }
 
 class BaseCandidateViewController: NSViewController {
-    typealias CandidatePresentationContextResolver = (Candidate) -> CandidateDisplayContext
-
     internal var candidates: [CandidatePresentation] = []
     internal var tableView: NSTableView!
     internal var currentSelectedRow: Int = -1
-    internal var candidateDisplayContextResolver: CandidatePresentationContextResolver?
 
     override func loadView() {
         // 親ビュー（ZStackのような役割）
@@ -207,7 +204,7 @@ class BaseCandidateViewController: NSViewController {
     }
 
     internal func makeCandidatePresentation(_ candidate: Candidate) -> CandidatePresentation {
-        .init(candidate: candidate, displayContext: self.candidateDisplayContextResolver?(candidate) ?? .init())
+        .init(candidate: candidate, displayContext: .init())
     }
 
     internal func updateSelection(to row: Int) {
