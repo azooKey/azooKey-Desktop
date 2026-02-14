@@ -38,6 +38,16 @@ public final class SegmentsManager {
     private var lastOperation: Operation = .other
     private var shouldShowCandidateWindow = false
 
+    private struct AdditionalCandidatePresentation {
+        let candidate: Candidate
+        let presentationContext: CandidatePresentationContext
+    }
+
+    private var isShowingAdditionalCandidates = false
+    private var additionalCandidates: [AdditionalCandidatePresentation] = []
+    private var showingAdditionalCandidateCount = 0
+    private var isFixingAdditionalCandidateTop = false
+
     private var shouldShowDebugCandidateWindow: Bool = false
     private var debugCandidates: [Candidate] = []
 
@@ -49,8 +59,28 @@ public final class SegmentsManager {
         public var appendText: String
     }
 
+    public struct CandidatePresentationContext: Sendable {
+        public var annotationText: String?
+        public var extraValues: [String: String]
+
+        public init(annotationText: String? = nil, extraValues: [String: String] = [:]) {
+            self.annotationText = annotationText
+            self.extraValues = extraValues
+        }
+    }
+
     private func candidateReading(_ candidate: Candidate) -> String {
         candidate.data.map(\.ruby).joined()
+    }
+
+    public func makeCandidatePresentationContexts(_ candidates: [Candidate]) -> [CandidatePresentationContext] {
+        let additionalContexts = self.additionalCandidateContextsForSelectionIndex
+        return candidates.indices.map { index in
+            if index < additionalContexts.count {
+                return additionalContexts[index]
+            }
+            return .init()
+        }
     }
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
@@ -172,6 +202,7 @@ public final class SegmentsManager {
         self.composingText.stopComposition()
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
+        self.resetAdditionalCandidates()
     }
 
     @MainActor
@@ -184,6 +215,7 @@ public final class SegmentsManager {
         self.lastOperation = .other
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
+        self.resetAdditionalCandidates()
     }
 
     @MainActor
@@ -195,6 +227,7 @@ public final class SegmentsManager {
         self.kanaKanjiConverter.commitUpdateLearningData()
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
+        self.resetAdditionalCandidates()
     }
 
     /// 変換キーを押したタイミングで入力の区切りを示す
@@ -284,24 +317,58 @@ public final class SegmentsManager {
     }
 
     private var candidates: [Candidate]? {
-        if let rawCandidates {
-            if !self.didExperienceSegmentEdition {
-                if rawCandidates.firstClauseResults.contains(where: { self.composingText.isWholeComposingText(composingCount: $0.composingCount) }) {
-                    // firstClauseCandidateがmainResultsと同じサイズの場合は、何もしない方が良い
-                    return rawCandidates.mainResults
-                } else {
-                    // 変換範囲がエディットされていない場合
-                    let seenAsFirstClauseResults = rawCandidates.firstClauseResults.mapSet(transform: \.text)
-                    return rawCandidates.firstClauseResults + rawCandidates.mainResults.filter {
-                        !seenAsFirstClauseResults.contains($0.text)
-                    }
-                }
-            } else {
-                return rawCandidates.mainResults
-            }
-        } else {
+        guard let rawCandidates = self.rawCandidatesList else {
+            return self.isShowingAdditionalCandidates
+                ? self.additionalCandidatesForSelectionIndex
+                : nil
+        }
+        return self.isShowingAdditionalCandidates
+            ? self.additionalCandidatesForSelectionIndex + rawCandidates
+            : rawCandidates
+    }
+
+    private var rawCandidatesList: [Candidate]? {
+        guard let rawCandidates else {
             return nil
         }
+        if !self.didExperienceSegmentEdition {
+            if rawCandidates.firstClauseResults.contains(where: { self.composingText.isWholeComposingText(composingCount: $0.composingCount) }) {
+                // firstClauseCandidateがmainResultsと同じサイズの場合は、何もしない方が良い
+                return rawCandidates.mainResults
+            } else {
+                // 変換範囲がエディットされていない場合
+                let seenAsFirstClauseResults = rawCandidates.firstClauseResults.mapSet(transform: \.text)
+                return rawCandidates.firstClauseResults + rawCandidates.mainResults.filter {
+                    !seenAsFirstClauseResults.contains($0.text)
+                }
+            }
+        } else {
+            return rawCandidates.mainResults
+        }
+    }
+
+    private var candidateOffsetByAdditionalCandidates: Int {
+        self.isShowingAdditionalCandidates ? self.showingAdditionalCandidateCount : 0
+    }
+
+    private var additionalCandidatesForSelectionIndex: [Candidate] {
+        guard self.isShowingAdditionalCandidates else {
+            return []
+        }
+        guard self.candidateOffsetByAdditionalCandidates > 0 else {
+            return []
+        }
+        return Array(self.additionalCandidates.suffix(self.candidateOffsetByAdditionalCandidates)).map(\.candidate)
+    }
+
+    private var additionalCandidateContextsForSelectionIndex: [CandidatePresentationContext] {
+        guard self.isShowingAdditionalCandidates else {
+            return []
+        }
+        guard self.candidateOffsetByAdditionalCandidates > 0 else {
+            return []
+        }
+        return Array(self.additionalCandidates.suffix(self.candidateOffsetByAdditionalCandidates)).map(\.presentationContext)
     }
 
     public var convertTarget: String {
@@ -336,6 +403,7 @@ public final class SegmentsManager {
     /// - Note:
     ///   This function is executed on the `@MainActor` to ensure UI consistency.
     @MainActor private func updateRawCandidate(requestRichCandidates: Bool = false, forcedLeftSideContext: String? = nil) {
+        self.resetAdditionalCandidates()
         // 不要
         if composingText.isEmpty {
             self.rawCandidates = nil
@@ -430,15 +498,46 @@ public final class SegmentsManager {
         self.shouldShowDebugCandidateWindow = enabled
     }
 
+    @MainActor
     public func requestSelectingNextCandidate() {
+        self.isFixingAdditionalCandidateTop = false
         self.selectionIndex = (self.selectionIndex ?? -1) + 1
     }
 
+    @MainActor
     public func requestSelectingPrevCandidate() {
-        self.selectionIndex = max(0, (self.selectionIndex ?? 1) - 1)
+        let selectionIndex = self.selectionIndex ?? 0
+
+        if self.isFixingAdditionalCandidateTop && self.isShowingAdditionalCandidates {
+            if self.candidateOffsetByAdditionalCandidates < self.additionalCandidates.count {
+                self.showingAdditionalCandidateCount += 1
+            }
+            self.selectionIndex = 0
+            return
+        }
+
+        if selectionIndex == 0, !self.isShowingAdditionalCandidates {
+            self.showAdditionalCandidatesIfNeeded()
+            let additionalCount = self.candidateOffsetByAdditionalCandidates
+            if additionalCount > 0 {
+                self.isFixingAdditionalCandidateTop = true
+                self.selectionIndex = 0
+                return
+            }
+        }
+        if selectionIndex == 0, self.isShowingAdditionalCandidates, self.candidateOffsetByAdditionalCandidates < self.additionalCandidates.count {
+            self.isFixingAdditionalCandidateTop = true
+            self.showingAdditionalCandidateCount += 1
+            self.selectionIndex = 0
+            return
+        }
+        self.selectionIndex = max(0, selectionIndex - 1)
     }
 
     public func requestSelectingRow(_ index: Int) {
+        if self.isFixingAdditionalCandidateTop, index != 0 {
+            self.isFixingAdditionalCandidateTop = false
+        }
         self.selectionIndex = max(0, index)
     }
 
@@ -452,6 +551,8 @@ public final class SegmentsManager {
 
     public func requestResettingSelection() {
         self.selectionIndex = nil
+        self.isFixingAdditionalCandidateTop = false
+        self.resetAdditionalCandidates()
     }
 
     public var selectedCandidate: Candidate? {
@@ -562,6 +663,49 @@ public final class SegmentsManager {
             )]
         )
         return candidate
+    }
+
+    @MainActor
+    private func createAdditionalCandidates() -> [AdditionalCandidatePresentation] {
+        let candidates: [(candidate: Candidate, annotationText: String?)] = [
+            (self.getModifiedRomanCandidate { $0 }, "英数"),
+            (self.getModifiedRomanCandidate { $0.applyingTransform(.fullwidthToHalfwidth, reverse: true) ?? $0 }, "全角英数"),
+            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toKatakana().applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? $0 }, "半角カナ"),
+            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toKatakana() }, "カタカナ"),
+            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toHiragana() }, "ひらがな")
+        ]
+        return candidates.map {
+            .init(
+                candidate: $0.candidate,
+                presentationContext: .init(annotationText: $0.annotationText)
+            )
+        }
+    }
+
+    @MainActor
+    private func showAdditionalCandidatesIfNeeded() {
+        if self.isShowingAdditionalCandidates {
+            return
+        }
+        guard !self.convertTarget.isEmpty else {
+            self.resetAdditionalCandidates()
+            return
+        }
+        let candidates = self.createAdditionalCandidates()
+        guard !candidates.isEmpty else {
+            self.resetAdditionalCandidates()
+            return
+        }
+        self.additionalCandidates = candidates
+        self.isShowingAdditionalCandidates = true
+        self.showingAdditionalCandidateCount = 1
+    }
+
+    private func resetAdditionalCandidates() {
+        self.isShowingAdditionalCandidates = false
+        self.additionalCandidates = []
+        self.showingAdditionalCandidateCount = 0
+        self.isFixingAdditionalCandidateTop = false
     }
 
     @MainActor

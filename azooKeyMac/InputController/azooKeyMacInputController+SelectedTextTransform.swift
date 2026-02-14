@@ -185,7 +185,7 @@ extension azooKeyMacInputController {
             self.segmentsManager.appendDebugMessage("AI translation ignored: prompt window already visible")
             return true
         }
-        guard let client = self.client() else {
+        guard self.client() != nil else {
             self.segmentsManager.appendDebugMessage("AI translation ignored: No client available")
             return false
         }
@@ -440,8 +440,9 @@ extension azooKeyMacInputController {
             }
         }
 
+        let backendName = backend.rawValue
         await MainActor.run {
-            self.segmentsManager.appendDebugMessage("getTransformationPreview: Sending preview request (\(backend.rawValue))")
+            self.segmentsManager.appendDebugMessage("getTransformationPreview: Sending preview request (\(backendName))")
         }
 
         let modelName = Config.OpenAiModelName().value

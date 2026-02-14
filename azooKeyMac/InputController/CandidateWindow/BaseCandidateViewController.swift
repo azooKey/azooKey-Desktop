@@ -2,6 +2,16 @@ import Cocoa
 import Core
 import KanaKanjiConverterModule
 
+struct CandidateDisplayContext {
+    var annotationText: String?
+    var extraValues: [String: String] = [:]
+}
+
+struct CandidatePresentation {
+    let candidate: Candidate
+    var displayContext: CandidateDisplayContext
+}
+
 class NonClickableTableView: NSTableView {
     override func rightMouseDown(with event: NSEvent) {}
     override func mouseDown(with event: NSEvent) {}
@@ -10,18 +20,50 @@ class NonClickableTableView: NSTableView {
 
 class CandidateTableCellView: NSTableCellView {
     let candidateTextField: NSTextField
+    let candidateAnnotationTextField: NSTextField
+    private lazy var candidateTextFieldLeadingConstraint: NSLayoutConstraint = {
+        self.candidateTextField.leadingAnchor.constraint(equalTo: self.leadingAnchor)
+    }()
+    private lazy var candidateTextFieldTrailingToAnnotationConstraint: NSLayoutConstraint = {
+        self.candidateTextField.trailingAnchor.constraint(lessThanOrEqualTo: self.candidateAnnotationTextField.leadingAnchor, constant: -8)
+    }()
+    private lazy var candidateTextFieldTrailingToContainerConstraint: NSLayoutConstraint = {
+        let constraint = self.candidateTextField.trailingAnchor.constraint(equalTo: self.trailingAnchor)
+        return constraint
+    }()
+    private lazy var candidateAnnotationTextFieldLeadingConstraint: NSLayoutConstraint = {
+        self.candidateAnnotationTextField.leadingAnchor.constraint(greaterThanOrEqualTo: self.candidateTextField.trailingAnchor, constant: 8)
+    }()
+    private lazy var candidateAnnotationTextFieldTrailingConstraint: NSLayoutConstraint = {
+        self.candidateAnnotationTextField.trailingAnchor.constraint(equalTo: self.trailingAnchor)
+    }()
 
     override init(frame frameRect: NSRect) {
         self.candidateTextField = NSTextField(labelWithString: "")
         self.candidateTextField.font = NSFont.systemFont(ofSize: 18)
+        self.candidateAnnotationTextField = NSTextField(labelWithString: "")
+        self.candidateAnnotationTextField.font = NSFont.systemFont(ofSize: 12)
+        self.candidateAnnotationTextField.textColor = .systemGray
+        self.candidateAnnotationTextField.alignment = .right
         super.init(frame: frameRect)
         self.addSubview(self.candidateTextField)
+        self.addSubview(self.candidateAnnotationTextField)
 
         self.candidateTextField.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            self.candidateTextField.leadingAnchor.constraint(equalTo: self.leadingAnchor),
-            self.candidateTextField.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            self.candidateTextFieldLeadingConstraint,
+            self.candidateTextFieldTrailingToContainerConstraint,
             self.candidateTextField.centerYAnchor.constraint(equalTo: self.centerYAnchor)
+        ])
+        self.candidateTextField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        self.candidateTextField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        self.candidateAnnotationTextField.translatesAutoresizingMaskIntoConstraints = false
+        self.candidateAnnotationTextField.setContentHuggingPriority(.required, for: .horizontal)
+        self.candidateAnnotationTextField.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        NSLayoutConstraint.activate([
+            self.candidateAnnotationTextField.centerYAnchor.constraint(equalTo: self.centerYAnchor)
         ])
 
         // 基本設定
@@ -29,6 +71,13 @@ class CandidateTableCellView: NSTableCellView {
         self.candidateTextField.isBordered = false
         self.candidateTextField.drawsBackground = false
         self.candidateTextField.backgroundColor = .clear
+
+        self.candidateAnnotationTextField.isEditable = false
+        self.candidateAnnotationTextField.isBordered = false
+        self.candidateAnnotationTextField.drawsBackground = false
+        self.candidateAnnotationTextField.backgroundColor = .clear
+
+        self.showCandidateAnnotationTextField(false)
     }
 
     required init?(coder: NSCoder) {
@@ -38,14 +87,26 @@ class CandidateTableCellView: NSTableCellView {
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             candidateTextField.textColor = backgroundStyle == .emphasized ? .white : NSAppearance.currentDrawing().name == .aqua ? .init(white: 0.3, alpha: 1.0) : .textColor
+            candidateAnnotationTextField.textColor = .systemGray
         }
+    }
+
+    func showCandidateAnnotationTextField(_ show: Bool) {
+        self.candidateTextFieldTrailingToContainerConstraint.isActive = !show
+        self.candidateTextFieldTrailingToAnnotationConstraint.isActive = show
+        self.candidateAnnotationTextFieldLeadingConstraint.isActive = show
+        self.candidateAnnotationTextFieldTrailingConstraint.isActive = show
+        self.candidateAnnotationTextField.isHidden = !show
     }
 }
 
 class BaseCandidateViewController: NSViewController {
-    internal var candidates: [Candidate] = []
+    typealias CandidatePresentationContextResolver = (Candidate) -> CandidateDisplayContext
+
+    internal var candidates: [CandidatePresentation] = []
     internal var tableView: NSTableView!
     internal var currentSelectedRow: Int = -1
+    internal var candidateDisplayContextResolver: CandidatePresentationContextResolver?
 
     override func loadView() {
         // 親ビュー（ZStackのような役割）
@@ -131,12 +192,22 @@ class BaseCandidateViewController: NSViewController {
         window.isOpaque = false
     }
 
-    func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint) {
-        self.candidates = candidates
+    func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidateDisplayContext]? = nil) {
+        if let candidateDisplayContexts, candidateDisplayContexts.count == candidates.count {
+            self.candidates = zip(candidates, candidateDisplayContexts).map { candidate, context in
+                CandidatePresentation(candidate: candidate, displayContext: context)
+            }
+        } else {
+            self.candidates = candidates.map(self.makeCandidatePresentation)
+        }
         self.currentSelectedRow = selectionIndex ?? -1
         self.tableView.reloadData()
         self.resizeWindowToFitContent(cursorLocation: cursorLocation)
         self.updateSelection(to: selectionIndex ?? -1)
+    }
+
+    internal func makeCandidatePresentation(_ candidate: Candidate) -> CandidatePresentation {
+        .init(candidate: candidate, displayContext: self.candidateDisplayContextResolver?(candidate) ?? .init())
     }
 
     internal func updateSelection(to row: Int) {
@@ -191,7 +262,7 @@ class BaseCandidateViewController: NSViewController {
         let rowHeight = self.tableView.rowHeight
         let tableViewHeight = CGFloat(self.numberOfVisibleRows) * rowHeight
 
-        let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.text })
+        let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.candidate.text })
         let windowWidth = self.getWindowWidth(maxContentWidth: maxWidth)
         let newWindowFrame = WindowPositioning.frameNearCursor(
             currentFrame: .init(window.frame),
@@ -208,7 +279,7 @@ class BaseCandidateViewController: NSViewController {
         guard currentSelectedRow >= 0 && currentSelectedRow < candidates.count else {
             return nil
         }
-        return candidates[currentSelectedRow]
+        return candidates[currentSelectedRow].candidate
     }
 
     func selectNextCandidate() {
@@ -228,7 +299,9 @@ class BaseCandidateViewController: NSViewController {
     }
 
     internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        cell.candidateTextField.stringValue = candidates[row].text
+        cell.candidateTextField.stringValue = candidates[row].candidate.text
+        cell.showCandidateAnnotationTextField(false)
+        cell.candidateAnnotationTextField.stringValue = ""
     }
 }
 

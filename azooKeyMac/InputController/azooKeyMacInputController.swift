@@ -511,13 +511,29 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = true
-            self.candidatesViewController.updateCandidates(candidates, selectionIndex: selectionIndex, cursorLocation: rect.origin)
+            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates).map {
+                CandidateDisplayContext(annotationText: $0.annotationText, extraValues: $0.extraValues)
+            }
+            self.candidatesViewController.updateCandidates(
+                candidates,
+                selectionIndex: selectionIndex,
+                cursorLocation: rect.origin,
+                candidateDisplayContexts: presentationContexts
+            )
             self.candidatesWindow.orderFront(nil)
         case .composing(let candidates, let selectionIndex):
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = false
-            self.candidatesViewController.updateCandidates(candidates, selectionIndex: selectionIndex, cursorLocation: rect.origin)
+            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates).map {
+                CandidateDisplayContext(annotationText: $0.annotationText, extraValues: $0.extraValues)
+            }
+            self.candidatesViewController.updateCandidates(
+                candidates,
+                selectionIndex: selectionIndex,
+                cursorLocation: rect.origin,
+                candidateDisplayContexts: presentationContexts
+            )
             self.candidatesWindow.orderFront(nil)
         case .hidden:
             self.candidatesWindow.setIsVisible(false)

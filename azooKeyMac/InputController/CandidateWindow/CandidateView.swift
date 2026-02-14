@@ -11,9 +11,14 @@ class CandidatesViewController: BaseCandidateViewController {
     private var showedRows: ClosedRange = 0...8
     var showCandidateIndex = false
 
-    override func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint) {
+    override func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidateDisplayContext]? = nil) {
         self.showedRows = selectionIndex == nil ? 0...8 : self.showedRows
-        super.updateCandidates(candidates, selectionIndex: selectionIndex, cursorLocation: cursorLocation)
+        super.updateCandidates(
+            candidates,
+            selectionIndex: selectionIndex,
+            cursorLocation: cursorLocation,
+            candidateDisplayContexts: candidateDisplayContexts
+        )
     }
 
     override internal func updateSelectionCallback(_ row: Int) {
@@ -29,18 +34,20 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
+        let candidate = self.candidates[row].candidate
+        let annotationText = self.candidates[row].displayContext.annotationText
         let isWithinShowedRows = self.showedRows.contains(row)
         let displayIndex = row - self.showedRows.lowerBound + 1 // showedRowsの下限からの相対的な位置
         let displayText: String
 
         if isWithinShowedRows && self.showCandidateIndex {
             if displayIndex > 9 {
-                displayText = " " + self.candidates[row].text // 行番号が10以上の場合、インデントを調整
+                displayText = " " + candidate.text // 行番号が10以上の場合、インデントを調整
             } else {
-                displayText = "\(displayIndex). " + self.candidates[row].text
+                displayText = "\(displayIndex). " + candidate.text
             }
         } else {
-            displayText = self.candidates[row].text // showedRowsの範囲外では番号を付けない
+            displayText = candidate.text // showedRowsの範囲外では番号を付けない
         }
 
         // 数字部分と候補部分を別々に設定
@@ -56,6 +63,21 @@ class CandidatesViewController: BaseCandidateViewController {
         }
 
         cell.candidateTextField.attributedStringValue = attributedString
+
+        if let annotationText {
+            let annotationString = NSAttributedString(
+                string: annotationText,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12),
+                    .foregroundColor: currentSelectedRow == row ? NSColor.white : NSColor.systemGray
+                ]
+            )
+            cell.showCandidateAnnotationTextField(true)
+            cell.candidateAnnotationTextField.attributedStringValue = annotationString
+        } else {
+            cell.showCandidateAnnotationTextField(false)
+            cell.candidateAnnotationTextField.stringValue = ""
+        }
     }
 
     func getNumberCandidate(num: Int) -> Int {
@@ -73,10 +95,11 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
+        let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
         if self.showCandidateIndex {
-            maxContentWidth + 48
+            return maxContentWidth + 48 + (hasAnnotation ? 56 : 0)
         } else {
-            maxContentWidth + 20
+            return maxContentWidth + 20 + (hasAnnotation ? 56 : 0)
         }
     }
 }
@@ -91,7 +114,7 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        let candidateText = candidates[row].text
+        let candidateText = candidates[row].candidate.text
         let attributedString = NSMutableAttributedString()
 
         let isSelected = currentSelectedRow == row
