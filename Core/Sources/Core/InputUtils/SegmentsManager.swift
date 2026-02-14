@@ -59,16 +59,6 @@ public final class SegmentsManager {
         public var appendText: String
     }
 
-    public struct CandidatePresentationContext: Sendable {
-        public var annotationText: String?
-        public var extraValues: [String: String]
-
-        public init(annotationText: String? = nil, extraValues: [String: String] = [:]) {
-            self.annotationText = annotationText
-            self.extraValues = extraValues
-        }
-    }
-
     private func candidateReading(_ candidate: Candidate) -> String {
         candidate.data.map(\.ruby).joined()
     }

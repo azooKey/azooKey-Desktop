@@ -511,9 +511,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = true
-            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates).map {
-                CandidateDisplayContext(annotationText: $0.annotationText, extraValues: $0.extraValues)
-            }
+            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates)
             self.candidatesViewController.updateCandidates(
                 candidates,
                 selectionIndex: selectionIndex,
@@ -525,9 +523,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = false
-            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates).map {
-                CandidateDisplayContext(annotationText: $0.annotationText, extraValues: $0.extraValues)
-            }
+            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates)
             self.candidatesViewController.updateCandidates(
                 candidates,
                 selectionIndex: selectionIndex,

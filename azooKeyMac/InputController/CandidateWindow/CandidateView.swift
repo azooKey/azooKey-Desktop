@@ -1,4 +1,5 @@
 import Cocoa
+import Core
 import KanaKanjiConverterModule
 
 protocol CandidatesViewControllerDelegate: AnyObject {
@@ -11,7 +12,7 @@ class CandidatesViewController: BaseCandidateViewController {
     private var showedRows: ClosedRange = 0...8
     var showCandidateIndex = false
 
-    override func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidateDisplayContext]? = nil) {
+    override func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidatePresentationContext]? = nil) {
         self.showedRows = selectionIndex == nil ? 0...8 : self.showedRows
         super.updateCandidates(
             candidates,

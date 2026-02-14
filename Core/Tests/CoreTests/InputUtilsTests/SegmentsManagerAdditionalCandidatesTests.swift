@@ -1,10 +1,11 @@
 import Core
 import Foundation
+import KanaKanjiConverterModuleWithDefaultDictionary
 import Testing
 
 private func makeSegmentsManager() -> SegmentsManager {
     SegmentsManager(
-        kanaKanjiConverter: .init(),
+        kanaKanjiConverter: .withDefaultDictionary(),
         applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
         containerURL: nil
     )

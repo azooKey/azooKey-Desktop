@@ -2,14 +2,9 @@ import Cocoa
 import Core
 import KanaKanjiConverterModule
 
-struct CandidateDisplayContext {
-    var annotationText: String?
-    var extraValues: [String: String] = [:]
-}
-
 struct CandidatePresentation {
     let candidate: Candidate
-    var displayContext: CandidateDisplayContext
+    var displayContext: CandidatePresentationContext
 }
 
 class NonClickableTableView: NSTableView {
@@ -189,7 +184,7 @@ class BaseCandidateViewController: NSViewController {
         window.isOpaque = false
     }
 
-    func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidateDisplayContext]? = nil) {
+    func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidatePresentationContext]? = nil) {
         if let candidateDisplayContexts, candidateDisplayContexts.count == candidates.count {
             self.candidates = zip(candidates, candidateDisplayContexts).map { candidate, context in
                 CandidatePresentation(candidate: candidate, displayContext: context)
