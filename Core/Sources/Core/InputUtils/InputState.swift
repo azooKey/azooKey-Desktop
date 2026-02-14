@@ -27,6 +27,21 @@ public enum InputState: Sendable, Hashable {
             switch userAction {
             case .input, .deadKey, .backspace:
                 break
+            case .enter where self == .composing:
+                break
+            case .tab where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                break
+            case .navigation(let direction) where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                switch direction {
+                case .up, .down, .left, .right:
+                    return (.consume, .fallthrough)
+                }
+            case .escape where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
+            case .英数 where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
+            case .かな where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
             default:
                 return (.fallthrough, .fallthrough)
             }
@@ -117,7 +132,11 @@ public enum InputState: Sendable, Hashable {
                     return (.removeLastMarkedText, .basedOnBackspace(ifIsEmpty: .none, ifIsNotEmpty: .composing))
                 }
             case .enter:
-                return (.commitMarkedText, .transition(.none))
+                if event.modifierFlags.contains(.option) {
+                    return (.consume, .fallthrough)
+                } else {
+                    return (.commitMarkedText, .transition(.none))
+                }
             case .escape:
                 return (.stopComposition, .transition(.none))
             case .space:
@@ -142,7 +161,11 @@ public enum InputState: Sendable, Hashable {
             case .forget:
                 return (.consume, .fallthrough)
             case .tab:
-                return (.acceptPredictionCandidate, .fallthrough)
+                if event.modifierFlags.contains(.option) {
+                    return (.consume, .fallthrough)
+                } else {
+                    return (.acceptPredictionCandidate, .fallthrough)
+                }
             case .英数:
                 return (.selectInputLanguage(.english), .fallthrough)
             case .かな:
