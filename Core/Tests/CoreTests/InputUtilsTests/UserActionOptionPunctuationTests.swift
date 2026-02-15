@@ -3,21 +3,11 @@ import Foundation
 import KanaKanjiConverterModule
 import Testing
 
-private func inputPiecesToString(_ inputPieces: [InputPiece]) -> String {
-    String(inputPieces.compactMap {
-        switch $0 {
-        case .character(let c): c
-        case .key(intention: let cint, input: let cinp, modifiers: _): cint ?? cinp
-        case .compositionSeparator: nil
-        }
-    })
-}
-
 private func inputString(from action: UserAction) -> String? {
     guard case .input(let pieces) = action else {
         return nil
     }
-    return inputPiecesToString(pieces)
+    return pieces.inputString(preferIntention: true)
 }
 
 private func makeEvent(

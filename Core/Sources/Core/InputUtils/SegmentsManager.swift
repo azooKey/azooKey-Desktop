@@ -619,19 +619,21 @@ public final class SegmentsManager {
     }
 
     @MainActor
-    public func getModifiedRomanCandidate(_ transform: (String) -> String) -> Candidate {
-        let inputString = String(self.composingText.input.compactMap {
-            switch $0.piece {
-            case .compositionSeparator: nil
-            case .character(let c): c
-            case .key(intention: _, input: let input, modifiers: _): input
-            }
-        })
+    public func getModifiedRomanCandidate(inputState: InputState = .composing, _ transform: (String) -> String) -> Candidate {
+        let targetComposingText: ComposingText
+        switch inputState {
+        case .selecting:
+            targetComposingText = self.composingText.prefixToCursorPosition()
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput:
+            targetComposingText = self.composingText
+        }
+        let inputString = targetComposingText.input.map(\.piece).inputString(preferIntention: false)
+        let composingCount: ComposingCount = .inputCount(targetComposingText.input.count)
         let candidateText = transform(inputString)
         let candidate = Candidate(
             text: candidateText,
             value: 0,
-            composingCount: .inputCount(composingText.input.count),
+            composingCount: composingCount,
             lastMid: 0,
             data: [DicdataElement(
                 word: candidateText,
@@ -647,11 +649,11 @@ public final class SegmentsManager {
     @MainActor
     private func createAdditionalCandidates() -> [CandidatePresentation] {
         let candidates: [(candidate: Candidate, annotationText: String?)] = [
-            (self.getModifiedRomanCandidate { $0 }, "英数"),
-            (self.getModifiedRomanCandidate { $0.applyingTransform(.fullwidthToHalfwidth, reverse: true) ?? $0 }, "全角英数"),
-            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toKatakana().applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? $0 }, "半角カナ"),
-            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toKatakana() }, "カタカナ"),
-            (self.getModifiedRubyCandidate(inputState: .composing) { $0.toHiragana() }, "ひらがな")
+            (self.getModifiedRomanCandidate(inputState: .selecting) { $0 }, "英数"),
+            (self.getModifiedRomanCandidate(inputState: .selecting) { $0.applyingTransform(.fullwidthToHalfwidth, reverse: true) ?? $0 }, "全角英数"),
+            (self.getModifiedRubyCandidate(inputState: .selecting) { $0.toKatakana().applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? $0 }, "半角カナ"),
+            (self.getModifiedRubyCandidate(inputState: .selecting) { $0.toKatakana() }, "カタカナ"),
+            (self.getModifiedRubyCandidate(inputState: .selecting) { $0.toHiragana() }, "ひらがな")
         ]
         return candidates.map {
             .init(

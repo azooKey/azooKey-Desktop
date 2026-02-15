@@ -12,6 +12,37 @@ private func makeSegmentsManager() -> SegmentsManager {
 }
 
 @MainActor
+private func makeEditedRangeScenario() -> (manager: SegmentsManager, selectedRuby: String) {
+    let manager = makeSegmentsManager()
+    manager.insertAtCursorPosition("hennkann", inputStyle: .roman2kana)
+    manager.editSegment(count: -1)
+    manager.requestSetCandidateWindowState(visible: true)
+    _ = manager.getCurrentCandidateWindow(inputState: .selecting)
+
+    let selectedRuby = manager.selectedCandidate!.data.map(\.ruby).joined()
+    return (manager, selectedRuby)
+}
+
+@MainActor
+@Test func testAdditionalHiraganaCandidateUsesEditedSelectionRuby() async throws {
+    let (manager, selectedRuby) = makeEditedRangeScenario()
+    manager.requestSelectingPrevCandidate()
+
+    switch manager.getCurrentCandidateWindow(inputState: .selecting) {
+    case .selecting(let candidates, _):
+        let presentations = manager.makeCandidatePresentations(candidates)
+        guard let hiraganaPresentation = presentations.first(where: { $0.displayContext.annotationText == "ひらがな" }) else {
+            Issue.record("Expected additional hiragana candidate.")
+            return
+        }
+        let hiraganaRuby = hiraganaPresentation.candidate.data.map(\.ruby).joined()
+        #expect(hiraganaRuby == selectedRuby)
+    case .hidden, .composing:
+        Issue.record("Expected selecting state while showing additional candidates.")
+    }
+}
+
+@MainActor
 @Test func testAdditionalCandidatesExpandInSuffixOrder() async throws {
     let manager = makeSegmentsManager()
     manager.insertAtCursorPosition("abc", inputStyle: .direct)

@@ -55,7 +55,7 @@ public enum InputState: Sendable, Hashable {
                     return (.appendPieceToMarkedText(string), .transition(.composing))
                 case .english:
                     // 連結する
-                    return (.insertWithoutMarkedText(inputPiecesToString(string)), .fallthrough)
+                    return (.insertWithoutMarkedText(string.inputString(preferIntention: true)), .fallthrough)
                 }
             case .deadKey(let diacritic):
                 if inputLanguage == .english {
@@ -94,7 +94,7 @@ public enum InputState: Sendable, Hashable {
         case .attachDiacritic(let diacritic):
             switch userAction {
             case .input(let string):
-                let string = self.inputPiecesToString(string)
+                let string = string.inputString(preferIntention: true)
                 if let result = DiacriticAttacher.attach(deadKeyChar: diacritic, with: string, shift: event.modifierFlags.contains(.shift)) {
                     return (.insertWithoutMarkedText(result), .transition(.none))
                 } else {
@@ -252,7 +252,7 @@ public enum InputState: Sendable, Hashable {
         case .selecting:
             switch userAction {
             case .input(let string):
-                let s = self.inputPiecesToString(string)
+                let s = string.inputString(preferIntention: true)
                 if s == "d" && enableDebugWindow {
                     return (.enableDebugWindow, .fallthrough)
                 } else if s == "D" && enableDebugWindow {
@@ -369,7 +369,7 @@ public enum InputState: Sendable, Hashable {
         case .unicodeInput(let codePoint):
             switch userAction {
             case .input(let pieces):
-                let input = inputPiecesToString(pieces).lowercased()
+                let input = pieces.inputString(preferIntention: true).lowercased()
                 // 16進数のみ受け付ける
                 let hexChars = CharacterSet(charactersIn: "0123456789abcdef")
                 let filteredInput = input.unicodeScalars.filter { hexChars.contains($0) }.map { String($0) }.joined()
@@ -400,15 +400,5 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             }
         }
-    }
-
-    private func inputPiecesToString(_ inputPieces: [InputPiece]) -> String {
-        String(inputPieces.compactMap {
-            switch $0 {
-            case .character(let c): c
-            case .key(intention: let cint, input: let cinp, modifiers: _): cint ?? cinp
-            case .compositionSeparator: nil
-            }
-        })
     }
 }
