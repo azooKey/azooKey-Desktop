@@ -5,17 +5,30 @@ public final class SegmentsManager {
     public init(
         kanaKanjiConverter: KanaKanjiConverter,
         applicationDirectoryURL: URL,
-        containerURL: URL?
+        containerURL: URL?,
+        context: Context = Context()
     ) {
         self.kanaKanjiConverter = kanaKanjiConverter
         self.applicationDirectoryURL = applicationDirectoryURL
         self.containerURL = containerURL
+        self.context = context
+    }
+
+    /// テストなどの設定注入のための型。外部には設定を露出させない。
+    public struct Context {
+        public init() {}
+        init(useZenzai: Bool) {
+            self.useZenzai = useZenzai
+        }
+
+        var useZenzai: Bool = true
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
     private var kanaKanjiConverter: KanaKanjiConverter
     private let applicationDirectoryURL: URL
     private let containerURL: URL?
+    private let context: Context
 
     private var composingText: ComposingText = ComposingText()
 
@@ -121,7 +134,10 @@ public final class SegmentsManager {
     }
 
     private func zenzaiMode(leftSideContext: String?, requestRichCandidates: Bool) -> ConvertRequestOptions.ZenzaiMode {
-        .on(
+        if !self.context.useZenzai {
+            return .off
+        }
+        return .on(
             weight: Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/ggml-model-Q5_K_M.gguf", isDirectory: false),
             inferenceLimit: Config.ZenzaiInferenceLimit().value,
             requestRichCandidates: requestRichCandidates,
