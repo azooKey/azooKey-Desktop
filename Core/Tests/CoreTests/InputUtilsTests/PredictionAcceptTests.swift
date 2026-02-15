@@ -5,7 +5,7 @@ import Testing
 
 /// 予測変換候補の確定処理のテスト
 /// acceptPredictionCandidate相当のロジックをテストする
-@Suite("Prediction Accept Tests")
+@Suite("Prediction Accept Tests", .serialized)
 struct PredictionAcceptTests {
 
     // MARK: - Setup / Teardown
@@ -69,6 +69,9 @@ struct PredictionAcceptTests {
 
         // 「・」を入力（中黒）
         manager.insertAtCursorPosition("・", inputStyle: .direct)
+
+        // 並列テストの UserDefaults 競合を防ぐため、検索前に設定を再確認
+        UserDefaults.standard.set(true, forKey: Config.DebugPredictiveTyping.key)
 
         // 予測候補を取得
         let predictions = manager.requestPredictionCandidates()
@@ -196,6 +199,9 @@ struct PredictionAcceptTests {
 
         let currentTarget = manager.convertTarget
         #expect(currentTarget == "・", "入力後のconvertTargetは「・」であるべき")
+
+        // 並列テストの UserDefaults 競合を防ぐため、検索前に設定を再確認
+        UserDefaults.standard.set(true, forKey: Config.DebugPredictiveTyping.key)
 
         // 予測候補を取得
         let predictions = manager.requestPredictionCandidates()

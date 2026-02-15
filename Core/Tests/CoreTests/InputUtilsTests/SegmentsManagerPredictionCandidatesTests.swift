@@ -4,7 +4,7 @@ import KanaKanjiConverterModuleWithDefaultDictionary
 import Testing
 
 /// SegmentsManagerのrequestPredictionCandidatesのテスト
-@Suite("SegmentsManager Prediction Candidates Tests")
+@Suite("SegmentsManager Prediction Candidates Tests", .serialized)
 struct SegmentsManagerPredictionCandidatesTests {
 
     // MARK: - Setup / Teardown
@@ -107,6 +107,9 @@ struct SegmentsManagerPredictionCandidatesTests {
         let manager = makeSegmentsManager()
         // 「azo」と入力（生ローマ字）
         manager.insertAtCursorPosition("azo", inputStyle: .roman2kana)
+
+        // 並列テストの UserDefaults 競合を防ぐため、検索前に設定を再確認
+        UserDefaults.standard.set(true, forKey: Config.DebugPredictiveTyping.key)
 
         let candidates = manager.requestPredictionCandidates()
         // 英字読みの辞書エントリが生ローマ字入力でマッチすることを期待

@@ -884,10 +884,6 @@ public final class SegmentsManager {
         }
         matchTarget = matchTarget.toHiragana()
 
-        guard let rawCandidates else {
-            return []
-        }
-
         let maxPredictionCount = 5
         var results: [PredictionCandidate] = []
         var seenDisplayTexts: Set<String> = []
@@ -897,6 +893,7 @@ public final class SegmentsManager {
 
         // ユーザー辞書から直接英字読みのエントリを検索（最優先）
         // (変換エンジンはひらがな入力から英字読みにマッチできないため、先に検索する)
+        // rawCandidates に依存しないため、非同期変換完了前でも結果を返せる
         if rawInputString.count >= 2 {
             let allUserDictionaryItems = cachedUserDictionary.items + cachedSystemUserDictionary.items
             for entry in allUserDictionaryItems {
@@ -928,6 +925,44 @@ public final class SegmentsManager {
                     seenDisplayTexts.insert(entry.word)
                 }
             }
+        }
+
+        // ユーザー辞書からひらがな読みのエントリも検索（rawCandidates 不要）
+        do {
+            let allUserDictionaryItems = cachedUserDictionary.items + cachedSystemUserDictionary.items
+            for entry in allUserDictionaryItems {
+                guard results.count < maxPredictionCount else {
+                    break
+                }
+
+                let reading = entry.reading
+                // ひらがな読みのみ（英字読みは上で処理済み）
+                guard !reading.unicodeScalars.allSatisfy({ $0.isASCII }) else {
+                    continue
+                }
+
+                let readingHiragana = reading.toHiragana()
+                guard readingHiragana.hasPrefix(matchTarget),
+                      matchTarget.count < readingHiragana.count,
+                      !seenDisplayTexts.contains(entry.word) else {
+                    continue
+                }
+
+                let appendText = String(readingHiragana.dropFirst(matchTarget.count))
+                if !appendText.isEmpty {
+                    results.append(.init(
+                        displayText: entry.word,
+                        appendText: appendText,
+                        isEnglishReading: false,
+                        fullText: entry.word
+                    ))
+                    seenDisplayTexts.insert(entry.word)
+                }
+            }
+        }
+
+        guard let rawCandidates else {
+            return results
         }
 
         // 候補処理のヘルパー関数
