@@ -22,7 +22,7 @@ private func makeSegmentsManager() -> SegmentsManager {
     switch manager.getCurrentCandidateWindow(inputState: .selecting) {
     case .selecting(let candidates, let selectionIndex):
         #expect(selectionIndex == 0)
-        let firstContexts = manager.makeCandidatePresentationContexts(candidates)
+        let firstContexts = manager.makeCandidatePresentations(candidates).map(\.displayContext)
         #expect(firstContexts.count == candidates.count)
         #expect(firstContexts.first?.annotationText == "ひらがな")
     case .hidden, .composing:
@@ -35,7 +35,7 @@ private func makeSegmentsManager() -> SegmentsManager {
     switch manager.getCurrentCandidateWindow(inputState: .selecting) {
     case .selecting(let candidates, let selectionIndex):
         #expect(selectionIndex == 0)
-        let contexts = manager.makeCandidatePresentationContexts(candidates)
+        let contexts = manager.makeCandidatePresentations(candidates).map(\.displayContext)
         if contexts.count >= 2 {
             #expect(contexts[0].annotationText == "カタカナ")
             #expect(contexts[1].annotationText == "ひらがな")
@@ -59,7 +59,8 @@ private func makeSegmentsManager() -> SegmentsManager {
 
     switch manager.getCurrentCandidateWindow(inputState: .selecting) {
     case .selecting(let candidates, _):
-        let annotationTexts = manager.makeCandidatePresentationContexts(candidates)
+        let annotationTexts = manager.makeCandidatePresentations(candidates)
+            .map(\.displayContext)
             .compactMap(\.annotationText)
         #expect(annotationTexts == ["英数", "全角英数", "半角カナ", "カタカナ", "ひらがな"])
     case .hidden, .composing:
@@ -76,12 +77,12 @@ private func makeSegmentsManager() -> SegmentsManager {
 
     switch manager.getCurrentCandidateWindow(inputState: .selecting) {
     case .selecting(let candidates, _):
-        let beforeReset = manager.makeCandidatePresentationContexts(candidates)
+        let beforeReset = manager.makeCandidatePresentations(candidates).map(\.displayContext)
         #expect(beforeReset.contains { $0.annotationText != nil })
 
         manager.requestResettingSelection()
 
-        let afterReset = manager.makeCandidatePresentationContexts(candidates)
+        let afterReset = manager.makeCandidatePresentations(candidates).map(\.displayContext)
         #expect(afterReset.allSatisfy { $0.annotationText == nil })
     case .hidden, .composing:
         Issue.record("Expected selecting state after expanding additional candidates.")

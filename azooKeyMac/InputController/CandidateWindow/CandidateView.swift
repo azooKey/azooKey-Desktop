@@ -12,13 +12,12 @@ class CandidatesViewController: BaseCandidateViewController {
     private var showedRows: ClosedRange = 0...8
     var showCandidateIndex = false
 
-    override func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidatePresentationContext]? = nil) {
+    override func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
         self.showedRows = selectionIndex == nil ? 0...8 : self.showedRows
-        super.updateCandidates(
+        super.updateCandidatePresentations(
             candidates,
             selectionIndex: selectionIndex,
-            cursorLocation: cursorLocation,
-            candidateDisplayContexts: candidateDisplayContexts
+            cursorLocation: cursorLocation
         )
     }
 

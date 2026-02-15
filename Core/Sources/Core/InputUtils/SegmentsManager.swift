@@ -38,13 +38,8 @@ public final class SegmentsManager {
     private var lastOperation: Operation = .other
     private var shouldShowCandidateWindow = false
 
-    private struct AdditionalCandidatePresentation {
-        let candidate: Candidate
-        let presentationContext: CandidatePresentationContext
-    }
-
     private var isShowingAdditionalCandidates = false
-    private var additionalCandidates: [AdditionalCandidatePresentation] = []
+    private var additionalCandidates: [CandidatePresentation] = []
     private var showingAdditionalCandidateCount = 0
     private var isFixingAdditionalCandidateTop = false
 
@@ -63,13 +58,13 @@ public final class SegmentsManager {
         candidate.data.map(\.ruby).joined()
     }
 
-    public func makeCandidatePresentationContexts(_ candidates: [Candidate]) -> [CandidatePresentationContext] {
-        let additionalContexts = self.additionalCandidateContextsForSelectionIndex
+    public func makeCandidatePresentations(_ candidates: [Candidate]) -> [CandidatePresentation] {
+        let additionalPresentations = self.additionalCandidatePresentationsForSelectionIndex
         return candidates.indices.map { index in
-            if index < additionalContexts.count {
-                return additionalContexts[index]
+            if index < additionalPresentations.count {
+                return .init(candidate: candidates[index], displayContext: additionalPresentations[index].displayContext)
             }
-            return .init()
+            return .init(candidate: candidates[index])
         }
     }
 
@@ -342,23 +337,17 @@ public final class SegmentsManager {
     }
 
     private var additionalCandidatesForSelectionIndex: [Candidate] {
-        guard self.isShowingAdditionalCandidates else {
-            return []
-        }
-        guard self.candidateOffsetByAdditionalCandidates > 0 else {
-            return []
-        }
-        return Array(self.additionalCandidates.suffix(self.candidateOffsetByAdditionalCandidates)).map(\.candidate)
+        self.additionalCandidatePresentationsForSelectionIndex.map(\.candidate)
     }
 
-    private var additionalCandidateContextsForSelectionIndex: [CandidatePresentationContext] {
+    private var additionalCandidatePresentationsForSelectionIndex: [CandidatePresentation] {
         guard self.isShowingAdditionalCandidates else {
             return []
         }
         guard self.candidateOffsetByAdditionalCandidates > 0 else {
             return []
         }
-        return Array(self.additionalCandidates.suffix(self.candidateOffsetByAdditionalCandidates)).map(\.presentationContext)
+        return Array(self.additionalCandidates.suffix(self.candidateOffsetByAdditionalCandidates))
     }
 
     public var convertTarget: String {
@@ -656,7 +645,7 @@ public final class SegmentsManager {
     }
 
     @MainActor
-    private func createAdditionalCandidates() -> [AdditionalCandidatePresentation] {
+    private func createAdditionalCandidates() -> [CandidatePresentation] {
         let candidates: [(candidate: Candidate, annotationText: String?)] = [
             (self.getModifiedRomanCandidate { $0 }, "英数"),
             (self.getModifiedRomanCandidate { $0.applyingTransform(.fullwidthToHalfwidth, reverse: true) ?? $0 }, "全角英数"),
@@ -667,7 +656,7 @@ public final class SegmentsManager {
         return candidates.map {
             .init(
                 candidate: $0.candidate,
-                presentationContext: .init(annotationText: $0.annotationText)
+                displayContext: .init(annotationText: $0.annotationText)
             )
         }
     }

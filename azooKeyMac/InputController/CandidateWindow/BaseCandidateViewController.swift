@@ -2,11 +2,6 @@ import Cocoa
 import Core
 import KanaKanjiConverterModule
 
-struct CandidatePresentation {
-    let candidate: Candidate
-    var displayContext: CandidatePresentationContext
-}
-
 class NonClickableTableView: NSTableView {
     override func rightMouseDown(with event: NSEvent) {}
     override func mouseDown(with event: NSEvent) {}
@@ -184,22 +179,12 @@ class BaseCandidateViewController: NSViewController {
         window.isOpaque = false
     }
 
-    func updateCandidates(_ candidates: [Candidate], selectionIndex: Int?, cursorLocation: CGPoint, candidateDisplayContexts: [CandidatePresentationContext]? = nil) {
-        if let candidateDisplayContexts, candidateDisplayContexts.count == candidates.count {
-            self.candidates = zip(candidates, candidateDisplayContexts).map { candidate, context in
-                CandidatePresentation(candidate: candidate, displayContext: context)
-            }
-        } else {
-            self.candidates = candidates.map(self.makeCandidatePresentation)
-        }
+    func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
+        self.candidates = candidates
         self.currentSelectedRow = selectionIndex ?? -1
         self.tableView.reloadData()
         self.resizeWindowToFitContent(cursorLocation: cursorLocation)
         self.updateSelection(to: selectionIndex ?? -1)
-    }
-
-    internal func makeCandidatePresentation(_ candidate: Candidate) -> CandidatePresentation {
-        .init(candidate: candidate, displayContext: .init())
     }
 
     internal func updateSelection(to row: Int) {

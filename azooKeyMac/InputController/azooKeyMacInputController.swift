@@ -130,9 +130,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             var rect: NSRect = .zero
             client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: rect.origin)
+            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: rect.origin)
         } else {
-            self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: .zero)
+            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         }
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
@@ -144,7 +144,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
-        self.candidatesViewController.updateCandidates([], selectionIndex: nil, cursorLocation: .zero)
+        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
     }
 
@@ -511,24 +511,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = true
-            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates)
-            self.candidatesViewController.updateCandidates(
-                candidates,
+            let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
+            self.candidatesViewController.updateCandidatePresentations(
+                candidatePresentations,
                 selectionIndex: selectionIndex,
-                cursorLocation: rect.origin,
-                candidateDisplayContexts: presentationContexts
+                cursorLocation: rect.origin
             )
             self.candidatesWindow.orderFront(nil)
         case .composing(let candidates, let selectionIndex):
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = false
-            let presentationContexts = self.segmentsManager.makeCandidatePresentationContexts(candidates)
-            self.candidatesViewController.updateCandidates(
-                candidates,
+            let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
+            self.candidatesViewController.updateCandidatePresentations(
+                candidatePresentations,
                 selectionIndex: selectionIndex,
-                cursorLocation: rect.origin,
-                candidateDisplayContexts: presentationContexts
+                cursorLocation: rect.origin
             )
             self.candidatesWindow.orderFront(nil)
         case .hidden:
@@ -573,7 +571,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         var rect: NSRect = .zero
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        self.predictionViewController.updateCandidates(candidates, selectionIndex: nil, cursorLocation: rect.origin)
+        self.predictionViewController.updateCandidatePresentations(
+            candidates.map { .init(candidate: $0) },
+            selectionIndex: nil,
+            cursorLocation: rect.origin
+        )
 
         if Config.LiveConversion().value {
             self.predictionWindow.orderFront(nil)
@@ -615,7 +617,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         var rect: NSRect = .zero
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        self.predictionViewController.updateCandidates(candidates, selectionIndex: nil, cursorLocation: rect.origin)
+        self.predictionViewController.updateCandidatePresentations(
+            candidates.map { .init(candidate: $0) },
+            selectionIndex: nil,
+            cursorLocation: rect.origin
+        )
         self.predictionWindow.orderFront(nil)
     }
 
@@ -866,7 +872,11 @@ extension azooKeyMacInputController {
                     self.segmentsManager.appendDebugMessage("候補ウィンドウ更新中...")
                     if !candidates.isEmpty {
                         self.segmentsManager.setReplaceSuggestions(candidates)
-                        self.replaceSuggestionsViewController.updateCandidates(candidates, selectionIndex: nil, cursorLocation: getCursorLocation())
+                        self.replaceSuggestionsViewController.updateCandidatePresentations(
+                            candidates.map { .init(candidate: $0) },
+                            selectionIndex: nil,
+                            cursorLocation: getCursorLocation()
+                        )
                         self.replaceSuggestionWindow.setIsVisible(true)
                         self.replaceSuggestionWindow.makeKeyAndOrderFront(nil)
                         self.segmentsManager.appendDebugMessage("候補ウィンドウ更新完了")
