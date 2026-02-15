@@ -145,7 +145,7 @@ class BaseCandidateViewController: NSViewController {
         self.tableView.delegate = self
         self.tableView.dataSource = self
         self.tableView.selectionHighlightStyle = .regular
-        self.tableView.rowHeight = 28
+        self.tableView.rowHeight = 32
 
         self.view = containerView
     }
@@ -174,7 +174,7 @@ class BaseCandidateViewController: NSViewController {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
 
-        window.contentView?.layer?.cornerRadius = 10
+        window.contentView?.layer?.cornerRadius = 16
         window.backgroundColor = .clear
         window.isOpaque = false
     }
