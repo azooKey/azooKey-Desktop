@@ -3,9 +3,9 @@ import Foundation
 /// キーボードショートカットを表す構造体
 public struct KeyboardShortcut: Codable, Equatable, Hashable, Sendable {
     public var key: String
-    public var modifiers: EventModifierFlags
+    public var modifiers: KeyEventCore.ModifierFlag
 
-    public init(key: String, modifiers: EventModifierFlags) {
+    public init(key: String, modifiers: KeyEventCore.ModifierFlag) {
         self.key = key
         self.modifiers = modifiers
     }
@@ -35,23 +35,5 @@ public struct KeyboardShortcut: Codable, Equatable, Hashable, Sendable {
 
         result += key.uppercased()
         return result
-    }
-}
-
-/// ModifierFlagsをCodable/Sendableにするためのラッパー（rawValueベース）
-public struct EventModifierFlags: Codable, Equatable, Hashable, Sendable {
-    public var rawValue: UInt
-
-    public init(rawValue: UInt) {
-        self.rawValue = rawValue
-    }
-
-    public static let control = EventModifierFlags(rawValue: 1 << 18)  // NSEvent.ModifierFlags.control.rawValue
-    public static let option = EventModifierFlags(rawValue: 1 << 19)   // NSEvent.ModifierFlags.option.rawValue
-    public static let shift = EventModifierFlags(rawValue: 1 << 17)    // NSEvent.ModifierFlags.shift.rawValue
-    public static let command = EventModifierFlags(rawValue: 1 << 20)  // NSEvent.ModifierFlags.command.rawValue
-
-    public func contains(_ other: EventModifierFlags) -> Bool {
-        (rawValue & other.rawValue) == other.rawValue
     }
 }

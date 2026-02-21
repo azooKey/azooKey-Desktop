@@ -9,6 +9,7 @@ struct CustomTextField: NSViewRepresentable {
     var onSubmit: () -> Void
     var onDownArrow: () -> Void
     var onUpArrow: () -> Void
+    var onCancel: () -> Void
 
     func makeNSView(context: Context) -> NSTextField {
         let textField = KeyHandlingTextField()
@@ -28,6 +29,7 @@ struct CustomTextField: NSViewRepresentable {
         textField.onDownArrow = onDownArrow
         textField.onUpArrow = onUpArrow
         textField.onSubmit = onSubmit
+        textField.onCancel = onCancel
 
         return textField
     }
@@ -40,6 +42,7 @@ struct CustomTextField: NSViewRepresentable {
             keyTextField.onDownArrow = onDownArrow
             keyTextField.onUpArrow = onUpArrow
             keyTextField.onSubmit = onSubmit
+            keyTextField.onCancel = onCancel
         }
 
         // Handle focus changes
@@ -65,6 +68,14 @@ struct CustomTextField: NSViewRepresentable {
             parent.onSubmit()
         }
 
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                parent.onCancel()
+                return true
+            }
+            return false
+        }
+
         func controlTextDidChange(_ obj: Notification) {
             if let textField = obj.object as? NSTextField {
                 parent.text = textField.stringValue
@@ -85,6 +96,7 @@ private final class KeyHandlingTextField: NSTextField {
     var onDownArrow: (() -> Void)?
     var onUpArrow: (() -> Void)?
     var onSubmit: (() -> Void)?
+    var onCancel: (() -> Void)?
 
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -120,6 +132,9 @@ private final class KeyHandlingTextField: NSTextField {
             return // Don't call super to prevent default behavior
         case 36: // Return key
             onSubmit?()
+            return
+        case 53: // Escape key
+            onCancel?()
             return
         default:
             super.keyDown(with: event)

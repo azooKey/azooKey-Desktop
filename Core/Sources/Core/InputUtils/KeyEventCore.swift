@@ -1,5 +1,5 @@
 public struct KeyEventCore: Sendable, Equatable {
-    public struct ModifierFlag: OptionSet, Sendable, Hashable {
+    public struct ModifierFlag: OptionSet, Codable, Sendable, Hashable {
         public let rawValue: Int
 
         public init(rawValue: Int) {

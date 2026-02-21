@@ -101,7 +101,7 @@ class ShortcutRecorderView: NSView {
         }
 
         let key = characters.lowercased()
-        let modifiers = EventModifierFlags(from: event.modifierFlags)
+        let modifiers = KeyEventCore.ModifierFlag(from: event.modifierFlags)
 
         guard modifiers.contains(.control) ||
                 modifiers.contains(.option) ||

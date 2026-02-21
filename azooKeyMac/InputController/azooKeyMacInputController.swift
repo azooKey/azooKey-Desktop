@@ -79,10 +79,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let key = characters.lowercased()
-
-        // 必要な修飾キーのみをマスクして取得
-        let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
-        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
+        let eventModifiers = KeyEventCore.ModifierFlag(from: event.modifierFlags)
 
         // 修飾キーがない場合は早期リターン（通常の入力）
         if eventModifiers.isEmpty {
@@ -90,13 +87,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         // キャッシュからショートカット付きのピン留めプロンプトを検索
-        let pinnedWithShortcuts = self.pinnedPromptsCache.filter { $0.shortcut != nil }
-        if let matched = pinnedWithShortcuts.first(where: { item in
+        if let matched = self.pinnedPromptsCache.first(where: { item in
             guard let itemShortcut = item.shortcut else {
                 return false
             }
-            let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
-            return itemShortcut.key == key && eventModifiers == shortcutModifiers
+            return itemShortcut.key == key && itemShortcut.modifiers == eventModifiers
         }) {
             return matched.prompt
         }
