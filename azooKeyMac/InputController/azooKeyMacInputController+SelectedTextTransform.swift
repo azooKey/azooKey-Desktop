@@ -163,13 +163,9 @@ extension azooKeyMacInputController {
             },
             completion: { [weak self] prompt in
                 self?.segmentsManager.appendDebugMessage("showPromptInputWindow: Window closed with prompt: \(prompt ?? "nil")")
-
-                // Restore focus on cancel (prompt == nil) here so every closing path including window-level Esc ends up restoring focus.
-                if prompt == nil, let app = currentApp {
-                    app.activate(options: [])
-                    self?.segmentsManager.appendDebugMessage("showPromptInputWindow: Restored focus to original app on cancel")
-                }
                 self?.isPromptWindowVisible = false
+                // 設定変更に備えてキャッシュを更新
+                self?.reloadPinnedPromptsCache()
             }
         )
     }

@@ -2,6 +2,9 @@ import Core
 import Foundation
 import SwiftUI
 
+// SwiftUI.KeyboardShortcutとの競合を避けるためtypealiasを定義
+typealias CustomKeyboardShortcut = Core.KeyboardShortcut
+
 struct PromptInputView: View {
     @State private var promptText: String = ""
     @State private var previewText: String = ""
@@ -11,6 +14,7 @@ struct PromptInputView: View {
     @State private var hoveredHistoryIndex: Int?
     @State private var isNavigatingHistory: Bool = false
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
+    @State private var editingShortcutFor: PromptHistoryItem?
     @FocusState private var isTextFieldFocused: Bool
 
     let initialPrompt: String?
@@ -116,9 +120,6 @@ struct PromptInputView: View {
                 onUpArrow: {
                     // Handle up arrow for history navigation
                     navigateHistory(direction: .up)
-                },
-                onCancel: {
-                    onCancel()
                 }
             )
             .onChange(of: isTextFieldFocused) { isFocused in
@@ -170,6 +171,25 @@ struct PromptInputView: View {
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                     .help(item.isPinned ? "Unpin" : "Pin")
+
+                                    // Shortcut button (only for pinned items)
+                                    if item.isPinned {
+                                        Button {
+                                            editingShortcutFor = item
+                                        } label: {
+                                            if let shortcut = item.shortcut {
+                                                Text(shortcut.displayString)
+                                                    .font(.system(size: 8, weight: .medium))
+                                                    .foregroundColor(.accentColor)
+                                            } else {
+                                                Image(systemName: "command")
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary.opacity(0.4))
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help(item.shortcut == nil ? "Set shortcut" : "Edit shortcut")
+                                    }
 
                                     // Prompt text
                                     Text(item.prompt)
@@ -360,6 +380,19 @@ struct PromptInputView: View {
             hoveredHistoryIndex = nil
             isTextFieldFocused = true
         }
+        .sheet(item: $editingShortcutFor) { item in
+            ShortcutEditorSheet(
+                item: item,
+                allItems: promptHistory,
+                onSave: { updatedItem in
+                    updateShortcut(for: updatedItem)
+                    editingShortcutFor = nil
+                },
+                onCancel: {
+                    editingShortcutFor = nil
+                }
+            )
+        }
     }
 
     private func requestPreview() {
@@ -439,10 +472,12 @@ struct PromptInputView: View {
 
         // Add default pinned prompts if history is empty
         if promptHistory.isEmpty {
-            let defaultPinnedPrompts = ["elaborate", "rewrite", "formal", "english"]
-            promptHistory = defaultPinnedPrompts.map { prompt in
-                PromptHistoryItem(prompt: prompt, isPinned: true)
-            }
+            promptHistory = [
+                PromptHistoryItem(prompt: "elaborate", isPinned: true),
+                PromptHistoryItem(prompt: "rewrite", isPinned: true),
+                PromptHistoryItem(prompt: "formal", isPinned: true),
+                PromptHistoryItem(prompt: "english", isPinned: true)
+            ]
             savePinnedHistory()
         }
     }
@@ -455,8 +490,25 @@ struct PromptInputView: View {
     }
 
     private func togglePin(for item: PromptHistoryItem) {
-        if let index = promptHistory.firstIndex(where: { $0.prompt == item.prompt }) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
             promptHistory[index].isPinned.toggle()
+            savePinnedHistory()
+        }
+    }
+
+    private func updateShortcut(for item: PromptHistoryItem) {
+        if let index = promptHistory.firstIndex(where: { $0.id == item.id }) {
+            // Clear conflicting keyboard shortcuts from other items
+            if let newShortcut = item.shortcut {
+                for i in promptHistory.indices where i != index {
+                    if promptHistory[i].shortcut == newShortcut {
+                        promptHistory[i].shortcut = nil
+                    }
+                }
+            }
+
+            // Update the item
+            promptHistory[index].shortcut = item.shortcut
             savePinnedHistory()
         }
     }
@@ -566,4 +618,106 @@ struct PromptInputView: View {
         }
     )
     .frame(width: 380)
+}
+
+// MARK: - Shortcut Editor Sheet
+struct ShortcutEditorSheet: View {
+    @State private var item: PromptHistoryItem
+    @State private var shortcut: CustomKeyboardShortcut
+    @State private var hasShortcut: Bool
+    let allItems: [PromptHistoryItem]
+    let onSave: (PromptHistoryItem) -> Void
+    let onCancel: () -> Void
+
+    // Reserved system shortcuts
+    private let reservedShortcuts: [CustomKeyboardShortcut] = [
+        Config.TransformShortcut().value  // いい感じ変換のショートカット
+    ]
+
+    private var conflictingPrompt: String? {
+        guard hasShortcut else {
+            return nil
+        }
+        return allItems.first(where: { otherItem in
+            otherItem.id != item.id &&
+                otherItem.shortcut == shortcut
+        })?.prompt
+    }
+
+    private var isSystemShortcut: Bool {
+        guard hasShortcut else {
+            return false
+        }
+        return reservedShortcuts.contains(shortcut)
+    }
+
+    init(item: PromptHistoryItem, allItems: [PromptHistoryItem], onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
+        self._item = State(initialValue: item)
+        self._shortcut = State(initialValue: item.shortcut ?? CustomKeyboardShortcut(key: "a", modifiers: .control))
+        self._hasShortcut = State(initialValue: item.shortcut != nil)
+        self.allItems = allItems
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Set Shortcut for \"\(item.prompt)\"")
+                .font(.headline)
+
+            VStack(spacing: 12) {
+                // Keyboard shortcut
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Toggle("Keyboard Shortcut", isOn: $hasShortcut)
+                            .toggleStyle(.checkbox)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if hasShortcut {
+                        KeyboardShortcutRecorder(shortcut: $shortcut)
+                            .frame(height: 40)
+
+                        // Conflict warnings
+                        if isSystemShortcut {
+                            Text("This shortcut is reserved for system function")
+                                .font(.system(size: 9))
+                                .foregroundColor(.red)
+                        } else if let conflicting = conflictingPrompt {
+                            Text("Already used by \"\(conflicting)\" (will be replaced)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                if hasShortcut {
+                    Button("Remove") {
+                        var updatedItem = item
+                        updatedItem.shortcut = nil
+                        onSave(updatedItem)
+                    }
+                }
+
+                Button("Save") {
+                    var updatedItem = item
+                    updatedItem.shortcut = hasShortcut ? shortcut : nil
+                    onSave(updatedItem)
+                }
+                .keyboardShortcut(.return)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
 }

@@ -36,6 +36,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private static let doubleTapInterval: TimeInterval = 0.5
     private static let candidateWindowInitialSize = CGSize(width: 400, height: 1000)
 
+    // ピン留めプロンプトのキャッシュ（パフォーマンス向上のため）
+    private var pinnedPromptsCache: [PromptHistoryItem] = []
+
     private static func makeCandidateWindow(contentViewController: NSViewController, inputClient: IMKTextInput?) -> NSWindow {
         let window = NSWindow(contentViewController: contentViewController)
         window.styleMask = [.borderless]
@@ -56,6 +59,49 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let isDouble = (self.lastKey.code == keyCode) && (now - self.lastKey.time < Self.doubleTapInterval)
         self.lastKey = (time: now, code: keyCode)
         return isDouble
+    }
+
+    /// ピン留めプロンプトのキャッシュを更新
+    func reloadPinnedPromptsCache() {
+        guard let data = UserDefaults.standard.data(forKey: "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"),
+              let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) else {
+            self.pinnedPromptsCache = []
+            return
+        }
+        self.pinnedPromptsCache = history.filter { $0.isPinned }
+    }
+
+    // MARK: - カスタムプロンプトショートカット検出
+    private func checkCustomPromptShortcut(event: NSEvent) -> String? {
+        guard let characters = event.charactersIgnoringModifiers,
+              !characters.isEmpty else {
+            return nil
+        }
+
+        let key = characters.lowercased()
+
+        // 必要な修飾キーのみをマスクして取得
+        let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        // 修飾キーがない場合は早期リターン（通常の入力）
+        if eventModifiers.isEmpty {
+            return nil
+        }
+
+        // キャッシュからショートカット付きのピン留めプロンプトを検索
+        let pinnedWithShortcuts = self.pinnedPromptsCache.filter { $0.shortcut != nil }
+        if let matched = pinnedWithShortcuts.first(where: { item in
+            guard let itemShortcut = item.shortcut else {
+                return false
+            }
+            let shortcutModifiers = itemShortcut.modifiers.nsModifierFlags.intersection(relevantModifiers)
+            return itemShortcut.key == key && eventModifiers == shortcutModifiers
+        }) {
+            return matched.prompt
+        }
+
+        return nil
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
@@ -124,6 +170,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.updateTransformSelectedTextMenuItemEnabledState()
+        // ピン留めプロンプトのキャッシュを更新
+        self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
 
         if let client = sender as? IMKTextInput {
@@ -227,6 +275,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         guard event.type == .keyDown else {
             return false
+        }
+
+        // カスタムプロンプトショートカットのチェック
+        if let matchedPrompt = checkCustomPromptShortcut(event: event) {
+            let aiBackendEnabled = Config.AIBackendPreference().value != .off
+            if aiBackendEnabled && !self.isPromptWindowVisible {
+                let selectedRange = client.selectedRange()
+                if selectedRange.length > 0 {
+                    if self.triggerAiTranslation(initialPrompt: matchedPrompt) {
+                        return true
+                    }
+                }
+            }
         }
 
         let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
