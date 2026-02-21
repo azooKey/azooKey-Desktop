@@ -127,7 +127,7 @@ class ShortcutRecorderView: NSView {
         let textColor: NSColor
 
         if isRecording {
-            text = "キーを入力..."
+            text = placeholder
             textColor = .secondaryLabelColor
         } else {
             text = shortcut.displayString

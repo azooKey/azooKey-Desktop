@@ -631,9 +631,11 @@ struct ShortcutEditorSheet: View {
     let onCancel: () -> Void
 
     // Reserved system shortcuts
-    private let reservedShortcuts: [CustomKeyboardShortcut] = [
-        Config.TransformShortcut().value  // いい感じ変換のショートカット
-    ]
+    private var reservedShortcuts: [CustomKeyboardShortcut] {
+        [
+            Config.TransformShortcut().value  // いい感じ変換のショートカット
+        ]
+    }
 
     private var conflictingPrompt: String? {
         guard hasShortcut else {
@@ -682,7 +684,7 @@ struct ShortcutEditorSheet: View {
 
                         // Conflict warnings
                         if isSystemShortcut {
-                            Text("This shortcut is reserved for system function")
+                            Text("This shortcut is reserved for a system function")
                                 .font(.system(size: 9))
                                 .foregroundColor(.red)
                         } else if let conflicting = conflictingPrompt {

@@ -92,7 +92,12 @@ final class PromptInputWindow: NSWindow {
         self.applyCallback = onApply
         self.completion = completion
         self.initialPrompt = initialPrompt
-        self.previousApp = NSWorkspace.shared.frontmostApplication
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        if let frontmostApp, frontmostApp.processIdentifier != NSRunningApplication.current.processIdentifier {
+            self.previousApp = frontmostApp
+        } else {
+            self.previousApp = nil
+        }
 
         // Reset the window display state
         resetWindowState()

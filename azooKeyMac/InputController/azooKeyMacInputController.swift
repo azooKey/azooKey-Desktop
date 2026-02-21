@@ -288,6 +288,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                     }
                 }
             }
+            // ショートカットがマッチした場合はイベントを消費して他のハンドラに渡さない
+            return true
         }
 
         let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
