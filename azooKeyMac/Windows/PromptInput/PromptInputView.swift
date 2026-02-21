@@ -2,7 +2,6 @@ import Core
 import Foundation
 import SwiftUI
 
-
 struct PromptInputView: View {
     @State private var promptText: String = ""
     @State private var previewText: String = ""
