@@ -520,8 +520,9 @@ struct PromptInputView: View {
             let existingItem = promptHistory[existingIndex]
             promptHistory.remove(at: existingIndex)
 
-            // Create updated item with new lastUsed time but preserve pinned status
-            let updatedItem = PromptHistoryItem(prompt: prompt, isPinned: existingItem.isPinned)
+            // Create updated item with new lastUsed time but preserve pinned status and shortcut
+            var updatedItem = PromptHistoryItem(prompt: prompt, isPinned: existingItem.isPinned, shortcut: existingItem.shortcut)
+            updatedItem.id = existingItem.id
 
             if existingItem.isPinned {
                 // For pinned items, just update in place (sorting will handle position)
