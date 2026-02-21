@@ -56,7 +56,7 @@ extension Config {
     }
 
     /// プロンプト履歴（JSON形式で保存）
-    struct PromptHistory: StringConfigItem {
-        static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
+    public struct PromptHistory: StringConfigItem {
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
     }
 }
