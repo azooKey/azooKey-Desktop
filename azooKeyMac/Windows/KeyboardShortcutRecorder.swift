@@ -2,12 +2,9 @@ import AppKit
 import Core
 import SwiftUI
 
-// SwiftUI.KeyboardShortcutとの競合を避けるためtypealiasを定義
-typealias RecorderKeyboardShortcut = Core.KeyboardShortcut
-
 /// キーボードショートカットを記録するためのビュー
 struct KeyboardShortcutRecorder: NSViewRepresentable {
-    @Binding var shortcut: RecorderKeyboardShortcut
+    @Binding var shortcut: Core.KeyboardShortcut
     var placeholder: String = "ショートカットを入力..."
 
     func makeNSView(context: Context) -> ShortcutRecorderView {
@@ -29,13 +26,13 @@ struct KeyboardShortcutRecorder: NSViewRepresentable {
 
 /// NSViewベースのショートカットレコーダー
 class ShortcutRecorderView: NSView {
-    var shortcut: RecorderKeyboardShortcut = .defaultTransformShortcut {
+    var shortcut: Core.KeyboardShortcut = .defaultTransformShortcut {
         didSet {
             needsDisplay = true
         }
     }
     var placeholder: String = "ショートカットを入力..."
-    var onShortcutChanged: ((RecorderKeyboardShortcut) -> Void)?
+    var onShortcutChanged: ((Core.KeyboardShortcut) -> Void)?
 
     private var isRecording = false {
         didSet {
@@ -113,7 +110,7 @@ class ShortcutRecorderView: NSView {
             return
         }
 
-        let newShortcut = RecorderKeyboardShortcut(key: key, modifiers: modifiers)
+        let newShortcut = Core.KeyboardShortcut(key: key, modifiers: modifiers)
         shortcut = newShortcut
         onShortcutChanged?(newShortcut)
         window?.makeFirstResponder(nil)
