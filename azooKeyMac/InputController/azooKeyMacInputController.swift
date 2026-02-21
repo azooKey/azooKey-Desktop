@@ -669,6 +669,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let appendText = prediction.appendText
+        let deleteCount = prediction.deleteCount
+        if deleteCount > 0 {
+            self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
+        }
 
         guard !appendText.isEmpty else {
             return
