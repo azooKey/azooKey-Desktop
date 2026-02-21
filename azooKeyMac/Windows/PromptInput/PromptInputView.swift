@@ -2,8 +2,6 @@ import Core
 import Foundation
 import SwiftUI
 
-// SwiftUI.KeyboardShortcutとの競合を避けるためtypealiasを定義
-typealias CustomKeyboardShortcut = Core.KeyboardShortcut
 
 struct PromptInputView: View {
     @State private var promptText: String = ""
@@ -627,14 +625,14 @@ struct PromptInputView: View {
 // MARK: - Shortcut Editor Sheet
 struct ShortcutEditorSheet: View {
     @State private var item: PromptHistoryItem
-    @State private var shortcut: CustomKeyboardShortcut
+    @State private var shortcut: Core.KeyboardShortcut
     @State private var hasShortcut: Bool
     let allItems: [PromptHistoryItem]
     let onSave: (PromptHistoryItem) -> Void
     let onCancel: () -> Void
 
     // Reserved system shortcuts
-    private var reservedShortcuts: [CustomKeyboardShortcut] {
+    private var reservedShortcuts: [Core.KeyboardShortcut] {
         [
             Config.TransformShortcut().value  // いい感じ変換のショートカット
         ]
@@ -659,7 +657,7 @@ struct ShortcutEditorSheet: View {
 
     init(item: PromptHistoryItem, allItems: [PromptHistoryItem], onSave: @escaping (PromptHistoryItem) -> Void, onCancel: @escaping () -> Void) {
         self._item = State(initialValue: item)
-        self._shortcut = State(initialValue: item.shortcut ?? CustomKeyboardShortcut(key: "a", modifiers: .control))
+        self._shortcut = State(initialValue: item.shortcut ?? Core.KeyboardShortcut(key: "a", modifiers: .control))
         self._hasShortcut = State(initialValue: item.shortcut != nil)
         self.allItems = allItems
         self.onSave = onSave
