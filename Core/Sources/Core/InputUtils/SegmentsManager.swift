@@ -774,6 +774,48 @@ public final class SegmentsManager {
         return []
     }
 
+    public func requestTypoCorrectionCandidates(inputStyle: InputStyle) -> [String] {
+        guard Config.DebugTypoCorrection().value else {
+            return []
+        }
+
+        let targetComposingText = self.composingText.prefixToCursorPosition()
+        guard !targetComposingText.isEmpty else {
+            return []
+        }
+
+        let leftSideContext = self.getCleanLeftSideContext(maxCount: 30) ?? ""
+        let typoCandidates = self.kanaKanjiConverter.experimentalRequestTypoCorrectionOnly(
+            leftSideContext: leftSideContext,
+            composingText: targetComposingText,
+            options: options(
+                leftSideContext: leftSideContext,
+                requestRichCandidates: false,
+                requireJapanesePrediction: .disabled,
+                requireEnglishPrediction: .disabled
+            ),
+            inputStyle: inputStyle,
+            searchConfig: .init(
+                beamSize: 16,
+                topK: 32,
+                nBest: 3
+            )
+        )
+
+        let currentTarget = targetComposingText.convertTarget
+        var seen: Set<String> = []
+        return typoCandidates.compactMap { candidate in
+            let text = candidate.convertedText.toHiragana()
+            guard !text.isEmpty, text != currentTarget else {
+                return nil
+            }
+            guard seen.insert(text).inserted else {
+                return nil
+            }
+            return text
+        }
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     public func getCurrentMarkedText(inputState: InputState) -> MarkedText {
         switch inputState {

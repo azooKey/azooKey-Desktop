@@ -32,6 +32,12 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.predictiveTyping"
     }
+    /// 入力訂正のデバッグ機能を有効化する設定
+    public struct DebugTypoCorrection: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.typoCorrection"
+    }
     /// ライブ変換を有効化する設定
     public struct LiveConversion: BoolConfigItem {
         public init() {}

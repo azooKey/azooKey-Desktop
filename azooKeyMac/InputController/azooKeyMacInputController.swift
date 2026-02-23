@@ -272,6 +272,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return false
         }
 
+        if self.isTypoCorrectionShortcut(event) {
+            guard Config.DebugTypoCorrection().value else {
+                return false
+            }
+            self.showTypoCorrectionPredictionWindow()
+            return true
+        }
+
         // カスタムプロンプトショートカットのチェック
         if let matchedPrompt = checkCustomPromptShortcut(event: event) {
             let aiBackendEnabled = Config.AIBackendPreference().value != .off
@@ -624,6 +632,52 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             )
         }
 
+        self.lastPredictionCandidates = candidates.map(\.text)
+        self.lastPredictionUpdateTime = Date().timeIntervalSince1970
+
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.predictionViewController.updateCandidatePresentations(
+            candidates.map { .init(candidate: $0) },
+            selectionIndex: nil,
+            cursorLocation: rect.origin
+        )
+
+        if Config.LiveConversion().value {
+            self.predictionWindow.orderFront(nil)
+            return
+        }
+
+        if self.candidatesWindow.isVisible {
+            self.positionPredictionWindowRightOfCandidateWindow()
+        }
+        self.predictionWindow.orderFront(nil)
+    }
+
+    private func isTypoCorrectionShortcut(_ event: NSEvent) -> Bool {
+        let modifierFlags = event.modifierFlags.intersection([.control, .shift, .option, .command])
+        return modifierFlags == [.control]
+            && event.charactersIgnoringModifiers?.lowercased() == "t"
+    }
+
+    @MainActor
+    private func showTypoCorrectionPredictionWindow() {
+        let typoCorrections = self.segmentsManager.requestTypoCorrectionCandidates(inputStyle: self.inputStyle)
+        guard !typoCorrections.isEmpty else {
+            self.hidePredictionWindow()
+            return
+        }
+
+        self.predictionHideWorkItem?.cancel()
+        let candidates = typoCorrections.map { text in
+            Candidate(
+                text: text,
+                value: 0,
+                composingCount: .surfaceCount(text.count),
+                lastMid: 0,
+                data: []
+            )
+        }
         self.lastPredictionCandidates = candidates.map(\.text)
         self.lastPredictionUpdateTime = Date().timeIntervalSince1970
 
