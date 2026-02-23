@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "azooKey Windows TSF MVP settings",
+  "type": "object",
+  "properties": {
+    "inputMode": {
+      "type": "string",
+      "enum": ["hiragana", "alnum_half", "alnum_full"],
+      "default": "hiragana"
+    },
+    "liveConversion": {
+      "type": "boolean",
+      "default": false
+    },
+    "llmMagicConversion": {
+      "type": "boolean",
+      "default": false,
+      "description": "MVPでは無効固定。将来拡張ポイント。"
+    },
+    "logLevel": {
+      "type": "string",
+      "enum": ["error", "warn", "info", "debug"],
+      "default": "info"
+    }
+  },
+  "additionalProperties": false
+}
