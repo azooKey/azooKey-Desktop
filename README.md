@@ -127,3 +127,46 @@ Thanks to authors!!
 
 ## Acknowledgement
 本プロジェクトは情報処理推進機構(IPA)による[2024年度未踏IT人材発掘・育成事業](https://www.ipa.go.jp/jinzai/mitou/it/2024/koubokekka.html)の支援を受けて開発を行いました。
+
+---
+
+
+
+---
+
+## Windows TSF + Inference Host MVP (experimental)
+
+Windows向けは、TSF TIP(in-proc DLL) と Inference Host(別プロセス) を分離する構成です。
+
+### ディレクトリ
+
+- `tsf-tip/`: TSF Text Service DLL
+- `inference-host/`: CPU/CUDA推論ホスト
+- `core/`: OS非依存の変換コア
+- `ipc/`: JSON + length-prefix IPC定義
+- `learning/`: 学習再ランキング
+- `bench/`: レイテンシ計測CLI
+- `scripts/`: 登録/解除スクリプト
+- `docs/`: 設計メモ・デバッグ手順
+
+### ローカル検証
+
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bench/azookey_bench
+```
+
+### Windows登録
+
+```powershell
+./scripts/register.ps1 -TipDllPath ./build/tsf-tip/Debug/azookey_tsf_tip.dll -HostExePath ./build/inference-host/Debug/azookey_inference_host.exe
+./scripts/unregister.ps1 -TipDllPath ./build/tsf-tip/Debug/azookey_tsf_tip.dll
+```
+
+### 状態
+
+- TSF側は EditSession を使う最小骨格を実装。
+- 推論は Host 側CPU実装が先行、CUDAはバックエンドスロットを用意。
+- 学習は頻度 + 時間減衰の再ランキングを実装。

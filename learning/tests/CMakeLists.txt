@@ -1,0 +1,3 @@
+add_executable(learning_tests learning_test.cpp)
+target_link_libraries(learning_tests PRIVATE azookey_learning)
+add_test(NAME learning_tests COMMAND learning_tests)
