@@ -16,6 +16,7 @@ final class PromptInputWindow: NSWindow {
     private var applyCallback: ((String) -> Void)?
     private var isTextFieldCurrentlyFocused: Bool = false
     private var initialPrompt: String?
+    private var previousApp: NSRunningApplication?
 
     init() {
         super.init(
@@ -91,6 +92,12 @@ final class PromptInputWindow: NSWindow {
         self.applyCallback = onApply
         self.completion = completion
         self.initialPrompt = initialPrompt
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        if let frontmostApp, frontmostApp.processIdentifier != NSRunningApplication.current.processIdentifier {
+            self.previousApp = frontmostApp
+        } else {
+            self.previousApp = nil
+        }
 
         // Reset the window display state
         resetWindowState()
@@ -164,6 +171,13 @@ final class PromptInputWindow: NSWindow {
         // Call completion handler to reset flags before closing
         if let completion = self.completion {
             completion(nil)
+        }
+
+        // Restore focus to the previous application
+        if let previousApp = self.previousApp {
+            DispatchQueue.main.async {
+                previousApp.activate(options: [])
+            }
         }
 
         super.close()
