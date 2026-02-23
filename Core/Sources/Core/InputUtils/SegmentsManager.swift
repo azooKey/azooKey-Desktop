@@ -31,6 +31,7 @@ public final class SegmentsManager {
     private let context: Context
 
     private var composingText: ComposingText = ComposingText()
+    private var lastInputStyle: InputStyle = .direct
 
     private var liveConversionEnabled: Bool {
         Config.LiveConversion().value
@@ -194,6 +195,7 @@ public final class SegmentsManager {
     public func activate() {
         self.shouldShowCandidateWindow = false
         self.backspaceAdjustedPredictionCandidate = nil
+        self.lastInputStyle = .direct
         self.zenzaiPersonalizationMode = self.getZenzaiPersonalizationMode()
     }
 
@@ -209,6 +211,7 @@ public final class SegmentsManager {
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
         self.backspaceAdjustedPredictionCandidate = nil
+        self.lastInputStyle = .direct
     }
 
     @MainActor
@@ -223,6 +226,7 @@ public final class SegmentsManager {
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
         self.backspaceAdjustedPredictionCandidate = nil
+        self.lastInputStyle = .direct
     }
 
     @MainActor
@@ -236,6 +240,7 @@ public final class SegmentsManager {
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
         self.backspaceAdjustedPredictionCandidate = nil
+        self.lastInputStyle = .direct
     }
 
     /// 変換キーを押したタイミングで入力の区切りを示す
@@ -245,6 +250,7 @@ public final class SegmentsManager {
             // すでに末尾がcompositionSeparatorの場合は何もしない
             return
         }
+        self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition([.init(piece: .compositionSeparator, inputStyle: inputStyle)])
         self.lastOperation = .insert
         if !skipUpdate {
@@ -254,6 +260,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func insertAtCursorPosition(_ string: String, inputStyle: InputStyle) {
+        self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(string, inputStyle: inputStyle)
         self.lastOperation = .insert
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
@@ -263,6 +270,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func insertAtCursorPosition(pieces: [InputPiece], inputStyle: InputStyle) {
+        self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(pieces.map { .init(piece: $0, inputStyle: inputStyle) })
         self.lastOperation = .insert
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
@@ -303,6 +311,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func deleteBackwardFromCursorPosition(count: Int = 1) {
+        var beforeComposingText = self.composingText.prefixToCursorPosition()
         let beforeInput = self.composingText.convertTarget
         let beforeFirstCandidateText = self.rawCandidates?.mainResults.first?.text ?? self.rawCandidatesList?.first?.text
         if !self.composingText.isAtEndIndex {
@@ -310,18 +319,31 @@ public final class SegmentsManager {
             _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
             // 一度segmentの編集状態もリセットにする
             self.didExperienceSegmentEdition = false
+            beforeComposingText = self.composingText.prefixToCursorPosition()
         }
         self.composingText.deleteBackwardFromCursorPosition(count: count)
         self.lastOperation = .delete
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
-        self.backspaceAdjustedPredictionCandidate = if let beforeFirstCandidateText {
-            Self.backspaceTypoFixPredictionCandidate(
-                previousInput: beforeInput,
-                previousFirstCandidateText: beforeFirstCandidateText,
-                currentInput: self.composingText.convertTarget
-            )
+        let currentInput = self.composingText.convertTarget
+        let currentBestCandidateText = self.rawCandidates?.mainResults.first?.text ?? self.rawCandidatesList?.first?.text
+        let shouldTriggerTypoCorrection = Self.shouldTriggerBackspaceTypoCorrection(
+            deleteCount: count,
+            currentBestCandidateText: currentBestCandidateText,
+            currentInput: currentInput
+        )
+        self.backspaceAdjustedPredictionCandidate = if shouldTriggerTypoCorrection {
+            self.lmBasedBackspaceTypoFixPredictionCandidate(previousComposingText: beforeComposingText, currentInput: currentInput) ?? {
+                guard let beforeFirstCandidateText else {
+                    return nil
+                }
+                return Self.backspaceTypoFixPredictionCandidate(
+                    previousInput: beforeInput,
+                    previousFirstCandidateText: beforeFirstCandidateText,
+                    currentInput: currentInput
+                )
+            }()
         } else {
             nil
         }
@@ -797,6 +819,92 @@ public final class SegmentsManager {
         }
 
         return []
+    }
+
+    private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
+        guard !targetComposingText.isEmpty else {
+            return []
+        }
+
+        let leftSideContext = self.getCleanLeftSideContext(maxCount: 30) ?? ""
+        let typoCandidates = self.kanaKanjiConverter.experimentalRequestTypoCorrectionOnly(
+            leftSideContext: leftSideContext,
+            composingText: targetComposingText,
+            options: options(
+                leftSideContext: leftSideContext,
+                requestRichCandidates: false,
+                requireJapanesePrediction: .disabled,
+                requireEnglishPrediction: .disabled
+            ),
+            inputStyle: inputStyle,
+            searchConfig: .init(
+                beamSize: 16,
+                topK: 32,
+                nBest: 3
+            )
+        )
+
+        var seen: Set<String> = []
+        return typoCandidates.compactMap { candidate in
+            let text = candidate.convertedText.toHiragana()
+            guard !text.isEmpty else {
+                return nil
+            }
+            guard seen.insert(text).inserted else {
+                return nil
+            }
+            return text
+        }
+    }
+
+    private func convertedText(reading: String, leftSideContext: String?) -> String? {
+        var composingText = ComposingText()
+        composingText.insertAtCursorPosition(reading, inputStyle: .direct)
+
+        let result = self.kanaKanjiConverter.requestCandidates(
+            composingText,
+            options: options(
+                leftSideContext: leftSideContext,
+                requestRichCandidates: false,
+                requireJapanesePrediction: .disabled,
+                requireEnglishPrediction: .disabled
+            )
+        )
+        return result.mainResults.first?.text
+    }
+
+    @MainActor
+    private func lmBasedBackspaceTypoFixPredictionCandidate(previousComposingText: ComposingText, currentInput: String) -> PredictionCandidate? {
+        let typoCorrectionCandidates = self.requestTypoCorrectionCandidates(
+            composingText: previousComposingText,
+            inputStyle: self.lastInputStyle
+        )
+        guard let correctedReading = typoCorrectionCandidates.first else {
+            return nil
+        }
+
+        let operation = Self.makeSuffixEditOperation(from: currentInput, to: correctedReading)
+            ?? Self.makeSuffixEditOperation(from: currentInput.toHiragana(), to: correctedReading)
+        guard let operation else {
+            return nil
+        }
+
+        let correctedDisplayText = self.convertedText(
+            reading: correctedReading,
+            leftSideContext: self.getCleanLeftSideContext(maxCount: 30)
+        ) ?? correctedReading
+
+        return .init(displayText: correctedDisplayText, appendText: operation.appendText, deleteCount: operation.deleteCount)
+    }
+
+    static func shouldTriggerBackspaceTypoCorrection(deleteCount: Int, currentBestCandidateText: String?, currentInput: String) -> Bool {
+        guard deleteCount == 1 else {
+            return false
+        }
+        if let currentBestCandidateText, currentBestCandidateText == currentInput {
+            return false
+        }
+        return true
     }
 
     static func backspaceTypoFixPredictionCandidate(
