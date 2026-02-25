@@ -312,8 +312,6 @@ public final class SegmentsManager {
     @MainActor
     public func deleteBackwardFromCursorPosition(count: Int = 1) {
         var beforeComposingText = self.composingText.prefixToCursorPosition()
-        let beforeInput = self.composingText.convertTarget
-        let beforeFirstCandidateText = self.rawCandidates?.mainResults.first?.text ?? self.rawCandidatesList?.first?.text
         if !self.composingText.isAtEndIndex {
             // 右端に持っていく
             _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
@@ -338,16 +336,7 @@ public final class SegmentsManager {
             currentInput: currentInput
         )
         self.backspaceAdjustedPredictionCandidate = if shouldTriggerTypoCorrection {
-            self.lmBasedBackspaceTypoFixPredictionCandidate(previousComposingText: beforeComposingText, currentInput: currentInput) ?? {
-                guard let beforeFirstCandidateText else {
-                    return nil
-                }
-                return Self.backspaceTypoFixPredictionCandidate(
-                    previousInput: beforeInput,
-                    previousFirstCandidateText: beforeFirstCandidateText,
-                    currentInput: currentInput
-                )
-            }()
+            self.lmBasedBackspaceTypoFixPredictionCandidate(previousComposingText: beforeComposingText, currentInput: currentInput)
         } else {
             nil
         }
@@ -914,40 +903,6 @@ public final class SegmentsManager {
         return true
     }
 
-    static func backspaceTypoFixPredictionCandidate(
-        previousInput: String,
-        previousFirstCandidateText: String,
-        currentInput: String
-    ) -> PredictionCandidate? {
-        let typoSuffix = "くだしあ"
-        let fixedSuffix = "ください"
-
-        guard let correctedReading = Self.typoFixedTextIfNeeded(
-            previousInput,
-            typoSuffix: typoSuffix,
-            fixedSuffix: fixedSuffix
-        ) else {
-            return nil
-        }
-        let correctedDisplayText = Self.replacingSuffix(previousFirstCandidateText, suffix: typoSuffix, replacement: fixedSuffix) ?? correctedReading
-
-        let operation = Self.makeSuffixEditOperation(from: currentInput, to: correctedReading)
-            ?? Self.makeSuffixEditOperation(from: currentInput.toHiragana(), to: correctedReading)
-        guard let operation else {
-            return nil
-        }
-
-        return .init(displayText: correctedDisplayText, appendText: operation.appendText, deleteCount: operation.deleteCount)
-    }
-
-    private static func typoFixedTextIfNeeded(_ text: String, typoSuffix: String, fixedSuffix: String) -> String? {
-        if let replaced = Self.replacingSuffix(text, suffix: typoSuffix, replacement: fixedSuffix) {
-            return replaced
-        }
-        let hiragana = text.toHiragana()
-        return Self.replacingSuffix(hiragana, suffix: typoSuffix, replacement: fixedSuffix)
-    }
-
     private static func makeSuffixEditOperation(from currentText: String, to targetText: String) -> (appendText: String, deleteCount: Int)? {
         let sharedPrefixLength = zip(currentText, targetText).prefix(while: ==).count
         let deleteCount = currentText.count - sharedPrefixLength
@@ -956,13 +911,6 @@ public final class SegmentsManager {
             return nil
         }
         return (appendText, deleteCount)
-    }
-
-    private static func replacingSuffix(_ text: String, suffix: String, replacement: String) -> String? {
-        guard text.hasSuffix(suffix) else {
-            return nil
-        }
-        return String(text.dropLast(suffix.count)) + replacement
     }
 
     // swiftlint:disable:next cyclomatic_complexity
