@@ -326,6 +326,10 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
+        guard Config.DebugTypoCorrection().value else {
+            self.backspaceAdjustedPredictionCandidate = nil
+            return
+        }
         let currentInput = self.composingText.convertTarget
         let currentBestCandidateText = self.rawCandidates?.mainResults.first?.text ?? self.rawCandidatesList?.first?.text
         let shouldTriggerTypoCorrection = Self.shouldTriggerBackspaceTypoCorrection(
@@ -822,6 +826,9 @@ public final class SegmentsManager {
     }
 
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
+        guard Config.DebugTypoCorrection().value else {
+            return []
+        }
         guard !targetComposingText.isEmpty else {
             return []
         }

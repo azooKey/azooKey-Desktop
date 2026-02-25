@@ -17,6 +17,7 @@ struct ConfigWindow: View {
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var debugPredictiveTyping = Config.DebugPredictiveTyping()
+    @ConfigState private var debugTypoCorrection = Config.DebugTypoCorrection()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
@@ -513,6 +514,7 @@ struct ConfigWindow: View {
             Section {
                 Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
                 Toggle("開発中の予測入力を有効化", isOn: $debugPredictiveTyping)
+                Toggle("開発中の入力訂正を有効化", isOn: $debugTypoCorrection)
                 Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
                     Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
                     Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
