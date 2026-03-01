@@ -178,6 +178,7 @@ extension Config {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case qwerty
             case australian
+            case british
             case colemak
             case dvorak
             case dvorakQwertyCommand
@@ -188,6 +189,8 @@ extension Config {
                     return "com.apple.keylayout.US"
                 case .australian:
                     return "com.apple.keylayout.Australian"
+                case .british:
+                    return "com.apple.keylayout.British"
                 case .colemak:
                     return "com.apple.keylayout.Colemak"
                 case .dvorak:
