@@ -109,6 +109,8 @@ extension azooKeyMacInputController {
         do {
             self.segmentsManager.appendDebugMessage("\(#line): Applicatiion Support Directory Path: \(self.segmentsManager.azooKeyMemoryDir)")
             try FileManager.default.createDirectory(at: self.segmentsManager.azooKeyMemoryDir, withIntermediateDirectories: true)
+            self.segmentsManager.appendDebugMessage("\(#line): Debug TypoCorrection Download Directory Path: \(self.segmentsManager.downloadedInputN5LMDir)")
+            try FileManager.default.createDirectory(at: self.segmentsManager.downloadedInputN5LMDir, withIntermediateDirectories: true)
         } catch {
             self.segmentsManager.appendDebugMessage("\(#line): \(error.localizedDescription)")
         }

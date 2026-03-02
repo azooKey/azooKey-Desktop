@@ -110,7 +110,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             .appendingPathComponent("memory", isDirectory: true)
         }
 
-        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac")
+        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.azooKeyMacIdentifier)
         self.segmentsManager = SegmentsManager(
             kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
@@ -713,19 +713,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         guard let prediction = predictions.first else {
             return
         }
-
-        let currentTarget = self.segmentsManager.convertTarget
-        var matchTarget = currentTarget
-        if let last = matchTarget.last,
-           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
-            matchTarget.removeLast()
-            self.segmentsManager.deleteBackwardFromCursorPosition(count: 1)
+        let deleteCount = prediction.deleteCount
+        if deleteCount > 0 {
+            self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
         }
-
-        guard !matchTarget.isEmpty else {
-            return
-        }
-
         let appendText = prediction.appendText
 
         guard !appendText.isEmpty else {

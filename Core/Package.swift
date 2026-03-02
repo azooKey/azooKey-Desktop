@@ -21,7 +21,9 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "44429812ea2f6fe1b8a759dd994c6b29eafbc88f", traits: kanaKanjiConverterTraits)
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "23544d6ea30822fd498caeff2dbc04d78b268134", traits: kanaKanjiConverterTraits),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.0")
     ],
     targets: [
         .executableTarget(
@@ -36,7 +38,9 @@ let package = Package(
             name: "Core",
             dependencies: [
                 .product(name: "SwiftUtils", package: "AzooKeyKanaKanjiConverter"),
-                .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter")
+                .product(name: "KanaKanjiConverterModuleWithDefaultDictionary", package: "AzooKeyKanaKanjiConverter"),
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ],
             swiftSettings: [.interoperabilityMode(.Cxx)],
             plugins: [
