@@ -110,7 +110,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             .appendingPathComponent("memory", isDirectory: true)
         }
 
-        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac")
+        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.azooKeyMacIdentifier)
         self.segmentsManager = SegmentsManager(
             kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
