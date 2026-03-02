@@ -713,24 +713,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         guard let prediction = predictions.first else {
             return
         }
-
-        let currentTarget = self.segmentsManager.convertTarget
-        var matchTarget = currentTarget
-        if let last = matchTarget.last,
-           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
-            matchTarget.removeLast()
-            self.segmentsManager.deleteBackwardFromCursorPosition(count: 1)
-        }
-
-        guard !matchTarget.isEmpty else {
-            return
-        }
-
-        let appendText = prediction.appendText
         let deleteCount = prediction.deleteCount
         if deleteCount > 0 {
             self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
         }
+        let appendText = prediction.appendText
 
         guard !appendText.isEmpty else {
             return
