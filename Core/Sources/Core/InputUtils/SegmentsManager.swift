@@ -371,17 +371,6 @@ public final class SegmentsManager {
             }
             return
         }
-        let currentBestCandidateText = self.rawCandidates?.mainResults.first?.text ?? self.rawCandidatesList?.first?.text
-        let shouldTriggerTypoCorrection = Self.shouldTriggerBackspaceTypoCorrection(
-            deleteCount: count,
-            currentBestCandidateText: currentBestCandidateText,
-            currentInput: currentInput
-        )
-        guard shouldTriggerTypoCorrection else {
-            self.backspaceAdjustedPredictionCandidate = nil
-            self.backspaceTypoCorrectionLock = nil
-            return
-        }
         self.backspaceTypoCorrectionLock = self.lmBasedBackspaceTypoCorrectionLock(previousComposingText: beforeComposingText)
         if let lock = self.backspaceTypoCorrectionLock {
             self.backspaceAdjustedPredictionCandidate = Self.makeBackspaceTypoCorrectionPredictionCandidate(
@@ -951,16 +940,6 @@ public final class SegmentsManager {
             return nil
         }
         return .init(displayText: displayText, appendText: operation.appendText, deleteCount: operation.deleteCount)
-    }
-
-    static func shouldTriggerBackspaceTypoCorrection(deleteCount: Int, currentBestCandidateText: String?, currentInput: String) -> Bool {
-        guard deleteCount == 1 else {
-            return false
-        }
-        if let currentBestCandidateText, currentBestCandidateText == currentInput {
-            return false
-        }
-        return true
     }
 
     private static func makeSuffixEditOperation(from currentText: String, to targetText: String) -> (appendText: String, deleteCount: Int)? {
