@@ -3,7 +3,7 @@ import Testing
 
 @Test func testMakeBackspaceTypoCorrectionPredictionCandidateRecalculatesEditOperationForCurrentInput() async throws {
     let candidate = SegmentsManager.makeBackspaceTypoCorrectionPredictionCandidate(
-        currentInput: "くだし",
+        currentConvertTarget: "くだし",
         targetReading: "ください",
         displayText: "下さい"
     )
@@ -15,7 +15,7 @@ import Testing
 
 @Test func testMakeBackspaceTypoCorrectionPredictionCandidateKeepsDisplayTextAndUpdatesAppendTextOnFurtherDelete() async throws {
     let candidate = SegmentsManager.makeBackspaceTypoCorrectionPredictionCandidate(
-        currentInput: "くだ",
+        currentConvertTarget: "くだ",
         targetReading: "ください",
         displayText: "下さい"
     )
@@ -56,4 +56,24 @@ import Testing
     )
 
     #expect(candidates == [prediction])
+}
+
+@Test func testShouldPresentTypoCorrectionPredictionCandidateReturnsFalseForMatchingPreviousComposingDisplay() async throws {
+    // 削除前の previousComposingText と同じ表示候補は、訂正候補として出さない。
+    let shouldPresent = SegmentsManager.shouldPresentTypoCorrectionPredictionCandidate(
+        candidateDisplayText: "下さい",
+        previousComposingDisplayText: "下さい"
+    )
+
+    #expect(shouldPresent == false)
+}
+
+@Test func testShouldPresentTypoCorrectionPredictionCandidateReturnsTrueForDifferentPreviousComposingDisplay() async throws {
+    // 削除前の previousComposingText と異なる表示候補だけを、訂正候補として出す。
+    let shouldPresent = SegmentsManager.shouldPresentTypoCorrectionPredictionCandidate(
+        candidateDisplayText: "下さい",
+        previousComposingDisplayText: "ください"
+    )
+
+    #expect(shouldPresent == true)
 }

@@ -336,13 +336,13 @@ public final class SegmentsManager {
 
     @MainActor
     public func deleteBackwardFromCursorPosition(count: Int = 1) {
-        var beforeComposingText = self.composingText.prefixToCursorPosition()
+        var previousComposingText = self.composingText.prefixToCursorPosition()
         if !self.composingText.isAtEndIndex {
             // 右端に持っていく
             _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
             // 一度segmentの編集状態もリセットにする
             self.didExperienceSegmentEdition = false
-            beforeComposingText = self.composingText.prefixToCursorPosition()
+            previousComposingText = self.composingText.prefixToCursorPosition()
         }
         self.composingText.deleteBackwardFromCursorPosition(count: count)
         self.lastOperation = .delete
@@ -354,7 +354,7 @@ public final class SegmentsManager {
             self.backspaceTypoCorrectionLock = nil
             return
         }
-        let currentInput = self.composingText.convertTarget
+        let currentConvertTarget = self.composingText.convertTarget
         guard count == 1 else {
             self.backspaceAdjustedPredictionCandidate = nil
             self.backspaceTypoCorrectionLock = nil
@@ -362,7 +362,7 @@ public final class SegmentsManager {
         }
         if let lock = self.backspaceTypoCorrectionLock {
             self.backspaceAdjustedPredictionCandidate = Self.makeBackspaceTypoCorrectionPredictionCandidate(
-                currentInput: currentInput,
+                currentConvertTarget: currentConvertTarget,
                 targetReading: lock.targetReading,
                 displayText: lock.displayText
             )
@@ -371,10 +371,10 @@ public final class SegmentsManager {
             }
             return
         }
-        self.backspaceTypoCorrectionLock = self.lmBasedBackspaceTypoCorrectionLock(previousComposingText: beforeComposingText)
+        self.backspaceTypoCorrectionLock = self.lmBasedBackspaceTypoCorrectionLock(previousComposingText: previousComposingText)
         if let lock = self.backspaceTypoCorrectionLock {
             self.backspaceAdjustedPredictionCandidate = Self.makeBackspaceTypoCorrectionPredictionCandidate(
-                currentInput: currentInput,
+                currentConvertTarget: currentConvertTarget,
                 targetReading: lock.targetReading,
                 displayText: lock.displayText
             )
@@ -829,6 +829,14 @@ public final class SegmentsManager {
         return predictionCandidates
     }
 
+    public static func shouldPresentTypoCorrectionPredictionCandidate(
+        candidateDisplayText: String,
+        previousComposingDisplayText: String
+    ) -> Bool {
+        // 削除前の previousComposingText と同じ表示候補は、訂正候補としては提示しない。
+        candidateDisplayText != previousComposingDisplayText
+    }
+
     public func requestPredictionCandidates() -> [PredictionCandidate] {
         guard Config.DebugPredictiveTyping().value else {
             return []
@@ -962,17 +970,27 @@ public final class SegmentsManager {
             reading: correctedReading,
             leftSideContext: self.getCleanLeftSideContext(maxCount: 30)
         ) ?? correctedReading
+        let previousComposingDisplayText = self.convertedText(
+            reading: previousComposingText.convertTarget,
+            leftSideContext: self.getCleanLeftSideContext(maxCount: 30)
+        ) ?? previousComposingText.convertTarget
+        guard Self.shouldPresentTypoCorrectionPredictionCandidate(
+            candidateDisplayText: correctedDisplayText,
+            previousComposingDisplayText: previousComposingDisplayText
+        ) else {
+            return nil
+        }
 
         return .init(displayText: correctedDisplayText, targetReading: correctedReading)
     }
 
     static func makeBackspaceTypoCorrectionPredictionCandidate(
-        currentInput: String,
+        currentConvertTarget: String,
         targetReading: String,
         displayText: String
     ) -> PredictionCandidate? {
-        let operation = Self.makeSuffixEditOperation(from: currentInput, to: targetReading)
-            ?? Self.makeSuffixEditOperation(from: currentInput.toHiragana(), to: targetReading)
+        let operation = Self.makeSuffixEditOperation(from: currentConvertTarget, to: targetReading)
+            ?? Self.makeSuffixEditOperation(from: currentConvertTarget.toHiragana(), to: targetReading)
         guard let operation else {
             return nil
         }
