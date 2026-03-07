@@ -263,12 +263,14 @@ extension azooKeyMacInputController {
                 }
 
                 let modelName = Config.OpenAiModelName().value
-                let result = try await AIClient.sendTextTransformRequest(
-                    systemPrompt,
-                    backend: backend,
-                    modelName: modelName,
+                let configuration = AIClient.configuration(
+                    for: backend,
                     apiKey: apiKey,
-                    apiEndpoint: self.endpoint,
+                    apiEndpoint: self.endpoint
+                )
+                let result = try await AIClient.sendTextTransform(
+                    .init(prompt: systemPrompt, modelName: modelName),
+                    using: configuration,
                     logger: { [weak self] message in
                         self?.segmentsManager.appendDebugMessage(message)
                     }
@@ -447,12 +449,14 @@ extension azooKeyMacInputController {
         }
 
         let modelName = Config.OpenAiModelName().value
-        let result = try await AIClient.sendTextTransformRequest(
-            systemPrompt,
-            backend: backend,
-            modelName: modelName,
+        let configuration = AIClient.configuration(
+            for: backend,
             apiKey: apiKey,
-            apiEndpoint: self.endpoint,
+            apiEndpoint: self.endpoint
+        )
+        let result = try await AIClient.sendTextTransform(
+            .init(prompt: systemPrompt, modelName: modelName),
+            using: configuration,
             logger: { [weak self] message in
                 self?.segmentsManager.appendDebugMessage(message)
             }

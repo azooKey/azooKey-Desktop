@@ -892,16 +892,19 @@ extension azooKeyMacInputController {
             backend = .openAI
         }
         self.segmentsManager.appendDebugMessage("Using backend: \(backend.rawValue)")
+        let configuration = AIClient.configuration(
+            for: backend,
+            apiKey: apiKey,
+            apiEndpoint: Config.OpenAiApiEndpoint().value
+        )
 
         // 非同期タスクでリクエストを送信
         Task {
             do {
                 self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await AIClient.sendRequest(
+                let predictions = try await AIClient.sendPrediction(
                     request,
-                    backend: backend,
-                    apiKey: apiKey,
-                    apiEndpoint: Config.OpenAiApiEndpoint().value,
+                    using: configuration,
                     logger: { [weak self] message in
                         self?.segmentsManager.appendDebugMessage(message)
                     }

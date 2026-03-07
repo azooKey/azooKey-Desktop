@@ -23,6 +23,13 @@ public enum FoundationModelsAvailability {
         }
         return false
     }
+
+    public var unavailableReason: UnavailabilityReason? {
+        guard case .unavailable(let reason) = self else {
+            return nil
+        }
+        return reason
+    }
 }
 
 // Foundation Models specific errors
@@ -58,25 +65,7 @@ public enum FoundationModelsClient {
     // Check if Foundation Models is available on this system
     public static func checkAvailability() -> FoundationModelsAvailability {
         #if canImport(FoundationModels)
-        let systemModel = SystemLanguageModel.default
-
-        switch systemModel.availability {
-        case .available:
-            return .available
-        case .unavailable(let reason):
-            switch reason {
-            case .deviceNotEligible:
-                return .unavailable(reason: .deviceNotEligible)
-            case .appleIntelligenceNotEnabled:
-                return .unavailable(reason: .appleIntelligenceNotEnabled)
-            case .modelNotReady:
-                return .unavailable(reason: .modelNotReady)
-            @unknown default:
-                return .unavailable(reason: .deviceNotEligible)
-            }
-        @unknown default:
-            return .unavailable(reason: .deviceNotEligible)
-        }
+        mapAvailability(SystemLanguageModel.default.availability)
         #else
         return .unavailable(reason: .frameworkNotAvailable)
         #endif
@@ -99,32 +88,7 @@ public enum FoundationModelsClient {
     public static func sendRequest(_ request: OpenAIRequest, logger: ((String) -> Void)? = nil) async throws -> [String] {
         #if canImport(FoundationModels)
         logger?("Foundation Models request started")
-
-        let systemModel = SystemLanguageModel.default
-
-        // Check availability and throw appropriate error
-        switch systemModel.availability {
-        case .available:
-            break
-        case .unavailable(let reason):
-            logger?("Foundation Models not available: \(reason)")
-            let mappedReason: FoundationModelsAvailability.UnavailabilityReason = switch reason {
-            case .deviceNotEligible:
-                .deviceNotEligible
-            case .appleIntelligenceNotEnabled:
-                .appleIntelligenceNotEnabled
-            case .modelNotReady:
-                .modelNotReady
-            @unknown default:
-                .deviceNotEligible
-            }
-            throw FoundationModelsError.unavailable(mappedReason)
-        @unknown default:
-            logger?("Foundation Models availability unknown")
-            throw FoundationModelsError.unavailable(.deviceNotEligible)
-        }
-
-        let session = LanguageModelSession(model: systemModel)
+        let session = try makeSession(logger: logger)
 
         // Build prompt - simplified since we use @Generable for structured output
         let promptText = """
@@ -148,14 +112,22 @@ public enum FoundationModelsClient {
     public static func sendTextTransformRequest(_ prompt: String, logger: ((String) -> Void)? = nil) async throws -> String {
         #if canImport(FoundationModels)
         logger?("Foundation Models text transform request started")
+        let session = try makeSession(logger: logger)
+        let response = try await session.respond(to: prompt, generating: TextTransformResponse.self)
 
-        let systemModel = SystemLanguageModel.default
+        logger?("Received structured response for text transform")
+        return response.content.result.trimmingCharacters(in: .whitespacesAndNewlines)
+        #else
+        throw FoundationModelsError.unavailable(.frameworkNotAvailable)
+        #endif
+    }
 
-        switch systemModel.availability {
+    #if canImport(FoundationModels)
+    private static func mapAvailability(_ availability: SystemLanguageModel.Availability) -> FoundationModelsAvailability {
+        switch availability {
         case .available:
-            break
+            return .available
         case .unavailable(let reason):
-            logger?("Foundation Models not available: \(reason)")
             let mappedReason: FoundationModelsAvailability.UnavailabilityReason = switch reason {
             case .deviceNotEligible:
                 .deviceNotEligible
@@ -166,21 +138,21 @@ public enum FoundationModelsClient {
             @unknown default:
                 .deviceNotEligible
             }
-            throw FoundationModelsError.unavailable(mappedReason)
+            return .unavailable(reason: mappedReason)
         @unknown default:
-            logger?("Foundation Models availability unknown")
-            throw FoundationModelsError.unavailable(.deviceNotEligible)
+            return .unavailable(reason: .deviceNotEligible)
         }
-
-        let session = LanguageModelSession(model: systemModel)
-        let response = try await session.respond(to: prompt, generating: TextTransformResponse.self)
-
-        logger?("Received structured response for text transform")
-        return response.content.result.trimmingCharacters(in: .whitespacesAndNewlines)
-        #else
-        throw FoundationModelsError.unavailable(.frameworkNotAvailable)
-        #endif
     }
+
+    private static func makeSession(logger: ((String) -> Void)? = nil) throws -> LanguageModelSession {
+        let availability = checkAvailability()
+        if let reason = availability.unavailableReason {
+            logger?("Foundation Models not available: \(reason)")
+            throw FoundationModelsError.unavailable(reason)
+        }
+        return LanguageModelSession(model: SystemLanguageModel.default)
+    }
+    #endif
 }
 
 // Compatibility wrapper for older macOS versions

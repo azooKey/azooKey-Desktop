@@ -185,17 +185,7 @@ struct Prompt {
 //
 // - methods:
 //    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
-public struct OpenAIRequest {
-    public init(prompt: String, target: String, modelName: String) {
-        self.prompt = prompt
-        self.target = target
-        self.modelName = modelName
-    }
-
-    let prompt: String
-    let target: String
-    let modelName: String
-
+extension AIPredictionRequest {
     // リクエストをJSON形式に変換する関数
     func toJSON() -> [String: Any] {
         [
@@ -225,6 +215,36 @@ public struct OpenAIRequest {
                             ]
                         ],
                         "required": ["predictions"],
+                        "additionalProperties": false
+                    ] as [String: Any]
+                ] as [String: Any]
+            ] as [String: Any]
+        ]
+    }
+}
+
+extension AITextTransformRequest {
+    func toJSON() -> [String: Any] {
+        [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions. Return only the transformed text as a JSON object with a 'result' field."],
+                ["role": "user", "content": prompt]
+            ],
+            "response_format": [
+                "type": "json_schema",
+                "json_schema": [
+                    "name": "text_transform_response",
+                    "strict": true,
+                    "schema": [
+                        "type": "object",
+                        "properties": [
+                            "result": [
+                                "type": "string",
+                                "description": "The transformed text"
+                            ]
+                        ],
+                        "required": ["result"],
                         "additionalProperties": false
                     ] as [String: Any]
                 ] as [String: Any]
@@ -270,38 +290,17 @@ public enum OpenAIError: LocalizedError, @unchecked Sendable {
 // OpenAI APIクライアント
 public enum OpenAIClient {
     // APIリクエストを送信する静的メソッド
-    public static func sendRequest(_ request: OpenAIRequest, apiKey: String, apiEndpoint: String, logger: ((String) -> Void)? = nil) async throws -> [String] {
-        guard let url = URL(string: apiEndpoint) else {
-            throw OpenAIError.invalidURL
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = request.toJSON()
-        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        // 非同期でリクエストを送信
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        // レスポンスの検証
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
-        }
-
-        // レスポンスデータの解析
-        return try parseResponseData(data, logger: logger)
+    public static func sendRequest(_ request: AIPredictionRequest, apiKey: String, apiEndpoint: String, logger: ((String) -> Void)? = nil) async throws -> [String] {
+        let data = try await performChatCompletionRequest(
+            body: request.toJSON(),
+            apiKey: apiKey,
+            apiEndpoint: apiEndpoint
+        )
+        return try parsePredictionsResponse(data, logger: logger)
     }
 
     // レスポンスデータのパースを行う静的メソッド
-    private static func parseResponseData(_ data: Data, logger: ((String) -> Void)? = nil) throws -> [String] {
+    static func parsePredictionsResponse(_ data: Data, logger: ((String) -> Void)? = nil) throws -> [String] {
         logger?("Received JSON response")
 
         let jsonObject: Any
@@ -349,68 +348,31 @@ public enum OpenAIClient {
     }
 
     // Simple text transformation method for AI Transform feature
+    public static func sendTextTransformRequest(
+        _ request: AITextTransformRequest,
+        apiKey: String,
+        apiEndpoint: String,
+        logger: ((String) -> Void)? = nil
+    ) async throws -> String {
+        let data = try await performChatCompletionRequest(
+            body: request.toJSON(),
+            apiKey: apiKey,
+            apiEndpoint: apiEndpoint
+        )
+        return try parseTextTransformResponse(data, logger: logger)
+    }
+
     public static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String, apiEndpoint: String) async throws -> String {
-        guard let url = URL(string: apiEndpoint) else {
-            throw OpenAIError.invalidURL
-        }
+        try await sendTextTransformRequest(
+            .init(prompt: prompt, modelName: modelName),
+            apiKey: apiKey,
+            apiEndpoint: apiEndpoint
+        )
+    }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    static func parseTextTransformResponse(_ data: Data, logger: ((String) -> Void)? = nil) throws -> String {
+        let contentString = try firstChoiceContentString(from: data, logger: logger)
 
-        let body: [String: Any] = [
-            "model": modelName,
-            "messages": [
-                ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions. Return only the transformed text as a JSON object with a 'result' field."],
-                ["role": "user", "content": prompt]
-            ],
-            "response_format": [
-                "type": "json_schema",
-                "json_schema": [
-                    "name": "text_transform_response",
-                    "strict": true,
-                    "schema": [
-                        "type": "object",
-                        "properties": [
-                            "result": [
-                                "type": "string",
-                                "description": "The transformed text"
-                            ]
-                        ],
-                        "required": ["result"],
-                        "additionalProperties": false
-                    ] as [String: Any]
-                ] as [String: Any]
-            ] as [String: Any]
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        // Send async request
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        // Validate response
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.noServerResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
-            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
-        }
-
-        // Parse response data using similar approach as sendRequest
-        let jsonObject = try JSONSerialization.jsonObject(with: data)
-        guard let jsonDict = jsonObject as? [String: Any],
-              let choices = jsonDict["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let contentString = message["content"] as? String else {
-            throw OpenAIError.invalidResponseStructure(jsonObject)
-        }
-
-        // Parse the structured JSON response
         guard let contentData = contentString.data(using: .utf8),
               let parsedContent = try JSONSerialization.jsonObject(with: contentData) as? [String: Any],
               let result = parsedContent["result"] as? String else {
@@ -419,53 +381,85 @@ public enum OpenAIClient {
 
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-}
 
-private enum ErrorUnion: Error {
-    case nullError
-    case double(any Error, any Error)
-}
-
-private struct ChatRequest: Codable {
-    var model: String = "gpt-4o-mini"
-    var messages: [Message] = []
-}
-
-private struct Message: Codable {
-    enum Role: String, Codable {
-        case user
-        case system
-        case assistant
-    }
-    var role: Role
-    var content: String
-}
-
-private struct ChatSuccessResponse: Codable {
-    var id: String
-    var object: String
-    var created: Int
-    var model: String
-    var choices: [Choice]
-
-    struct Choice: Codable {
-        var index: Int
-        var logprobs: Double?
-        var finishReason: String
-        var message: Message
+    private static func performChatCompletionRequest(
+        body: [String: Any],
+        apiKey: String,
+        apiEndpoint: String
+    ) async throws -> Data {
+        let request = try makeChatCompletionRequest(
+            body: body,
+            apiKey: apiKey,
+            apiEndpoint: apiEndpoint
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return data
     }
 
-    struct Usage: Codable {
-        var promptTokens: Int
-        var completionTokens: Int
-        var totalTokens: Int
-    }
-}
+    private static func makeChatCompletionRequest(
+        body: [String: Any],
+        apiKey: String,
+        apiEndpoint: String
+    ) throws -> URLRequest {
+        guard let url = validatedEndpointURL(apiEndpoint) else {
+            throw OpenAIError.invalidURL
+        }
 
-private struct ChatFailureResponse: Codable, Error {
-    var error: ErrorResponse
-    struct ErrorResponse: Codable {
-        var message: String
-        var type: String
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    private static func validatedEndpointURL(_ apiEndpoint: String) -> URL? {
+        guard let url = URL(string: apiEndpoint),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return nil
+        }
+        return url
+    }
+
+    private static func validate(response: URLResponse, data: Data) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIError.noServerResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let responseBody = String(bytes: data, encoding: .utf8) ?? "Body is not encoded in UTF-8"
+            throw OpenAIError.invalidResponseStatus(code: httpResponse.statusCode, body: responseBody)
+        }
+    }
+
+    private static func choiceContentStrings(from data: Data, logger: ((String) -> Void)? = nil) throws -> [String] {
+        let jsonObject: Any
+        do {
+            jsonObject = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            logger?("Failed to parse JSON response")
+            throw OpenAIError.parseError("Failed to parse response")
+        }
+
+        guard let jsonDict = jsonObject as? [String: Any],
+              let choices = jsonDict["choices"] as? [[String: Any]] else {
+            throw OpenAIError.invalidResponseStructure(jsonObject)
+        }
+
+        return choices.compactMap { choice in
+            let message = choice["message"] as? [String: Any]
+            return message?["content"] as? String
+        }
+    }
+
+    private static func firstChoiceContentString(from data: Data, logger: ((String) -> Void)? = nil) throws -> String {
+        guard let contentString = try choiceContentStrings(from: data, logger: logger).first else {
+            let jsonObject = try JSONSerialization.jsonObject(with: data)
+            throw OpenAIError.invalidResponseStructure(jsonObject)
+        }
+        return contentString
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 // AI Backend selection
-public enum AIBackend: String, Codable, CaseIterable {
+public enum AIBackend: String, Codable, CaseIterable, Sendable {
     case foundationModels = "Foundation Models"
     case openAI = "OpenAI API"
 
@@ -16,21 +16,93 @@ public enum AIBackend: String, Codable, CaseIterable {
     }
 }
 
+public struct AIPredictionRequest: Sendable {
+    public init(prompt: String, target: String, modelName: String) {
+        self.prompt = prompt
+        self.target = target
+        self.modelName = modelName
+    }
+
+    let prompt: String
+    let target: String
+    let modelName: String
+}
+
+public typealias OpenAIRequest = AIPredictionRequest
+
+public struct AITextTransformRequest: Sendable {
+    public init(prompt: String, modelName: String) {
+        self.prompt = prompt
+        self.modelName = modelName
+    }
+
+    let prompt: String
+    let modelName: String
+}
+
 // Unified AI Client that routes to the appropriate backend
 public enum AIClient {
+    public enum Configuration: Sendable {
+        case foundationModels
+        case openAI(apiKey: String, apiEndpoint: String)
+    }
+
+    public static func configuration(
+        for backend: AIBackend,
+        apiKey: String = "",
+        apiEndpoint: String = ""
+    ) -> Configuration {
+        switch backend {
+        case .foundationModels:
+            return .foundationModels
+        case .openAI:
+            return .openAI(apiKey: apiKey, apiEndpoint: apiEndpoint)
+        }
+    }
+
+    public static func sendPrediction(
+        _ request: AIPredictionRequest,
+        using configuration: Configuration,
+        logger: ((String) -> Void)? = nil
+    ) async throws -> [String] {
+        switch configuration {
+        case .foundationModels:
+            return try await FoundationModelsClientCompat.sendRequest(request, logger: logger)
+        case .openAI(let apiKey, let apiEndpoint):
+            return try await OpenAIClient.sendRequest(request, apiKey: apiKey, apiEndpoint: apiEndpoint, logger: logger)
+        }
+    }
+
+    public static func sendTextTransform(
+        _ request: AITextTransformRequest,
+        using configuration: Configuration,
+        logger: ((String) -> Void)? = nil
+    ) async throws -> String {
+        switch configuration {
+        case .foundationModels:
+            return try await FoundationModelsClientCompat.sendTextTransformRequest(request.prompt, logger: logger)
+        case .openAI(let apiKey, let apiEndpoint):
+            return try await OpenAIClient.sendTextTransformRequest(
+                request,
+                apiKey: apiKey,
+                apiEndpoint: apiEndpoint,
+                logger: logger
+            )
+        }
+    }
+
     public static func sendRequest(
-        _ request: OpenAIRequest,
+        _ request: AIPredictionRequest,
         backend: AIBackend,
         apiKey: String = "",
         apiEndpoint: String = "",
         logger: ((String) -> Void)? = nil
     ) async throws -> [String] {
-        switch backend {
-        case .foundationModels:
-            return try await FoundationModelsClientCompat.sendRequest(request, logger: logger)
-        case .openAI:
-            return try await OpenAIClient.sendRequest(request, apiKey: apiKey, apiEndpoint: apiEndpoint, logger: logger)
-        }
+        try await sendPrediction(
+            request,
+            using: configuration(for: backend, apiKey: apiKey, apiEndpoint: apiEndpoint),
+            logger: logger
+        )
     }
 
     public static func sendTextTransformRequest(
@@ -41,16 +113,10 @@ public enum AIClient {
         apiEndpoint: String = "",
         logger: ((String) -> Void)? = nil
     ) async throws -> String {
-        switch backend {
-        case .foundationModels:
-            return try await FoundationModelsClientCompat.sendTextTransformRequest(prompt, logger: logger)
-        case .openAI:
-            return try await OpenAIClient.sendTextTransformRequest(
-                prompt: prompt,
-                modelName: modelName,
-                apiKey: apiKey,
-                apiEndpoint: apiEndpoint
-            )
-        }
+        try await sendTextTransform(
+            .init(prompt: prompt, modelName: modelName),
+            using: configuration(for: backend, apiKey: apiKey, apiEndpoint: apiEndpoint),
+            logger: logger
+        )
     }
 }
