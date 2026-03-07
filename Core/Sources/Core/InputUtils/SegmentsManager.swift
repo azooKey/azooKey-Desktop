@@ -65,7 +65,7 @@ public final class SegmentsManager {
     private var backspaceAdjustedPredictionCandidate: PredictionCandidate?
     private var backspaceTypoCorrectionLock: BackspaceTypoCorrectionLock?
 
-    public struct PredictionCandidate: Sendable {
+    public struct PredictionCandidate: Sendable, Equatable {
         public var displayText: String
         public var appendText: String
         public var deleteCount: Int = 0
@@ -809,6 +809,26 @@ public final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
+    public func requestTypoCorrectionPredictionCandidates() -> [PredictionCandidate] {
+        guard Config.DebugTypoCorrection().value else {
+            return []
+        }
+        guard let backspaceAdjustedPredictionCandidate else {
+            return []
+        }
+        return [backspaceAdjustedPredictionCandidate]
+    }
+
+    public static func preferredPredictionCandidates(
+        typoCorrectionCandidates: [PredictionCandidate],
+        predictionCandidates: [PredictionCandidate]
+    ) -> [PredictionCandidate] {
+        if !typoCorrectionCandidates.isEmpty {
+            return typoCorrectionCandidates
+        }
+        return predictionCandidates
+    }
+
     public func requestPredictionCandidates() -> [PredictionCandidate] {
         guard Config.DebugPredictiveTyping().value else {
             return []
@@ -817,10 +837,6 @@ public final class SegmentsManager {
         let target = self.composingText.convertTarget
         guard !target.isEmpty else {
             return []
-        }
-
-        if let backspaceAdjustedPredictionCandidate {
-            return [backspaceAdjustedPredictionCandidate]
         }
 
         guard let rawCandidates else {

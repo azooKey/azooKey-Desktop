@@ -24,3 +24,36 @@ import Testing
     #expect(candidate?.appendText == "さい")
     #expect(candidate?.deleteCount == 0)
 }
+
+@Test func testPreferredPredictionCandidatesPreferTypoCorrectionCandidates() async throws {
+    let typoCorrection = SegmentsManager.PredictionCandidate(
+        displayText: "下さい",
+        appendText: "さい",
+        deleteCount: 1
+    )
+    let prediction = SegmentsManager.PredictionCandidate(
+        displayText: "くださいました",
+        appendText: "ました"
+    )
+
+    let candidates = SegmentsManager.preferredPredictionCandidates(
+        typoCorrectionCandidates: [typoCorrection],
+        predictionCandidates: [prediction]
+    )
+
+    #expect(candidates == [typoCorrection])
+}
+
+@Test func testPreferredPredictionCandidatesFallbackToPredictionCandidates() async throws {
+    let prediction = SegmentsManager.PredictionCandidate(
+        displayText: "くださいました",
+        appendText: "ました"
+    )
+
+    let candidates = SegmentsManager.preferredPredictionCandidates(
+        typoCorrectionCandidates: [],
+        predictionCandidates: [prediction]
+    )
+
+    #expect(candidates == [prediction])
+}

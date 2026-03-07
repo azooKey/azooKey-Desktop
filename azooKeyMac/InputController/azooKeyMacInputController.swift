@@ -600,7 +600,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        let predictions = self.segmentsManager.requestPredictionCandidates()
+        let predictions = self.requestPreferredPredictionCandidates()
         if predictions.isEmpty {
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
@@ -709,7 +709,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     private func acceptPredictionCandidate() {
-        let predictions = self.segmentsManager.requestPredictionCandidates()
+        let predictions = self.requestPreferredPredictionCandidates()
         guard let prediction = predictions.first else {
             return
         }
@@ -724,6 +724,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
+    }
+
+    private func requestPreferredPredictionCandidates() -> [SegmentsManager.PredictionCandidate] {
+        SegmentsManager.preferredPredictionCandidates(
+            typoCorrectionCandidates: self.segmentsManager.requestTypoCorrectionPredictionCandidates(),
+            predictionCandidates: self.segmentsManager.requestPredictionCandidates()
+        )
     }
 
     var retryCount = 0
