@@ -809,7 +809,6 @@ public final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     public func requestPredictionCandidates() -> [PredictionCandidate] {
         guard Config.DebugPredictiveTyping().value else {
             return []
