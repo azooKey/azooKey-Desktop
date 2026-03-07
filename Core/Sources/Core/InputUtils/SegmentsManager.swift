@@ -809,7 +809,6 @@ public final class SegmentsManager {
         suggestSelectionIndex = nil
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     public func requestPredictionCandidates() -> [PredictionCandidate] {
         guard Config.DebugPredictiveTyping().value else {
             return []
@@ -819,16 +818,6 @@ public final class SegmentsManager {
         guard !target.isEmpty else {
             return []
         }
-
-        var matchTarget = target
-        if let last = matchTarget.last,
-           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
-            matchTarget.removeLast()
-        }
-        guard matchTarget.count >= 2 else {
-            return []
-        }
-        matchTarget = matchTarget.toHiragana()
 
         if let backspaceAdjustedPredictionCandidate {
             return [backspaceAdjustedPredictionCandidate]
@@ -843,21 +832,49 @@ public final class SegmentsManager {
             guard !reading.isEmpty else {
                 continue
             }
-            let readingHiragana = reading.toHiragana()
-            guard readingHiragana.hasPrefix(matchTarget) else {
-                continue
+            if let predictionCandidate = Self.makePredictionCandidate(
+                currentTarget: target,
+                candidateReading: reading,
+                displayText: candidate.text
+            ) {
+                return [predictionCandidate]
             }
-            guard matchTarget.count < readingHiragana.count else {
-                continue
-            }
-            let appendText = String(readingHiragana.dropFirst(matchTarget.count))
-            guard !appendText.isEmpty else {
-                continue
-            }
-            return [.init(displayText: candidate.text, appendText: appendText)]
         }
 
         return []
+    }
+
+    static func makePredictionCandidate(
+        currentTarget: String,
+        candidateReading: String,
+        displayText: String
+    ) -> PredictionCandidate? {
+        var matchTarget = currentTarget
+        var deleteCount = 0
+        if let last = matchTarget.last,
+           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
+            matchTarget.removeLast()
+            deleteCount = 1
+        }
+        guard matchTarget.count >= 2 else {
+            return nil
+        }
+
+        let readingHiragana = candidateReading.toHiragana()
+        let matchTargetHiragana = matchTarget.toHiragana()
+        guard readingHiragana.hasPrefix(matchTargetHiragana) else {
+            return nil
+        }
+        guard matchTargetHiragana.count < readingHiragana.count else {
+            return nil
+        }
+
+        let appendText = String(readingHiragana.dropFirst(matchTargetHiragana.count))
+        guard !appendText.isEmpty else {
+            return nil
+        }
+
+        return .init(displayText: displayText, appendText: appendText, deleteCount: deleteCount)
     }
 
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
