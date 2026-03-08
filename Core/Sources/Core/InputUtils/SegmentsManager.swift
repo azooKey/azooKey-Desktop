@@ -190,10 +190,7 @@ public final class SegmentsManager {
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates),
             experimentalZenzaiPredictiveInput: true,
-            typoCorrectionConfig: .init(
-                mode: canUseDebugTypoCorrection ? .noisyChannel : .auto,
-                languageModel: .ngram(.init(prefix: self.downloadedInputN5LMDir.path + "/lm_", n: 5, d: 0.75))
-            ),
+            typoCorrectionMode: .automatic,
             metadata: self.metadata
         )
     }
@@ -910,7 +907,7 @@ public final class SegmentsManager {
         }
 
         let leftSideContext = self.getCleanLeftSideContext(maxCount: 30) ?? ""
-        let typoCandidates = self.kanaKanjiConverter.experimentalRequestTypoCorrectionOnly(
+        let typoCandidates = self.kanaKanjiConverter.experimentalRequestTypoCorrection(
             leftSideContext: leftSideContext,
             composingText: targetComposingText,
             options: options(
@@ -920,7 +917,8 @@ public final class SegmentsManager {
                 requireEnglishPrediction: .disabled
             ),
             inputStyle: inputStyle,
-            searchConfig: .init(
+            config: .init(
+                languageModel: .ngram(.init(prefix: self.downloadedInputN5LMDir.path + "/lm_", n: 5, d: 0.75)),
                 beamSize: 16,
                 topK: 32,
                 nBest: 3
