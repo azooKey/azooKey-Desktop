@@ -255,14 +255,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu
     }
 
-    private func isPrintable(_ text: String) -> Bool {
-        let printable: CharacterSet = [.alphanumerics, .symbols, .punctuationCharacters]
-            .reduce(into: CharacterSet()) {
-                $0.formUnion($1)
-            }
-        return CharacterSet(text.unicodeScalars).isSubset(of: printable)
-    }
-
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
@@ -284,6 +276,20 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 }
             }
             // ショートカットがマッチした場合はイベントを消費して他のハンドラに渡さない
+            return true
+        }
+
+        let eventModifiers = KeyEventCore.ModifierFlag(from: event.modifierFlags)
+        let charactersForOptionDirectInput = event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.option))
+        if Config.OptionDirectFullWidthInput().value,
+           let text = OptionDirectInputResolver.resolve(
+            characters: charactersForOptionDirectInput,
+            modifierFlags: eventModifiers,
+            inputLanguage: inputLanguage,
+            inputState: inputState,
+            typeBackSlash: Config.TypeBackSlash().value
+           ) {
+            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             return true
         }
 

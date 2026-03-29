@@ -8,6 +8,7 @@ struct ConfigWindow: View {
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
+    @ConfigState private var optionDirectFullWidthInput = Config.OptionDirectFullWidthInput()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
@@ -473,6 +474,7 @@ struct ConfigWindow: View {
             Section {
                 Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                 Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Toggle("Optionキーで直接全角英数を入力", isOn: $optionDirectFullWidthInput)
                 Picker("句読点の種類", selection: $punctuationStyle) {
                     Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
                     Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)

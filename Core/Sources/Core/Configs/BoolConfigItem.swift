@@ -56,6 +56,12 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
     }
+    /// Optionキー押下時に直接全角英数を入力する設定
+    public struct OptionDirectFullWidthInput: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.optionDirectFullWidthInput"
+    }
     /// AI変換時にコンテキストを含めるかどうか
     public struct IncludeContextInAITransform: BoolConfigItem {
         public init() {}
