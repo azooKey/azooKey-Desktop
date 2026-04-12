@@ -21,7 +21,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "fc16d94b7caac13cde86977c5547a1167a824f81", traits: kanaKanjiConverterTraits),
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "aa12475593c50756312b196ba13918faf3d73633", traits: kanaKanjiConverterTraits),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.0")
     ],
