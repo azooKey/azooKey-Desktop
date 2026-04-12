@@ -156,6 +156,9 @@ public enum UserAction {
                 return .suggest
             case ("u", [.control, .shift]): // Shift + Control + u
                 return .startUnicodeInput
+            case (_, let modifierFlags) where modifierFlags.contains(.control):
+                // Controlが押されているが、上記のどのショートカットにも当てはまらない場合は、未知のアクションとして扱う
+                return .unknown
 
             case ("¥", [.shift, .option]), ("¥", [.shift]), ("\\", [.shift, .option]), ("\\", [.shift]):
                 return .input(keyMap("|"))
