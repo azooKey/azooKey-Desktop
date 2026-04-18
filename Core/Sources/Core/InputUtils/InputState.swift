@@ -10,6 +10,8 @@ public enum InputState: Sendable, Hashable {
     case replaceSuggestion
     case unicodeInput(String)
     case emojiInput(String)
+    /// composing 中から入った絵文字モード。composing を保持したまま絵文字を合流させる。
+    case emojiInputNested(String)
 
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
@@ -129,9 +131,9 @@ public enum InputState: Sendable, Hashable {
         case .composing:
             switch userAction {
             case .input(let string):
-                // 日本語モードで設定のトリガー文字を押すと、現在のmarked textを確定して絵文字入力モードに入る
+                // 日本語モードで設定のトリガー文字を押すと、composingを保持したまま入れ子の絵文字入力モードに入る
                 if emojiInputEnabled && inputLanguage == .japanese && string.inputString(preferIntention: true) == emojiInputTrigger {
-                    return (.commitMarkedTextAndEnterEmojiInputMode, .transition(.emojiInput("")))
+                    return (.enterEmojiInputMode, .transition(.emojiInputNested("")))
                 }
                 return (.appendPieceToMarkedText(string), .fallthrough)
             case .number(let number):
@@ -208,6 +210,10 @@ public enum InputState: Sendable, Hashable {
         case .previewing:
             switch userAction {
             case .input(let string):
+                // 日本語モードでトリガー文字を押すと composing を保持して入れ子の絵文字入力モードへ
+                if emojiInputEnabled && inputLanguage == .japanese && string.inputString(preferIntention: true) == emojiInputTrigger {
+                    return (.enterEmojiInputMode, .transition(.emojiInputNested("")))
+                }
                 return (.commitMarkedTextAndAppendPieceToMarkedText(string), .transition(.composing))
             case .number(let number):
                 return (.commitMarkedTextAndAppendPieceToMarkedText([number.inputPiece]), .transition(.composing))
@@ -268,6 +274,10 @@ public enum InputState: Sendable, Hashable {
                     return (.enableDebugWindow, .fallthrough)
                 } else if s == "D" && enableDebugWindow {
                     return (.disableDebugWindow, .fallthrough)
+                }
+                // 日本語モードでトリガー文字を押すと composing を保持して入れ子の絵文字入力モードへ
+                if emojiInputEnabled && inputLanguage == .japanese && s == emojiInputTrigger {
+                    return (.enterEmojiInputMode, .transition(.emojiInputNested("")))
                 }
                 // FIXME: ここの動作はmacOSの標準と異なる。具体的には、macOSの標準ではselectingをcomposingに戻して入力を継続する動きになる。
                 return (.commitMarkedTextAndAppendPieceToMarkedText(string), .transition(.composing))
@@ -411,51 +421,74 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             }
         case .emojiInput(let query):
-            switch userAction {
-            case .input(let pieces):
-                let input = pieces.inputString(preferIntention: false)
-                // もう一度 トリガー文字を打ったら選択中の候補を確定
-                if pieces.inputString(preferIntention: true) == emojiInputTrigger {
-                    if query.isEmpty {
-                        return (.cancelEmojiInput, .transition(.none))
-                    }
-                    return (.submitSelectedEmojiCandidate, .transition(.none))
-                }
-                // ASCII英数・アンダースコア・ハイフン・プラスのみ受け付ける
-                let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+")
-                let filtered = input.unicodeScalars.filter { allowed.contains($0) }.map { String($0) }.joined()
-                if !filtered.isEmpty {
-                    return (.appendToEmojiInput(filtered), .transition(.emojiInput(query + filtered)))
-                } else {
-                    return (.consume, .fallthrough)
-                }
-            case .number(let number):
-                let digit = number.inputString
-                return (.appendToEmojiInput(digit), .transition(.emojiInput(query + digit)))
-            case .backspace:
+            // トップレベルの絵文字モード: 確定時に .none に戻る (composing なし)
+            return Self.handleEmojiInputEvent(
+                query: query,
+                userAction: userAction,
+                emojiInputTrigger: emojiInputTrigger,
+                exitState: .none,
+                stayInState: { .emojiInput($0) }
+            )
+        case .emojiInputNested(let query):
+            // 入れ子の絵文字モード: 確定時に .composing に戻る (composing 保持)
+            return Self.handleEmojiInputEvent(
+                query: query,
+                userAction: userAction,
+                emojiInputTrigger: emojiInputTrigger,
+                exitState: .composing,
+                stayInState: { .emojiInputNested($0) }
+            )
+        }
+    }
+
+    private static func handleEmojiInputEvent(
+        query: String,
+        userAction: UserAction,
+        emojiInputTrigger: String,
+        exitState: InputState,
+        stayInState: (String) -> InputState
+    ) -> (ClientAction, ClientActionCallback) {
+        switch userAction {
+        case .input(let pieces):
+            // もう一度 トリガー文字を打ったら選択中の候補を確定
+            if pieces.inputString(preferIntention: true) == emojiInputTrigger {
                 if query.isEmpty {
-                    return (.cancelEmojiInput, .transition(.none))
-                } else {
-                    let newQuery = String(query.dropLast())
-                    return (.removeLastEmojiInput, .transition(.emojiInput(newQuery)))
+                    return (.cancelEmojiInput, .transition(exitState))
                 }
-            case .enter, .space:
-                // query 空でも submit を通す (InputController側で "：" を残す)
-                return (.submitSelectedEmojiCandidate, .transition(.none))
-            case .escape:
-                return (.cancelEmojiInput, .transition(.none))
-            case .navigation(let direction):
-                switch direction {
-                case .down:
-                    return (.selectNextEmojiCandidate, .fallthrough)
-                case .up:
-                    return (.selectPrevEmojiCandidate, .fallthrough)
-                case .left, .right:
-                    return (.consume, .fallthrough)
-                }
-            case .英数, .かな, .function, .editSegment, .tab, .forget, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
+                return (.submitSelectedEmojiCandidate, .transition(exitState))
+            }
+            // ASCII英数・アンダースコア・ハイフン・プラスのみ受け付ける
+            let input = pieces.inputString(preferIntention: false)
+            let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+")
+            let filtered = input.unicodeScalars.filter { allowed.contains($0) }.map { String($0) }.joined()
+            if !filtered.isEmpty {
+                return (.appendToEmojiInput(filtered), .transition(stayInState(query + filtered)))
+            }
+            return (.consume, .fallthrough)
+        case .number(let number):
+            let digit = number.inputString
+            return (.appendToEmojiInput(digit), .transition(stayInState(query + digit)))
+        case .backspace:
+            if query.isEmpty {
+                return (.cancelEmojiInput, .transition(exitState))
+            }
+            return (.removeLastEmojiInput, .transition(stayInState(String(query.dropLast()))))
+        case .enter, .space:
+            // query 空でも submit を通す (InputController側で "<trigger>" を残す/破棄判定)
+            return (.submitSelectedEmojiCandidate, .transition(exitState))
+        case .escape:
+            return (.cancelEmojiInput, .transition(exitState))
+        case .navigation(let direction):
+            switch direction {
+            case .down:
+                return (.selectNextEmojiCandidate, .fallthrough)
+            case .up:
+                return (.selectPrevEmojiCandidate, .fallthrough)
+            case .left, .right:
                 return (.consume, .fallthrough)
             }
+        case .英数, .かな, .function, .editSegment, .tab, .forget, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
+            return (.consume, .fallthrough)
         }
     }
 }

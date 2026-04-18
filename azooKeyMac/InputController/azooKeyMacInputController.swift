@@ -204,6 +204,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.inputState = .none
             return
         }
+        if case .emojiInputNested = self.inputState {
+            // emoji 部分だけリセットし、残った composing は後段でコミットさせる
+            self.segmentsManager.clearEmojiInput()
+            self.inputState = .composing
+            // fallthrough: 下の segmentsManager.commitMarkedText で composing を確定
+        }
         if self.segmentsManager.isEmpty {
             return
         }
@@ -538,19 +544,31 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .enterEmojiInputMode:
             // 状態遷移と候補更新は後段で行う
             break
-        case .commitMarkedTextAndEnterEmojiInputMode:
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .appendToEmojiInput, .removeLastEmojiInput:
             // 候補更新は末尾で行う
             break
         case .submitSelectedEmojiCandidate:
+            // 挿入する文字列を決定: 選択中の絵文字があればそれ、無ければ "<trigger>query" を直書き
+            let emojiInsertText: String
             if let candidate = self.segmentsManager.selectedEmojiCandidate {
-                client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                emojiInsertText = candidate.text
             } else if case .emojiInput(let query) = self.inputState {
-                // 候補がない場合 (query 空を含む) は "<trigger>query" を文字列として確定
-                let trigger = Config.EmojiInputTrigger().value
-                client.insertText(trigger + query, replacementRange: NSRange(location: NSNotFound, length: 0))
+                emojiInsertText = Config.EmojiInputTrigger().value + query
+            } else if case .emojiInputNested(let query) = self.inputState {
+                emojiInsertText = Config.EmojiInputTrigger().value + query
+            } else {
+                emojiInsertText = ""
+            }
+            if case .emojiInputNested = self.inputState {
+                // 入れ子モード: composingText に絵文字/文字列を追加 (composing 保持)
+                if !emojiInsertText.isEmpty {
+                    self.segmentsManager.insertAtCursorPosition(emojiInsertText, inputStyle: .direct)
+                }
+            } else {
+                // 通常モード: クライアントに直接挿入
+                if !emojiInsertText.isEmpty {
+                    client.insertText(emojiInsertText, replacementRange: NSRange(location: NSNotFound, length: 0))
+                }
             }
             self.segmentsManager.clearEmojiInput()
         case .cancelEmojiInput:
@@ -583,9 +601,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.inputState = self.segmentsManager.isEmpty ? ifIsEmpty : ifIsNotEmpty
         }
 
-        // 絵文字入力モードに遷移・継続している場合、クエリに合わせて候補を更新
-        if case .emojiInput(let query) = self.inputState {
+        // 絵文字入力モード (通常 or 入れ子) に遷移・継続している場合、クエリに合わせて候補を更新
+        switch self.inputState {
+        case .emojiInput(let query), .emojiInputNested(let query):
             self.segmentsManager.updateEmojiCandidates(query: query)
+        default:
+            break
         }
 
         self.refreshMarkedText()
@@ -613,9 +634,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = true
             let candidatePresentations: [CandidatePresentation]
-            if case .emojiInput = self.inputState {
+            switch self.inputState {
+            case .emojiInput, .emojiInputNested:
                 candidatePresentations = self.segmentsManager.makeEmojiCandidatePresentations()
-            } else {
+            default:
                 candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
             }
             self.candidatesViewController.updateCandidatePresentations(

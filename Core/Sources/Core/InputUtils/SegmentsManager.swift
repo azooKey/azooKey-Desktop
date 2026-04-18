@@ -646,7 +646,7 @@ public final class SegmentsManager {
         switch inputState {
         case .none, .previewing, .replaceSuggestion, .attachDiacritic, .unicodeInput:
             return .hidden
-        case .emojiInput:
+        case .emojiInput, .emojiInputNested:
             if self.emojiCandidates.isEmpty {
                 return .hidden
             }
@@ -705,7 +705,7 @@ public final class SegmentsManager {
                 // 選択範囲なしの場合はconvertTargetを返す
                 (self.convertTarget, .inputCount(self.composingText.input.count))
             }
-        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput:
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput, .emojiInputNested:
             (self.convertTarget, .inputCount(self.composingText.input.count))
         }
         let candidateText = transform(ruby)
@@ -730,7 +730,7 @@ public final class SegmentsManager {
         switch inputState {
         case .selecting:
             targetComposingText = self.composingText.prefixToCursorPosition()
-        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput:
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput, .emojiInputNested:
             targetComposingText = self.composingText
         }
         let inputString = targetComposingText.input.map(\.piece).inputString(preferIntention: false)
@@ -1089,6 +1089,19 @@ public final class SegmentsManager {
             return MarkedText(
                 text: [.init(content: displayText, focus: .none)],
                 selectionRange: NSRange(location: displayText.count, length: 0)
+            )
+        case .emojiInputNested(let query):
+            // 入れ子絵文字入力: 既存のcomposingテキスト + "<trigger>query" を並べて表示
+            // composing 部分は確定と誤解されないよう .unfocused (薄い下線) にする
+            let trigger = Config.EmojiInputTrigger().value
+            let composingPart = self.composingText.convertTarget
+            let emojiPart = trigger + query
+            return MarkedText(
+                text: [
+                    .init(content: composingPart, focus: .unfocused),
+                    .init(content: emojiPart, focus: .focused)
+                ],
+                selectionRange: NSRange(location: composingPart.count + emojiPart.count, length: 0)
             )
         case .composing:
             let text = if self.lastOperation == .delete {
