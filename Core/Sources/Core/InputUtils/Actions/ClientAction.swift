@@ -70,6 +70,16 @@ public enum ClientAction {
     case cancelUnicodeInput
     case submitSelectedCandidateAndEnterUnicodeInputMode
 
+    // Emoji Input (`:` in Japanese mode)
+    case enterEmojiInputMode
+    case commitMarkedTextAndEnterEmojiInputMode
+    case appendToEmojiInput(String)
+    case removeLastEmojiInput
+    case submitSelectedEmojiCandidate
+    case cancelEmojiInput
+    case selectNextEmojiCandidate
+    case selectPrevEmojiCandidate
+
     case stopComposition
 }
 

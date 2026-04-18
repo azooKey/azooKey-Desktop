@@ -9,6 +9,7 @@ public enum InputState: Sendable, Hashable {
     case selecting
     case replaceSuggestion
     case unicodeInput(String)
+    case emojiInput(String)
 
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
@@ -18,7 +19,9 @@ public enum InputState: Sendable, Hashable {
         inputLanguage: InputLanguage,
         liveConversionEnabled: Bool,
         enableDebugWindow: Bool,
-        enableSuggestion: Bool
+        enableSuggestion: Bool,
+        emojiInputEnabled: Bool = false,
+        emojiInputTrigger: String = "："
     ) -> (ClientAction, ClientActionCallback) {
         if event.modifierFlags.contains(.command) {
             return (.fallthrough, .fallthrough)
@@ -52,6 +55,10 @@ public enum InputState: Sendable, Hashable {
             case .input(let string):
                 switch inputLanguage {
                 case .japanese:
+                    // 設定で有効かつ、インテンション文字列がトリガーに一致したら絵文字入力モードへ
+                    if emojiInputEnabled && string.inputString(preferIntention: true) == emojiInputTrigger {
+                        return (.enterEmojiInputMode, .transition(.emojiInput("")))
+                    }
                     return (.appendPieceToMarkedText(string), .transition(.composing))
                 case .english:
                     // 連結する
@@ -122,6 +129,10 @@ public enum InputState: Sendable, Hashable {
         case .composing:
             switch userAction {
             case .input(let string):
+                // 日本語モードで設定のトリガー文字を押すと、現在のmarked textを確定して絵文字入力モードに入る
+                if emojiInputEnabled && inputLanguage == .japanese && string.inputString(preferIntention: true) == emojiInputTrigger {
+                    return (.commitMarkedTextAndEnterEmojiInputMode, .transition(.emojiInput("")))
+                }
                 return (.appendPieceToMarkedText(string), .fallthrough)
             case .number(let number):
                 return (.appendPieceToMarkedText([number.inputPiece]), .fallthrough)
@@ -397,6 +408,52 @@ public enum InputState: Sendable, Hashable {
             case .escape:
                 return (.cancelUnicodeInput, .transition(.none))
             case .英数, .かな, .tab, .forget, .function, .navigation, .editSegment, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
+                return (.consume, .fallthrough)
+            }
+        case .emojiInput(let query):
+            switch userAction {
+            case .input(let pieces):
+                let input = pieces.inputString(preferIntention: false)
+                // もう一度 トリガー文字を打ったら選択中の候補を確定
+                if pieces.inputString(preferIntention: true) == emojiInputTrigger {
+                    if query.isEmpty {
+                        return (.cancelEmojiInput, .transition(.none))
+                    }
+                    return (.submitSelectedEmojiCandidate, .transition(.none))
+                }
+                // ASCII英数・アンダースコア・ハイフン・プラスのみ受け付ける
+                let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+")
+                let filtered = input.unicodeScalars.filter { allowed.contains($0) }.map { String($0) }.joined()
+                if !filtered.isEmpty {
+                    return (.appendToEmojiInput(filtered), .transition(.emojiInput(query + filtered)))
+                } else {
+                    return (.consume, .fallthrough)
+                }
+            case .number(let number):
+                let digit = number.inputString
+                return (.appendToEmojiInput(digit), .transition(.emojiInput(query + digit)))
+            case .backspace:
+                if query.isEmpty {
+                    return (.cancelEmojiInput, .transition(.none))
+                } else {
+                    let newQuery = String(query.dropLast())
+                    return (.removeLastEmojiInput, .transition(.emojiInput(newQuery)))
+                }
+            case .enter, .space:
+                // query 空でも submit を通す (InputController側で "：" を残す)
+                return (.submitSelectedEmojiCandidate, .transition(.none))
+            case .escape:
+                return (.cancelEmojiInput, .transition(.none))
+            case .navigation(let direction):
+                switch direction {
+                case .down:
+                    return (.selectNextEmojiCandidate, .fallthrough)
+                case .up:
+                    return (.selectPrevEmojiCandidate, .fallthrough)
+                case .left, .right:
+                    return (.consume, .fallthrough)
+                }
+            case .英数, .かな, .function, .editSegment, .tab, .forget, .suggest, .transformSelectedText, .deadKey, .startUnicodeInput, .unknown:
                 return (.consume, .fallthrough)
             }
         }

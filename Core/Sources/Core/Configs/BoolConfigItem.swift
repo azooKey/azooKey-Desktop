@@ -68,4 +68,10 @@ extension Config {
         static let `default` = true
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.includeContextInAITransform"
     }
+    /// 絵文字入力モード（":"などで起動）を有効化する設定
+    public struct EmojiInputEnabled: BoolConfigItem {
+        public init() {}
+        static let `default` = true
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.emojiInputEnabled"
+    }
 }
