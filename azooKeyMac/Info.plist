@@ -18,7 +18,7 @@
 				<key>tsInputModeKeyEquivalentModifiersKey</key>
 				<integer>4608</integer>
 				<key>tsInputModeKeyEquivalentKey</key>
-				<string>;</string>
+				<string>:</string>
 				<key>TISInputSourceID</key>
 				<string>dev.ensan.inputmethod.azooKeyMac.Roman</string>
 				<key>tsInputModePrimaryInScriptKey</key>
