@@ -264,6 +264,24 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return false
         }
 
+        // 英語モード切り替えショートカット: Ctrl+Shift+;（keyCode 41）
+        // 日本語モードのCtrl+Shift+J（macOSのsmJapanese scriptに自動割り当て）と対になるショートカット
+        // smRoman scriptには自動割り当てがないため、自前でハンドルする必要がある
+        if event.keyCode == 41,
+           self.inputLanguage == .japanese,
+           event.modifierFlags.intersection([.control, .shift, .option, .command]) == [.control, .shift] {
+            if !self.segmentsManager.isEmpty {
+                let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                self.inputState = .none
+                self.refreshMarkedText()
+                self.refreshCandidateWindow()
+                self.refreshPredictionWindow()
+            }
+            self.switchInputLanguage(.english, client: client)
+            return true
+        }
+
         // カスタムプロンプトショートカットのチェック
         if let matchedPrompt = checkCustomPromptShortcut(event: event) {
             let aiBackendEnabled = Config.AIBackendPreference().value != .off
