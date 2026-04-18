@@ -22,6 +22,10 @@ public enum InputState: Sendable, Hashable {
         liveConversionEnabled: Bool,
         enableDebugWindow: Bool,
         enableSuggestion: Bool,
+        // 絵文字モード関連のデフォルトは「無効」。
+        // 呼び出し元 (InputController) が Config から値を読んで明示的に渡す想定で、
+        // InputController 以外の経路 (言語切替時の内部 event 呼び出し等) で誤発動しないようにするため。
+        // Config.EmojiInputEnabled().default は `true` だが、それは UI 経由のデフォルト値なので別問題。
         emojiInputEnabled: Bool = false,
         emojiInputTrigger: String = "："
     ) -> (ClientAction, ClientActionCallback) {
