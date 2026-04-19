@@ -16,6 +16,7 @@ import Core
 import KanaKanjiConverterModuleWithDefaultDictionary
 @testable import azooKeyMac
 
+@MainActor
 final class ChromiumDeadlockRegressionTests: XCTestCase {
     /// 空の候補配列で updateCandidatePresentations を呼んだ後、
     /// numberOfVisibleRows が 0 であることを確認する。
