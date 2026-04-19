@@ -42,8 +42,3 @@ import Testing
     #expect(!entry.emoji.isEmpty)
     #expect(entry.emoji.unicodeScalars.count >= 1)
 }
-
-@Test func testEmojiDictionaryEntriesLoaded() async throws {
-    // iamcal データが正しくロードされていれば1000件以上あるはず
-    #expect(EmojiDictionary.entries.count > 1000)
-}

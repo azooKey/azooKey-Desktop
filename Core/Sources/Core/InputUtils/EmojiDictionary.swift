@@ -55,8 +55,14 @@ public enum EmojiDictionary {
 
     private struct RawEmoji: Decodable {
         let unified: String
-        let short_names: [String]
-        let sort_order: Int?
+        let shortNames: [String]
+        let sortOrder: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case unified
+            case shortNames = "short_names"
+            case sortOrder = "sort_order"
+        }
     }
 
     private static func loadEntries() -> [EmojiEntry] {
@@ -65,12 +71,12 @@ public enum EmojiDictionary {
               let raws = try? JSONDecoder().decode([RawEmoji].self, from: data) else {
             return []
         }
-        let sorted = raws.sorted { ($0.sort_order ?? Int.max) < ($1.sort_order ?? Int.max) }
+        let sorted = raws.sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
         return sorted.compactMap { raw in
             guard let emoji = emojiString(fromUnified: raw.unified) else {
                 return nil
             }
-            return EmojiEntry(emoji: emoji, shortnames: raw.short_names)
+            return EmojiEntry(emoji: emoji, shortnames: raw.shortNames)
         }
     }
 

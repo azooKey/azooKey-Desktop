@@ -445,6 +445,8 @@ public enum InputState: Sendable, Hashable {
         }
     }
 
+    // この種のコードは複雑にしかならないので、lintを無効にする
+    // swiftlint:disable:next cyclomatic_complexity
     private static func handleEmojiInputEvent(
         query: String,
         userAction: UserAction,

@@ -218,3 +218,23 @@ private func runEvent(
         Issue.record("colon should not trigger when custom trigger is set to semicolon")
     }
 }
+
+// MARK: - 無効化時のパススルー
+
+@Test func testComposingColonPassesThroughAsNormalInputWhenDisabled() async throws {
+    // 絵文字モード無効時、.composing 中の「：」は通常の入力として composing に追加される
+    let (action, callback) = runEvent(
+        state: .composing,
+        userAction: colonInputAction(),
+        emojiInputEnabled: false
+    )
+    if case .enterEmojiInputMode = action {
+        Issue.record("emoji input should not trigger when disabled")
+    }
+    if case .appendPieceToMarkedText = action {} else {
+        Issue.record("expected .appendPieceToMarkedText, got \(action)")
+    }
+    if case .fallthrough = callback {} else {
+        Issue.record("expected .fallthrough, got \(callback)")
+    }
+}
