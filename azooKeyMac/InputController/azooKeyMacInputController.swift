@@ -39,15 +39,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     // ピン留めプロンプトのキャッシュ（パフォーマンス向上のため）
     private var pinnedPromptsCache: [PromptHistoryItem] = []
 
-    private static func makeCandidateWindow(contentViewController: NSViewController, inputClient: IMKTextInput?) -> NSWindow {
+    private static func makeCandidateWindow(contentViewController: NSViewController) -> NSWindow {
         let window = NSWindow(contentViewController: contentViewController)
         window.styleMask = [.borderless]
         window.level = .popUpMenu
 
-        var rect: NSRect = .zero
-        inputClient?.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        rect.size = candidateWindowInitialSize
-        window.setFrame(rect, display: true)
+        // Chromium 系アプリの deadlock 回避のため、初期化時に client への
+        // 問い合わせを行わない（Chromium issue 503787240）。
+        // ウィンドウは直後に orderOut されるため origin はユーザーから不可視であり、
+        // 最初の候補表示時に refreshCandidateWindow() で正しい位置に再配置される。
+        var frame = NSRect.zero
+        frame.size = candidateWindowInitialSize
+        window.setFrame(frame, display: true)
         window.setIsVisible(false)
         window.orderOut(nil)
         return window
@@ -121,8 +124,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.liveConversionToggleMenuItem = NSMenuItem()
         self.transformSelectedTextMenuItem = NSMenuItem()
 
-        let textInputClient = inputClient as? IMKTextInput
-
         let candidatesViewController = CandidatesViewController()
         let predictionViewController = PredictionCandidatesViewController()
         let replaceSuggestionsViewController = ReplaceSuggestionsViewController()
@@ -131,18 +132,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionViewController = predictionViewController
         self.replaceSuggestionsViewController = replaceSuggestionsViewController
 
-        self.candidatesWindow = Self.makeCandidateWindow(
-            contentViewController: candidatesViewController,
-            inputClient: textInputClient
-        )
-        self.predictionWindow = Self.makeCandidateWindow(
-            contentViewController: predictionViewController,
-            inputClient: textInputClient
-        )
-        self.replaceSuggestionWindow = Self.makeCandidateWindow(
-            contentViewController: replaceSuggestionsViewController,
-            inputClient: textInputClient
-        )
+        self.candidatesWindow = Self.makeCandidateWindow(contentViewController: candidatesViewController)
+        self.predictionWindow = Self.makeCandidateWindow(contentViewController: predictionViewController)
+        self.replaceSuggestionWindow = Self.makeCandidateWindow(contentViewController: replaceSuggestionsViewController)
 
         // PromptInputWindowの初期化
         self.promptInputWindow = PromptInputWindow()
@@ -171,14 +163,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
-            var rect: NSRect = .zero
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: rect.origin)
-        } else {
-            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         }
-        self.refreshCandidateWindow()
-        self.refreshPredictionWindow()
+        // Chromium 系アプリで JS コンパイル中に activate された場合、
+        // client.attributes(forCharacterIndex:) の同期呼び出しが deadlock を
+        // 引き起こすため呼び出さない（Chromium issue 503787240）。
+        // refreshCandidateWindow / refreshPredictionWindow は composing/selecting 状態で
+        // client.attributes(...) を呼ぶ経路があるため、activate 中は使わずウィンドウを
+        // 明示的に閉じる。
+        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
+        self.candidatesWindow.setIsVisible(false)
+        self.candidatesWindow.orderOut(nil)
+        self.candidatesViewController.hide()
+        self.hidePredictionWindow()
     }
 
     @MainActor
