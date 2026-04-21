@@ -140,7 +140,9 @@ public enum InputState: Sendable, Hashable {
             case .escape:
                 return (.stopComposition, .transition(.none))
             case .space:
-                if liveConversionEnabled {
+                if inputLanguage == .english {
+                    return (.appendToMarkedText(" "), .fallthrough)
+                } else if liveConversionEnabled {
                     return (.enterCandidateSelectionMode, .transition(.selecting))
                 } else {
                     return (.enterFirstCandidatePreviewMode, .transition(.previewing))
