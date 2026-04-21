@@ -23,6 +23,8 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var emojiInputEnabled = Config.EmojiInputEnabled()
+    @ConfigState private var emojiInputTrigger = Config.EmojiInputTrigger()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -483,6 +485,25 @@ struct ConfigWindow: View {
                 }
             } header: {
                 Label("入力オプション", systemImage: "character.cursor.ibeam")
+            }
+
+            Section {
+                Toggle("絵文字入力を有効にする", isOn: $emojiInputEnabled)
+                if emojiInputEnabled.value {
+                    LabeledContent {
+                        TextField("", text: $emojiInputTrigger)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 80)
+                            .multilineTextAlignment(.center)
+                    } label: {
+                        Text("起動トリガー文字")
+                    }
+                    Text("日本語入力中にトリガー文字を打つと絵文字候補が表示されます (例: 「：」「;」「/」)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Label("絵文字入力", systemImage: "face.smiling")
             }
 
             Section {

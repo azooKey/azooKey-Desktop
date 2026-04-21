@@ -59,4 +59,22 @@ extension Config {
     public struct PromptHistory: StringConfigItem {
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.PromptHistory"
     }
+
+    /// 絵文字入力モードを起動するトリガー文字（デフォルト: 全角コロン "："）
+    public struct EmojiInputTrigger: StringConfigItem {
+        public init() {}
+
+        public static let `default`: String = "："
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.emojiInputTrigger"
+
+        public var value: String {
+            get {
+                let stored = UserDefaults.standard.string(forKey: Self.key) ?? ""
+                return stored.isEmpty ? Self.default : stored
+            }
+            nonmutating set {
+                UserDefaults.standard.set(newValue, forKey: Self.key)
+            }
+        }
+    }
 }

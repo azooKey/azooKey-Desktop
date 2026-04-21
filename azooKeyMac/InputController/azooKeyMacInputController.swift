@@ -193,11 +193,22 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
-        // Unicode入力モードの場合は状態だけリセットして終了
+        // Unicode入力モード/Emoji入力モードの場合は状態だけリセットして終了
         // マウスクリック等でOSがMarkedTextを確定した場合、IME側からは消せないため
         if case .unicodeInput = self.inputState {
             self.inputState = .none
             return
+        }
+        if case .emojiInput = self.inputState {
+            self.segmentsManager.clearEmojiInput()
+            self.inputState = .none
+            return
+        }
+        if case .emojiInputNested = self.inputState {
+            // emoji 部分だけリセットし、残った composing は後段でコミットさせる
+            self.segmentsManager.clearEmojiInput()
+            self.inputState = .composing
+            // fallthrough: 下の segmentsManager.commitMarkedText で composing を確定
         }
         if self.segmentsManager.isEmpty {
             return
@@ -361,7 +372,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
             enableDebugWindow: Config.DebugWindow().value,
-            enableSuggestion: aiBackendEnabled
+            enableSuggestion: aiBackendEnabled,
+            emojiInputEnabled: Config.EmojiInputEnabled().value,
+            emojiInputTrigger: Config.EmojiInputTrigger().value
         )
         return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
     }
@@ -527,6 +540,43 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
                 self.segmentsManager.stopComposition()
             }
+        // Emoji Input
+        case .enterEmojiInputMode:
+            // 状態遷移と候補更新は後段で行う
+            break
+        case .appendToEmojiInput, .removeLastEmojiInput:
+            // 候補更新は末尾で行う
+            break
+        case .submitSelectedEmojiCandidate:
+            // 挿入する文字列を決定: 選択中の絵文字があればそれ、無ければ "<trigger>query" を直書き
+            let emojiInsertText: String
+            if let candidate = self.segmentsManager.selectedEmojiCandidate {
+                emojiInsertText = candidate.text
+            } else if case .emojiInput(let query) = self.inputState {
+                emojiInsertText = Config.EmojiInputTrigger().value + query
+            } else if case .emojiInputNested(let query) = self.inputState {
+                emojiInsertText = Config.EmojiInputTrigger().value + query
+            } else {
+                emojiInsertText = ""
+            }
+            if case .emojiInputNested = self.inputState {
+                // 入れ子モード: composingText に絵文字/文字列を追加 (composing 保持)
+                if !emojiInsertText.isEmpty {
+                    self.segmentsManager.insertAtCursorPosition(emojiInsertText, inputStyle: .direct)
+                }
+            } else {
+                // 通常モード: クライアントに直接挿入
+                if !emojiInsertText.isEmpty {
+                    client.insertText(emojiInsertText, replacementRange: NSRange(location: NSNotFound, length: 0))
+                }
+            }
+            self.segmentsManager.clearEmojiInput()
+        case .cancelEmojiInput:
+            self.segmentsManager.clearEmojiInput()
+        case .selectNextEmojiCandidate:
+            self.segmentsManager.selectNextEmojiCandidate()
+        case .selectPrevEmojiCandidate:
+            self.segmentsManager.selectPrevEmojiCandidate()
         // MARK: 特殊ケース
         case .consume:
             // 何もせず先に進む
@@ -549,6 +599,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.inputState = inputState
         case .basedOnBackspace(let ifIsEmpty, let ifIsNotEmpty), .basedOnSubmitCandidate(let ifIsEmpty, let ifIsNotEmpty):
             self.inputState = self.segmentsManager.isEmpty ? ifIsEmpty : ifIsNotEmpty
+        }
+
+        // 絵文字入力モード (通常 or 入れ子) に遷移・継続している場合、クエリに合わせて候補を更新
+        switch self.inputState {
+        case .emojiInput(let query), .emojiInputNested(let query):
+            self.segmentsManager.updateEmojiCandidates(query: query)
+        default:
+            break
         }
 
         self.refreshMarkedText()
@@ -575,7 +633,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             var rect: NSRect = .zero
             self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
             self.candidatesViewController.showCandidateIndex = true
-            let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
+            let candidatePresentations: [CandidatePresentation]
+            switch self.inputState {
+            case .emojiInput, .emojiInputNested:
+                candidatePresentations = self.segmentsManager.makeEmojiCandidatePresentations()
+            default:
+                candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
+            }
             self.candidatesViewController.updateCandidatePresentations(
                 candidatePresentations,
                 selectionIndex: selectionIndex,

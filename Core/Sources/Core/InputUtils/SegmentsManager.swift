@@ -65,6 +65,12 @@ public final class SegmentsManager {
     private var backspaceAdjustedPredictionCandidate: PredictionCandidate?
     private var backspaceTypoCorrectionLock: BackspaceTypoCorrectionLock?
 
+    // 絵文字入力モードの状態
+    private var emojiCandidateEntries: [EmojiEntry] = []
+    private var emojiCandidates: [Candidate] = []
+    private var emojiSelectionIndex: Int?
+    private var lastEmojiQuery: String?
+
     public struct PredictionCandidate: Sendable, Equatable {
         public var displayText: String
         public var appendText: String
@@ -640,6 +646,11 @@ public final class SegmentsManager {
         switch inputState {
         case .none, .previewing, .replaceSuggestion, .attachDiacritic, .unicodeInput:
             return .hidden
+        case .emojiInput, .emojiInputNested:
+            if self.emojiCandidates.isEmpty {
+                return .hidden
+            }
+            return .selecting(self.emojiCandidates, selectionIndex: self.emojiSelectionIndex)
         case .composing:
             if !self.liveConversionEnabled, let firstCandidate = self.rawCandidates?.mainResults.first {
                 return .composing([firstCandidate], selectionIndex: 0)
@@ -694,7 +705,7 @@ public final class SegmentsManager {
                 // 選択範囲なしの場合はconvertTargetを返す
                 (self.convertTarget, .inputCount(self.composingText.input.count))
             }
-        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput:
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput, .emojiInputNested:
             (self.convertTarget, .inputCount(self.composingText.input.count))
         }
         let candidateText = transform(ruby)
@@ -719,7 +730,7 @@ public final class SegmentsManager {
         switch inputState {
         case .selecting:
             targetComposingText = self.composingText.prefixToCursorPosition()
-        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput:
+        case .composing, .previewing, .none, .replaceSuggestion, .attachDiacritic, .unicodeInput, .emojiInput, .emojiInputNested:
             targetComposingText = self.composingText
         }
         let inputString = targetComposingText.input.map(\.piece).inputString(preferIntention: false)
@@ -793,6 +804,67 @@ public final class SegmentsManager {
         }
         self.stopComposition()
         return text
+    }
+
+    // MARK: - 絵文字入力モード
+    public func updateEmojiCandidates(query: String) {
+        // クエリが変わっていない場合は selectionIndex を保持するため何もしない
+        if self.lastEmojiQuery == query {
+            return
+        }
+        self.lastEmojiQuery = query
+        let entries = EmojiDictionary.search(query: query)
+        self.emojiCandidateEntries = entries
+        self.emojiCandidates = entries.map { entry in
+            Candidate(
+                text: entry.emoji,
+                value: 0,
+                composingCount: .surfaceCount(1),
+                lastMid: 0,
+                data: []
+            )
+        }
+        self.emojiSelectionIndex = entries.isEmpty ? nil : 0
+    }
+
+    public func selectNextEmojiCandidate() {
+        guard !self.emojiCandidates.isEmpty else {
+            return
+        }
+        let current = self.emojiSelectionIndex ?? -1
+        self.emojiSelectionIndex = (current + 1) % self.emojiCandidates.count
+    }
+
+    public func selectPrevEmojiCandidate() {
+        guard !self.emojiCandidates.isEmpty else {
+            return
+        }
+        let current = self.emojiSelectionIndex ?? 0
+        self.emojiSelectionIndex = (current - 1 + self.emojiCandidates.count) % self.emojiCandidates.count
+    }
+
+    public var selectedEmojiCandidate: Candidate? {
+        guard let index = self.emojiSelectionIndex, self.emojiCandidates.indices.contains(index) else {
+            return nil
+        }
+        return self.emojiCandidates[index]
+    }
+
+    public func clearEmojiInput() {
+        self.emojiCandidateEntries = []
+        self.emojiCandidates = []
+        self.emojiSelectionIndex = nil
+        self.lastEmojiQuery = nil
+    }
+
+    public func makeEmojiCandidatePresentations() -> [CandidatePresentation] {
+        zip(self.emojiCandidates, self.emojiCandidateEntries).map { candidate, entry in
+            let annotation = entry.shortnames.first.map { ":\($0):" }
+            return CandidatePresentation(
+                candidate: candidate,
+                displayContext: .init(annotationText: annotation)
+            )
+        }
     }
 
     // サジェスト候補を設定するメソッド
@@ -1010,6 +1082,27 @@ public final class SegmentsManager {
         switch inputState {
         case .none, .attachDiacritic:
             return MarkedText(text: [], selectionRange: .notFound)
+        case .emojiInput(let query):
+            // 絵文字入力モード: "<trigger>query" を表示
+            let trigger = Config.EmojiInputTrigger().value
+            let displayText = trigger + query
+            return MarkedText(
+                text: [.init(content: displayText, focus: .none)],
+                selectionRange: NSRange(location: displayText.count, length: 0)
+            )
+        case .emojiInputNested(let query):
+            // 入れ子絵文字入力: 既存のcomposingテキスト + "<trigger>query" を並べて表示
+            // composing 部分は確定と誤解されないよう .unfocused (薄い下線) にする
+            let trigger = Config.EmojiInputTrigger().value
+            let composingPart = self.composingText.convertTarget
+            let emojiPart = trigger + query
+            return MarkedText(
+                text: [
+                    .init(content: composingPart, focus: .unfocused),
+                    .init(content: emojiPart, focus: .focused)
+                ],
+                selectionRange: NSRange(location: composingPart.count + emojiPart.count, length: 0)
+            )
         case .composing:
             let text = if self.lastOperation == .delete {
                 // 削除のあとは常にひらがなを示す
