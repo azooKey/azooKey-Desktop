@@ -239,7 +239,15 @@ class BaseCandidateViewController: NSViewController {
         let rowHeight = self.tableView.rowHeight
         let tableViewHeight = CGFloat(self.numberOfVisibleRows) * rowHeight
 
-        let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.candidate.text })
+        let maxTextWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.candidate.text })
+        let annotationFont = NSFont.systemFont(ofSize: 12)
+        let maxAnnotationWidth = self.candidates.lazy
+            .compactMap { $0.displayContext.annotationText }
+            .reduce(CGFloat(0)) { partial, text in
+                let size = NSAttributedString(string: text, attributes: [.font: annotationFont]).size()
+                return max(partial, size.width)
+            }
+        let maxWidth = maxTextWidth + (maxAnnotationWidth > 0 ? maxAnnotationWidth + 8 : 0)
         let windowWidth = self.getWindowWidth(maxContentWidth: maxWidth)
         let newWindowFrame = WindowPositioning.frameNearCursor(
             currentFrame: .init(window.frame),
