@@ -40,6 +40,14 @@ struct ConfigWindow: View {
     @State private var debugTypoCorrectionDownloadInProgress = false
     @State private var debugTypoCorrectionErrorMessage: String?
 
+    private var userDictionaryValue: Config.UserDictionary.Value {
+        self.$userDictionary.wrappedValue
+    }
+
+    private var systemUserDictionaryValue: Config.SystemUserDictionary.Value {
+        self.$systemUserDictionary.wrappedValue
+    }
+
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
         case customize = "カスタマイズ"
@@ -398,7 +406,7 @@ struct ConfigWindow: View {
             Section {
                 LabeledContent {
                     HStack {
-                        Text("\(self.userDictionary.value.items.count)件のアイテム")
+                        Text("\(self.userDictionaryValue.dictionaries.count)個の辞書 / \(self.userDictionaryValue.enabledItems.count)件の有効なアイテム")
                         Button("編集") {
                             (NSApplication.shared.delegate as? AppDelegate)!.openUserDictionaryEditorWindow()
                         }
@@ -410,32 +418,36 @@ struct ConfigWindow: View {
                     HStack {
                         switch self.systemUserDictionaryUpdateMessage {
                         case .none:
-                            if let updated = self.systemUserDictionary.value.lastUpdate {
+                            if let updated = self.systemUserDictionaryValue.lastUpdate {
                                 let date = updated.formatted(date: .omitted, time: .omitted)
-                                Text("最終更新: \(date) / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                                Text("最終更新: \(date) / \(self.systemUserDictionaryValue.items.count)件のアイテム")
                             } else {
                                 Text("未設定")
                             }
                         case .error(let error):
                             Text("読み込みエラー: \(error.localizedDescription)")
                         case .successfulUpdate:
-                            Text("読み込みに成功しました / \(self.systemUserDictionary.value.items.count)件のアイテム")
+                            Text("読み込みに成功しました / \(self.systemUserDictionaryValue.items.count)件のアイテム")
                         }
                         Button("読み込む") {
                             do {
                                 let systemUserDictionaryEntries = try SystemUserDictionaryHelper.fetchEntries()
-                                self.systemUserDictionary.value.items = systemUserDictionaryEntries.map {
+                                var value = self.systemUserDictionaryValue
+                                value.items = systemUserDictionaryEntries.map {
                                     .init(word: $0.phrase, reading: $0.shortcut)
                                 }
-                                self.systemUserDictionary.value.lastUpdate = .now
+                                value.lastUpdate = .now
+                                self.$systemUserDictionary.wrappedValue = value
                                 self.systemUserDictionaryUpdateMessage = .successfulUpdate
                             } catch {
                                 self.systemUserDictionaryUpdateMessage = .error(error)
                             }
                         }
                         Button("リセット") {
-                            self.systemUserDictionary.value.lastUpdate = nil
-                            self.systemUserDictionary.value.items = []
+                            var value = self.systemUserDictionaryValue
+                            value.lastUpdate = nil
+                            value.items = []
+                            self.$systemUserDictionary.wrappedValue = value
                             self.systemUserDictionaryUpdateMessage = nil
                         }
                     }
