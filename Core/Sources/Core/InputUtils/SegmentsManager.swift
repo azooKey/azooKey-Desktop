@@ -1,6 +1,54 @@
 import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
+private final class UserDictionaryIndexBuildRegistry: @unchecked Sendable {
+    struct Key: Hashable, Sendable {
+        var directoryPath: String
+        var userRevision: Int
+        var systemRevision: Int
+    }
+
+    static let shared = UserDictionaryIndexBuildRegistry()
+
+    private let lock = NSLock()
+    private var inProgressKeys: Set<Key> = []
+    private var inProgressDirectoryPaths: Set<String> = []
+    private var retryNotBeforeByKey: [Key: Date] = [:]
+    private let retryInterval: TimeInterval = 30
+
+    func start(_ key: Key) -> Bool {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if inProgressKeys.contains(key) || inProgressDirectoryPaths.contains(key.directoryPath) {
+            return false
+        }
+        if let retryNotBefore = retryNotBeforeByKey[key],
+           retryNotBefore > Date() {
+            return false
+        }
+        retryNotBeforeByKey.removeValue(forKey: key)
+        inProgressKeys.insert(key)
+        inProgressDirectoryPaths.insert(key.directoryPath)
+        return true
+    }
+
+    func finish(_ key: Key, failed: Bool) {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        inProgressKeys.remove(key)
+        inProgressDirectoryPaths.remove(key.directoryPath)
+        if failed {
+            retryNotBeforeByKey[key] = Date().addingTimeInterval(retryInterval)
+        } else {
+            retryNotBeforeByKey.removeValue(forKey: key)
+        }
+    }
+}
+
 public final class SegmentsManager {
     public init(
         kanaKanjiConverter: KanaKanjiConverter,
@@ -66,7 +114,7 @@ public final class SegmentsManager {
         self.applicationDirectoryURL.appendingPathComponent("UserDictionary", isDirectory: true)
     }
 
-    private struct DynamicUserDictionaryEntry {
+    private struct DynamicUserDictionaryEntry: Sendable {
         var deduplicationKey: String
         var ruby: String
         var element: DicdataElement
@@ -79,8 +127,10 @@ public final class SegmentsManager {
         var systemEntryCount: Int
         var userEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
         var systemEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+        var dynamicFallbackEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
         var hints: [String: String]
         var hasIndexedDictionary: Bool
+        var hasLoadedIndexMetadata: Bool
     }
 
     public struct PredictionCandidate: Sendable, Equatable {
@@ -113,7 +163,10 @@ public final class SegmentsManager {
 
     private func annotationText(for candidate: Candidate) -> String? {
         candidate.data.lazy.compactMap {
-            self.userDictionaryHints[Self.userDictionaryHintKey(word: $0.word, ruby: $0.ruby)]
+            guard candidate.text == $0.word else {
+                return nil
+            }
+            return self.userDictionaryHints[Self.userDictionaryHintKey(word: $0.word, ruby: $0.ruby)]
         }.first
     }
 
@@ -127,6 +180,25 @@ public final class SegmentsManager {
         if let userDictionaryCache,
            userDictionaryCache.userRevision == userRevision,
            userDictionaryCache.systemRevision == systemRevision {
+            if !userDictionaryCache.hasLoadedIndexMetadata {
+                let allEntries = Self.entries(from: userDictionaryCache.userEntriesByFirstRubyCharacter)
+                    + Self.entries(from: userDictionaryCache.systemEntriesByFirstRubyCharacter)
+                let indexState = self.currentUserDictionaryIndexState(
+                    userRevision: userRevision,
+                    systemRevision: systemRevision,
+                    entries: allEntries
+                )
+                if indexState.hasLoadedIndexMetadata {
+                    var cache = userDictionaryCache
+                    cache.dynamicFallbackEntriesByFirstRubyCharacter = Self.entriesByFirstRubyCharacter(indexState.dynamicFallbackEntries)
+                    cache.hasIndexedDictionary = indexState.hasIndexedDictionary
+                    cache.hasLoadedIndexMetadata = true
+                    self.userDictionaryCache = cache
+                    self.userDictionaryHints = cache.hints
+                    self.userDictionaryIndexNeedsReload = true
+                    return cache
+                }
+            }
             self.userDictionaryHints = userDictionaryCache.hints
             return userDictionaryCache
         }
@@ -155,6 +227,12 @@ public final class SegmentsManager {
             }
             hints[Self.userDictionaryHintKey(word: item.word, ruby: item.reading.toKatakana())] = hint
         }
+        let allEntries = userEntries + systemEntries
+        let indexState = self.currentUserDictionaryIndexState(
+            userRevision: userRevision,
+            systemRevision: systemRevision,
+            entries: allEntries
+        )
         let cache = UserDictionaryCache(
             userRevision: userRevision,
             systemRevision: systemRevision,
@@ -162,8 +240,10 @@ public final class SegmentsManager {
             systemEntryCount: systemEntries.count,
             userEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(userEntries),
             systemEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(systemEntries),
+            dynamicFallbackEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(indexState.dynamicFallbackEntries),
             hints: hints,
-            hasIndexedDictionary: self.rebuildUserDictionaryIndex(entries: userEntries + systemEntries)
+            hasIndexedDictionary: indexState.hasIndexedDictionary,
+            hasLoadedIndexMetadata: indexState.hasLoadedIndexMetadata
         )
         self.userDictionaryCache = cache
         self.userDictionaryHints = hints
@@ -172,27 +252,91 @@ public final class SegmentsManager {
         return cache
     }
 
-    private func rebuildUserDictionaryIndex(entries: [DynamicUserDictionaryEntry]) -> Bool {
-        do {
-            try UserDictionaryIndexStore(directoryURL: self.userDictionaryIndexDirectoryURL).rebuild(
-                entries: entries.map(\.element)
+    private func currentUserDictionaryIndexState(
+        userRevision: Int,
+        systemRevision: Int,
+        entries: [DynamicUserDictionaryEntry]
+    ) -> (hasIndexedDictionary: Bool, dynamicFallbackEntries: [DynamicUserDictionaryEntry], hasLoadedIndexMetadata: Bool) {
+        let store = UserDictionaryIndexStore(directoryURL: self.userDictionaryIndexDirectoryURL)
+        if let metadata = store.metadata(),
+           metadata.userRevision == userRevision,
+           metadata.systemRevision == systemRevision,
+           store.hasUsableIndex(for: metadata) {
+            let dynamicFallbackEntries = self.dynamicFallbackEntriesForIndexedDictionary(
+                entries: entries,
+                skippedEntryCount: metadata.skippedEntryCount
             )
-            self.userDictionaryIndexNeedsReload = true
-            return true
+            return (metadata.indexedEntryCount > 0, dynamicFallbackEntries, true)
+        }
+
+        self.startUserDictionaryIndexBuildIfNeeded(
+            userRevision: userRevision,
+            systemRevision: systemRevision,
+            entries: entries
+        )
+        return (false, entries, false)
+    }
+
+    private func dynamicFallbackEntriesForIndexedDictionary(
+        entries: [DynamicUserDictionaryEntry],
+        skippedEntryCount: Int
+    ) -> [DynamicUserDictionaryEntry] {
+        guard skippedEntryCount > 0 else {
+            return []
+        }
+        do {
+            let supportedCharacters = try UserDictionaryIndexStore.supportedCharacters()
+            return entries.filter {
+                !UserDictionaryIndexStore.canIndex(ruby: $0.ruby, supportedCharacters: supportedCharacters)
+            }
         } catch {
-            self.userDictionaryIndexNeedsReload = true
-            self.appendDebugMessage("userDictionaryIndexBuildError: \(error)")
-            return false
+            self.appendDebugMessage("userDictionaryIndexFallbackError: \(error)")
+            return entries
+        }
+    }
+
+    private func startUserDictionaryIndexBuildIfNeeded(
+        userRevision: Int,
+        systemRevision: Int,
+        entries: [DynamicUserDictionaryEntry]
+    ) {
+        let directoryURL = self.userDictionaryIndexDirectoryURL
+        let registryKey = UserDictionaryIndexBuildRegistry.Key(
+            directoryPath: directoryURL.path,
+            userRevision: userRevision,
+            systemRevision: systemRevision
+        )
+        guard UserDictionaryIndexBuildRegistry.shared.start(registryKey) else {
+            return
+        }
+
+        DispatchQueue.global(qos: .utility).async { [directoryURL, entries, registryKey] in
+            var didFail = false
+            do {
+                _ = try UserDictionaryIndexStore(directoryURL: directoryURL).rebuild(
+                    entries: entries.map(\.element),
+                    userRevision: userRevision,
+                    systemRevision: systemRevision
+                )
+            } catch {
+                didFail = true
+            }
+            UserDictionaryIndexBuildRegistry.shared.finish(registryKey, failed: didFail)
         }
     }
 
     private func dynamicUserDictionary(for queryRuby: String) -> [DicdataElement] {
         let cache = self.currentUserDictionaryCache()
-        guard !cache.hasIndexedDictionary else {
-            return []
-        }
         guard !queryRuby.isEmpty else {
             return []
+        }
+        let entriesByFirstRubyCharacter = if cache.hasIndexedDictionary {
+            cache.dynamicFallbackEntriesByFirstRubyCharacter
+        } else {
+            Self.mergeEntriesByFirstRubyCharacter(
+                cache.userEntriesByFirstRubyCharacter,
+                cache.systemEntriesByFirstRubyCharacter
+            )
         }
         var elements: [DicdataElement] = []
         var seenKeys: Set<String> = []
@@ -201,8 +345,7 @@ public final class SegmentsManager {
             guard let firstRubyCharacter = suffix.first else {
                 continue
             }
-            let entries = (cache.userEntriesByFirstRubyCharacter[firstRubyCharacter] ?? [])
-                + (cache.systemEntriesByFirstRubyCharacter[firstRubyCharacter] ?? [])
+            let entries = entriesByFirstRubyCharacter[firstRubyCharacter] ?? []
             for entry in entries where Self.dynamicUserDictionaryEntryRuby(entry.ruby, matchesQuerySuffix: suffix) {
                 if seenKeys.insert(entry.deduplicationKey).inserted {
                     elements.append(entry.element)
@@ -220,6 +363,21 @@ public final class SegmentsManager {
                 return
             }
             result[firstRubyCharacter, default: []].append(entry)
+        }
+    }
+
+    private static func entries(
+        from entriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+    ) -> [DynamicUserDictionaryEntry] {
+        entriesByFirstRubyCharacter.values.flatMap(\.self)
+    }
+
+    private static func mergeEntriesByFirstRubyCharacter(
+        _ lhs: [Character: [DynamicUserDictionaryEntry]],
+        _ rhs: [Character: [DynamicUserDictionaryEntry]]
+    ) -> [Character: [DynamicUserDictionaryEntry]] {
+        rhs.reduce(into: lhs) { result, item in
+            result[item.key, default: []].append(contentsOf: item.value)
         }
     }
 

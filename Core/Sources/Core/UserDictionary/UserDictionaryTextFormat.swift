@@ -45,10 +45,10 @@ public enum UserDictionaryTextCodec {
             return String(data: Data(data.dropFirst(3)), encoding: .utf8)
         }
         if data.starts(with: [0xFF, 0xFE]) {
-            return String(data: data, encoding: .utf16LittleEndian)
+            return String(data: Data(data.dropFirst(2)), encoding: .utf16LittleEndian)
         }
         if data.starts(with: [0xFE, 0xFF]) {
-            return String(data: data, encoding: .utf16BigEndian)
+            return String(data: Data(data.dropFirst(2)), encoding: .utf16BigEndian)
         }
         return String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .shiftJIS)

@@ -11,11 +11,16 @@ import enum KanaKanjiConverterModuleWithDefaultDictionary.LearningType
 
 protocol CustomCodableConfigItem: ConfigItem {
     static var `default`: Value { get }
+    static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool
 }
 
 extension CustomCodableConfigItem {
     static var revisionKey: String {
         "\(Self.key).revision"
+    }
+
+    static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+        false
     }
 
     public var value: Value {
@@ -34,9 +39,14 @@ extension CustomCodableConfigItem {
         }
         nonmutating set {
             do {
+                let oldValue = UserDefaults.standard.data(forKey: Self.key).flatMap {
+                    try? JSONDecoder().decode(Value.self, from: $0)
+                }
                 let encoded = try JSONEncoder().encode(newValue)
                 UserDefaults.standard.set(encoded, forKey: Self.key)
-                UserDefaults.standard.set(UserDefaults.standard.integer(forKey: Self.revisionKey) + 1, forKey: Self.revisionKey)
+                if Self.shouldIncrementRevision(oldValue: oldValue, newValue: newValue) {
+                    UserDefaults.standard.set(UserDefaults.standard.integer(forKey: Self.revisionKey) + 1, forKey: Self.revisionKey)
+                }
             } catch {
                 print(#file, #line, error)
             }
@@ -158,6 +168,26 @@ extension Config {
             ])
         ])
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.user_dictionary_temporal2"
+
+        static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+            Self.revisionSignature(oldValue ?? Self.default) != Self.revisionSignature(newValue)
+        }
+
+        private static func revisionSignature(_ value: Value) -> [String] {
+            value.dictionaries.flatMap { dictionary -> [String] in
+                guard dictionary.isEnabled else {
+                    return []
+                }
+                return ["enabled:\(dictionary.id.uuidString)"] + dictionary.items.map { item in
+                    [
+                        item.id.uuidString,
+                        item.word,
+                        item.reading,
+                        item.hint ?? ""
+                    ].joined(separator: "\u{1F}")
+                }
+            }
+        }
     }
 
     public struct SystemUserDictionary: CustomCodableConfigItem {
@@ -174,6 +204,22 @@ extension Config {
 
         public static let `default`: Value = .init(items: [])
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.system_user_dictionary"
+
+        static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+            let oldItems = oldValue?.items ?? Self.default.items
+            return Self.revisionSignature(oldItems) != Self.revisionSignature(newValue.items)
+        }
+
+        private static func revisionSignature(_ items: [UserDictionaryEntry]) -> [String] {
+            items.map { item in
+                [
+                    item.id.uuidString,
+                    item.word,
+                    item.reading,
+                    item.hint ?? ""
+                ].joined(separator: "\u{1F}")
+            }
+        }
     }
 }
 
