@@ -11,9 +11,18 @@ import enum KanaKanjiConverterModuleWithDefaultDictionary.LearningType
 
 protocol CustomCodableConfigItem: ConfigItem {
     static var `default`: Value { get }
+    static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool
 }
 
 extension CustomCodableConfigItem {
+    static var revisionKey: String {
+        "\(Self.key).revision"
+    }
+
+    static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+        false
+    }
+
     public var value: Value {
         get {
             guard let data = UserDefaults.standard.data(forKey: Self.key) else {
@@ -30,8 +39,14 @@ extension CustomCodableConfigItem {
         }
         nonmutating set {
             do {
+                let oldValue = UserDefaults.standard.data(forKey: Self.key).flatMap {
+                    try? JSONDecoder().decode(Value.self, from: $0)
+                }
                 let encoded = try JSONEncoder().encode(newValue)
                 UserDefaults.standard.set(encoded, forKey: Self.key)
+                if Self.shouldIncrementRevision(oldValue: oldValue, newValue: newValue) {
+                    UserDefaults.standard.set(UserDefaults.standard.integer(forKey: Self.revisionKey) + 1, forKey: Self.revisionKey)
+                }
             } catch {
                 print(#file, #line, error)
             }
@@ -67,8 +82,8 @@ extension Config {
 
 extension Config {
     public struct UserDictionaryEntry: Sendable, Codable, Identifiable {
-        public init(word: String, reading: String, hint: String? = nil) {
-            self.id = UUID()
+        public init(id: UUID = UUID(), word: String, reading: String, hint: String? = nil) {
+            self.id = id
             self.word = word
             self.reading = reading
             self.hint = hint
@@ -77,7 +92,7 @@ extension Config {
         public var id: UUID
         public var word: String
         public var reading: String
-        var hint: String?
+        public var hint: String?
 
         public var nonNullHint: String {
             get {
@@ -93,9 +108,52 @@ extension Config {
         }
     }
 
+    public struct UserDictionaryGroup: Sendable, Codable, Identifiable {
+        public init(id: UUID = UUID(), name: String, isEnabled: Bool = true, items: [UserDictionaryEntry] = []) {
+            self.id = id
+            self.name = name
+            self.isEnabled = isEnabled
+            self.items = items
+        }
+
+        public var id: UUID
+        public var name: String
+        public var isEnabled: Bool
+        public var items: [UserDictionaryEntry]
+    }
+
     public struct UserDictionary: CustomCodableConfigItem {
         public struct Value: Codable, Sendable {
-            public var items: [UserDictionaryEntry]
+            public var dictionaries: [UserDictionaryGroup]
+
+            public init(dictionaries: [UserDictionaryGroup]) {
+                self.dictionaries = dictionaries
+            }
+
+            public var items: [UserDictionaryEntry] {
+                dictionaries.flatMap(\.items)
+            }
+
+            public var enabledItems: [UserDictionaryEntry] {
+                dictionaries.filter(\.isEnabled).flatMap(\.items)
+            }
+
+            public init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if let dictionaries = try container.decodeIfPresent([UserDictionaryGroup].self, forKey: .dictionaries) {
+                    self.dictionaries = dictionaries
+                } else {
+                    let items = try container.decodeIfPresent([UserDictionaryEntry].self, forKey: .items) ?? []
+                    self.dictionaries = [
+                        .init(name: "ユーザ辞書", isEnabled: true, items: items)
+                    ]
+                }
+            }
+
+            public func encode(to encoder: any Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(dictionaries, forKey: .dictionaries)
+            }
         }
 
         public var items: Value = Self.default
@@ -104,10 +162,32 @@ extension Config {
             self.items = items
         }
 
-        public static let `default`: Value = .init(items: [
-            .init(word: "azooKey", reading: "あずーきー", hint: "アプリ")
+        public static let `default`: Value = .init(dictionaries: [
+            .init(name: "ユーザ辞書", isEnabled: true, items: [
+                .init(word: "azooKey", reading: "あずーきー", hint: "アプリ")
+            ])
         ])
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.user_dictionary_temporal2"
+
+        static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+            Self.revisionSignature(oldValue ?? Self.default) != Self.revisionSignature(newValue)
+        }
+
+        private static func revisionSignature(_ value: Value) -> [String] {
+            value.dictionaries.flatMap { dictionary -> [String] in
+                guard dictionary.isEnabled else {
+                    return []
+                }
+                return ["enabled:\(dictionary.id.uuidString)"] + dictionary.items.map { item in
+                    [
+                        item.id.uuidString,
+                        item.word,
+                        item.reading,
+                        item.hint ?? ""
+                    ].joined(separator: "\u{1F}")
+                }
+            }
+        }
     }
 
     public struct SystemUserDictionary: CustomCodableConfigItem {
@@ -124,6 +204,29 @@ extension Config {
 
         public static let `default`: Value = .init(items: [])
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.system_user_dictionary"
+
+        static func shouldIncrementRevision(oldValue: Value?, newValue: Value) -> Bool {
+            let oldItems = oldValue?.items ?? Self.default.items
+            return Self.revisionSignature(oldItems) != Self.revisionSignature(newValue.items)
+        }
+
+        private static func revisionSignature(_ items: [UserDictionaryEntry]) -> [String] {
+            items.map { item in
+                [
+                    item.id.uuidString,
+                    item.word,
+                    item.reading,
+                    item.hint ?? ""
+                ].joined(separator: "\u{1F}")
+            }
+        }
+    }
+}
+
+extension Config.UserDictionary.Value {
+    enum CodingKeys: String, CodingKey {
+        case dictionaries
+        case items
     }
 }
 

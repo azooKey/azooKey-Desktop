@@ -96,10 +96,11 @@ class CandidatesViewController: BaseCandidateViewController {
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
         let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
+        let annotationWidth = hasAnnotation ? CandidateTableCellView.annotationMaxWidth + 12 : 0
         if self.showCandidateIndex {
-            return maxContentWidth + 48 + (hasAnnotation ? 56 : 0)
+            return maxContentWidth + 48 + annotationWidth
         } else {
-            return maxContentWidth + 20 + (hasAnnotation ? 56 : 0)
+            return maxContentWidth + 20 + annotationWidth
         }
     }
 }

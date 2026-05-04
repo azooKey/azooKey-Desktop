@@ -1,6 +1,54 @@
 import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
+private final class UserDictionaryIndexBuildRegistry: @unchecked Sendable {
+    struct Key: Hashable, Sendable {
+        var directoryPath: String
+        var userRevision: Int
+        var systemRevision: Int
+    }
+
+    static let shared = UserDictionaryIndexBuildRegistry()
+
+    private let lock = NSLock()
+    private var inProgressKeys: Set<Key> = []
+    private var inProgressDirectoryPaths: Set<String> = []
+    private var retryNotBeforeByKey: [Key: Date] = [:]
+    private let retryInterval: TimeInterval = 30
+
+    func start(_ key: Key) -> Bool {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if inProgressKeys.contains(key) || inProgressDirectoryPaths.contains(key.directoryPath) {
+            return false
+        }
+        if let retryNotBefore = retryNotBeforeByKey[key],
+           retryNotBefore > Date() {
+            return false
+        }
+        retryNotBeforeByKey.removeValue(forKey: key)
+        inProgressKeys.insert(key)
+        inProgressDirectoryPaths.insert(key.directoryPath)
+        return true
+    }
+
+    func finish(_ key: Key, failed: Bool) {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        inProgressKeys.remove(key)
+        inProgressDirectoryPaths.remove(key.directoryPath)
+        if failed {
+            retryNotBeforeByKey[key] = Date().addingTimeInterval(retryInterval)
+        } else {
+            retryNotBeforeByKey.removeValue(forKey: key)
+        }
+    }
+}
+
 public final class SegmentsManager {
     public init(
         kanaKanjiConverter: KanaKanjiConverter,
@@ -36,12 +84,6 @@ public final class SegmentsManager {
     private var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
-    private var userDictionary: Config.UserDictionary.Value {
-        Config.UserDictionary().value
-    }
-    private var systemUserDictionary: Config.SystemUserDictionary.Value {
-        Config.SystemUserDictionary().value
-    }
     private var zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value {
         Config.ZenzaiPersonalizationLevel().value
     }
@@ -64,6 +106,32 @@ public final class SegmentsManager {
     private var suggestSelectionIndex: Int?
     private var backspaceAdjustedPredictionCandidate: PredictionCandidate?
     private var backspaceTypoCorrectionLock: BackspaceTypoCorrectionLock?
+    private var userDictionaryHints: [String: String] = [:]
+    private var userDictionaryCache: UserDictionaryCache?
+    private var userDictionaryIndexNeedsReload = true
+
+    private var userDictionaryIndexDirectoryURL: URL {
+        self.applicationDirectoryURL.appendingPathComponent("UserDictionary", isDirectory: true)
+    }
+
+    private struct DynamicUserDictionaryEntry: Sendable {
+        var deduplicationKey: String
+        var ruby: String
+        var element: DicdataElement
+    }
+
+    private struct UserDictionaryCache {
+        var userRevision: Int
+        var systemRevision: Int
+        var userEntryCount: Int
+        var systemEntryCount: Int
+        var userEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+        var systemEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+        var dynamicFallbackEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+        var hints: [String: String]
+        var hasIndexedDictionary: Bool
+        var hasLoadedIndexMetadata: Bool
+    }
 
     public struct PredictionCandidate: Sendable, Equatable {
         public var displayText: String
@@ -86,8 +154,272 @@ public final class SegmentsManager {
             if index < additionalPresentations.count {
                 return .init(candidate: candidates[index], displayContext: additionalPresentations[index].displayContext)
             }
-            return .init(candidate: candidates[index])
+            return .init(
+                candidate: candidates[index],
+                displayContext: .init(annotationText: self.annotationText(for: candidates[index]))
+            )
         }
+    }
+
+    private func annotationText(for candidate: Candidate) -> String? {
+        candidate.data.lazy.compactMap {
+            guard candidate.text == $0.word else {
+                return nil
+            }
+            return self.userDictionaryHints[Self.userDictionaryHintKey(word: $0.word, ruby: $0.ruby)]
+        }.first
+    }
+
+    private static func userDictionaryHintKey(word: String, ruby: String) -> String {
+        "\(ruby)\u{1F}\(word)"
+    }
+
+    private func currentUserDictionaryCache() -> UserDictionaryCache {
+        let userRevision = UserDefaults.standard.integer(forKey: Config.UserDictionary.revisionKey)
+        let systemRevision = UserDefaults.standard.integer(forKey: Config.SystemUserDictionary.revisionKey)
+        if let userDictionaryCache,
+           userDictionaryCache.userRevision == userRevision,
+           userDictionaryCache.systemRevision == systemRevision {
+            if !userDictionaryCache.hasLoadedIndexMetadata {
+                let allEntries = Self.entries(from: userDictionaryCache.userEntriesByFirstRubyCharacter)
+                    + Self.entries(from: userDictionaryCache.systemEntriesByFirstRubyCharacter)
+                let indexState = self.currentUserDictionaryIndexState(
+                    userRevision: userRevision,
+                    systemRevision: systemRevision,
+                    entries: allEntries
+                )
+                if indexState.hasLoadedIndexMetadata {
+                    var cache = userDictionaryCache
+                    cache.dynamicFallbackEntriesByFirstRubyCharacter = Self.entriesByFirstRubyCharacter(indexState.dynamicFallbackEntries)
+                    cache.hasIndexedDictionary = indexState.hasIndexedDictionary
+                    cache.hasLoadedIndexMetadata = true
+                    self.userDictionaryCache = cache
+                    self.userDictionaryHints = cache.hints
+                    self.userDictionaryIndexNeedsReload = true
+                    return cache
+                }
+            }
+            self.userDictionaryHints = userDictionaryCache.hints
+            return userDictionaryCache
+        }
+
+        let userDictionary = Config.UserDictionary().value
+        let enabledItems = userDictionary.enabledItems
+        let userEntries = enabledItems.map { item in
+            let ruby = item.reading.toKatakana()
+            return DynamicUserDictionaryEntry(
+                deduplicationKey: "user:\(item.id.uuidString)",
+                ruby: ruby,
+                element: .init(word: item.word, ruby: ruby, cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
+            )
+        }
+        let systemEntries = Config.SystemUserDictionary().value.items.map { item in
+            let ruby = item.reading.toKatakana()
+            return DynamicUserDictionaryEntry(
+                deduplicationKey: "system:\(item.id.uuidString)",
+                ruby: ruby,
+                element: .init(word: item.word, ruby: ruby, cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
+            )
+        }
+        let hints = enabledItems.reduce(into: [String: String]()) { hints, item in
+            guard let hint = item.hint, !hint.isEmpty else {
+                return
+            }
+            hints[Self.userDictionaryHintKey(word: item.word, ruby: item.reading.toKatakana())] = hint
+        }
+        let allEntries = userEntries + systemEntries
+        let indexState = self.currentUserDictionaryIndexState(
+            userRevision: userRevision,
+            systemRevision: systemRevision,
+            entries: allEntries
+        )
+        let cache = UserDictionaryCache(
+            userRevision: userRevision,
+            systemRevision: systemRevision,
+            userEntryCount: userEntries.count,
+            systemEntryCount: systemEntries.count,
+            userEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(userEntries),
+            systemEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(systemEntries),
+            dynamicFallbackEntriesByFirstRubyCharacter: Self.entriesByFirstRubyCharacter(indexState.dynamicFallbackEntries),
+            hints: hints,
+            hasIndexedDictionary: indexState.hasIndexedDictionary,
+            hasLoadedIndexMetadata: indexState.hasLoadedIndexMetadata
+        )
+        self.userDictionaryCache = cache
+        self.userDictionaryHints = hints
+        self.appendDebugMessage("userDictionaryCount: \(cache.userEntryCount)")
+        self.appendDebugMessage("systemUserDictionaryCount: \(cache.systemEntryCount)")
+        return cache
+    }
+
+    private func currentUserDictionaryIndexState(
+        userRevision: Int,
+        systemRevision: Int,
+        entries: [DynamicUserDictionaryEntry]
+    ) -> (hasIndexedDictionary: Bool, dynamicFallbackEntries: [DynamicUserDictionaryEntry], hasLoadedIndexMetadata: Bool) {
+        let store = UserDictionaryIndexStore(directoryURL: self.userDictionaryIndexDirectoryURL)
+        if let metadata = store.metadata(),
+           metadata.userRevision == userRevision,
+           metadata.systemRevision == systemRevision,
+           store.hasUsableIndex(for: metadata) {
+            let dynamicFallbackEntries = self.dynamicFallbackEntriesForIndexedDictionary(
+                entries: entries,
+                skippedEntryCount: metadata.skippedEntryCount
+            )
+            return (metadata.indexedEntryCount > 0, dynamicFallbackEntries, true)
+        }
+
+        self.startUserDictionaryIndexBuildIfNeeded(
+            userRevision: userRevision,
+            systemRevision: systemRevision,
+            entries: entries
+        )
+        return (false, entries, false)
+    }
+
+    private func dynamicFallbackEntriesForIndexedDictionary(
+        entries: [DynamicUserDictionaryEntry],
+        skippedEntryCount: Int
+    ) -> [DynamicUserDictionaryEntry] {
+        guard skippedEntryCount > 0 else {
+            return []
+        }
+        do {
+            let supportedCharacters = try UserDictionaryIndexStore.supportedCharacters()
+            return entries.filter {
+                !UserDictionaryIndexStore.canIndex(ruby: $0.ruby, supportedCharacters: supportedCharacters)
+            }
+        } catch {
+            self.appendDebugMessage("userDictionaryIndexFallbackError: \(error)")
+            return entries
+        }
+    }
+
+    private func startUserDictionaryIndexBuildIfNeeded(
+        userRevision: Int,
+        systemRevision: Int,
+        entries: [DynamicUserDictionaryEntry]
+    ) {
+        let directoryURL = self.userDictionaryIndexDirectoryURL
+        let registryKey = UserDictionaryIndexBuildRegistry.Key(
+            directoryPath: directoryURL.path,
+            userRevision: userRevision,
+            systemRevision: systemRevision
+        )
+        guard UserDictionaryIndexBuildRegistry.shared.start(registryKey) else {
+            return
+        }
+
+        DispatchQueue.global(qos: .utility).async { [directoryURL, entries, registryKey] in
+            var didFail = false
+            do {
+                _ = try UserDictionaryIndexStore(directoryURL: directoryURL).rebuild(
+                    entries: entries.map(\.element),
+                    userRevision: userRevision,
+                    systemRevision: systemRevision
+                )
+            } catch {
+                didFail = true
+            }
+            UserDictionaryIndexBuildRegistry.shared.finish(registryKey, failed: didFail)
+        }
+    }
+
+    private func dynamicUserDictionary(for queryRuby: String) -> [DicdataElement] {
+        let cache = self.currentUserDictionaryCache()
+        guard !queryRuby.isEmpty else {
+            return []
+        }
+        let entriesByFirstRubyCharacter = if cache.hasIndexedDictionary {
+            cache.dynamicFallbackEntriesByFirstRubyCharacter
+        } else {
+            Self.mergeEntriesByFirstRubyCharacter(
+                cache.userEntriesByFirstRubyCharacter,
+                cache.systemEntriesByFirstRubyCharacter
+            )
+        }
+        var elements: [DicdataElement] = []
+        var seenKeys: Set<String> = []
+        for suffixStart in queryRuby.indices {
+            let suffix = String(queryRuby[suffixStart...])
+            guard let firstRubyCharacter = suffix.first else {
+                continue
+            }
+            let entries = entriesByFirstRubyCharacter[firstRubyCharacter] ?? []
+            for entry in entries where Self.dynamicUserDictionaryEntryRuby(entry.ruby, matchesQuerySuffix: suffix) {
+                if seenKeys.insert(entry.deduplicationKey).inserted {
+                    elements.append(entry.element)
+                }
+            }
+        }
+        return elements
+    }
+
+    private static func entriesByFirstRubyCharacter(
+        _ entries: [DynamicUserDictionaryEntry]
+    ) -> [Character: [DynamicUserDictionaryEntry]] {
+        entries.reduce(into: [Character: [DynamicUserDictionaryEntry]]()) { result, entry in
+            guard let firstRubyCharacter = entry.ruby.first else {
+                return
+            }
+            result[firstRubyCharacter, default: []].append(entry)
+        }
+    }
+
+    private static func entries(
+        from entriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]]
+    ) -> [DynamicUserDictionaryEntry] {
+        entriesByFirstRubyCharacter.values.flatMap(\.self)
+    }
+
+    private static func mergeEntriesByFirstRubyCharacter(
+        _ lhs: [Character: [DynamicUserDictionaryEntry]],
+        _ rhs: [Character: [DynamicUserDictionaryEntry]]
+    ) -> [Character: [DynamicUserDictionaryEntry]] {
+        rhs.reduce(into: lhs) { result, item in
+            result[item.key, default: []].append(contentsOf: item.value)
+        }
+    }
+
+    static func shouldIncludeDynamicUserDictionaryEntry(ruby entryRuby: String, for queryRuby: String) -> Bool {
+        guard !entryRuby.isEmpty, !queryRuby.isEmpty else {
+            return false
+        }
+        return queryRuby.indices.contains { suffixStart in
+            let suffix = String(queryRuby[suffixStart...])
+            return Self.dynamicUserDictionaryEntryRuby(entryRuby, matchesQuerySuffix: suffix)
+        }
+    }
+
+    private static func dynamicUserDictionaryEntryRuby(_ entryRuby: String, matchesQuerySuffix suffix: String) -> Bool {
+        entryRuby.hasPrefix(suffix) || suffix.hasPrefix(entryRuby)
+    }
+
+    private static func makeDynamicShortcuts() -> [DicdataElement] {
+        [
+            ("M/d", -18, DateTemplateLiteral.CalendarType.western),
+            ("yyyy/MM/dd", -18.1, .western),
+            ("yyyy-MM-dd", -18.2, .western),
+            ("M月d日（E）", -18.3, .western),
+            ("yyyy年M月d日", -18.4, .western),
+            ("Gyyyy年M月d日", -18.5, .japanese),
+            ("E曜日", -18.6, .western)
+        ].flatMap { (format, value: PValue, type) in
+            [
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
+            ]
+        } + [
+            .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
+            .init(word: DateTemplateLiteral(format: "HH:mm", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "HH時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
+            .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
+        ]
     }
 
     private lazy var zenzaiPersonalizationMode: ConvertRequestOptions.ZenzaiMode.PersonalizationMode? = self.getZenzaiPersonalizationMode()
@@ -185,7 +517,7 @@ public final class SegmentsManager {
             fullWidthRomanCandidate: true,
             learningType: Config.Learning().value.learningType,
             memoryDirectoryURL: self.azooKeyMemoryDir,
-            sharedContainerURL: self.azooKeyMemoryDir,
+            sharedContainerURL: self.userDictionaryIndexDirectoryURL,
             textReplacer: .withDefaultEmojiDictionary(),
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates),
@@ -480,50 +812,16 @@ public final class SegmentsManager {
             self.kanaKanjiConverter.stopComposition()
             return
         }
-        // ユーザ辞書情報の更新
-        var userDictionary: [DicdataElement] = userDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("userDictionaryCount: \(userDictionary.count)")
-        let systemUserDictionary: [DicdataElement] = systemUserDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("systemUserDictionaryCount: \(systemUserDictionary.count)")
-        userDictionary.append(contentsOf: consume systemUserDictionary)
-
-        /// 日付・時刻変換を事前に入れておく
-        let dynamicShortcuts: [DicdataElement] =
-            [
-                ("M/d", -18, DateTemplateLiteral.CalendarType.western),
-                ("yyyy/MM/dd", -18.1, .western),
-                ("yyyy-MM-dd", -18.2, .western),
-                ("M月d日（E）", -18.3, .western),
-                ("yyyy年M月d日", -18.4, .western),
-                ("Gyyyy年M月d日", -18.5, .japanese),
-                ("E曜日", -18.6, .western)
-            ].flatMap { (format, value: PValue, type) in
-                [
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
-                ]
-            } + [
-                // 月
-                .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                // 年
-                .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                // 時刻
-                .init(word: DateTemplateLiteral(format: "HH:mm", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "HH時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
-            ]
-
-        self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary, shortcuts: dynamicShortcuts)
-
         let prefixComposingText = self.composingText.prefixToCursorPosition()
+        let queryRuby = prefixComposingText.convertTarget.toKatakana()
+        let userDictionary = self.dynamicUserDictionary(for: queryRuby)
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            self.userDictionaryIndexDirectoryURL,
+            forceReload: self.userDictionaryIndexNeedsReload
+        )
+        self.userDictionaryIndexNeedsReload = false
+        self.kanaKanjiConverter.importDynamicUserDictionary(userDictionary, shortcuts: Self.makeDynamicShortcuts())
+
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
         let result = self.kanaKanjiConverter.requestCandidates(
             prefixComposingText,

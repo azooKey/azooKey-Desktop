@@ -9,6 +9,8 @@ class NonClickableTableView: NSTableView {
 }
 
 class CandidateTableCellView: NSTableCellView {
+    static let annotationMaxWidth: CGFloat = 170
+
     let candidateTextField: NSTextField
     let candidateAnnotationTextField: NSTextField
     private lazy var candidateTextFieldLeadingConstraint: NSLayoutConstraint = {
@@ -27,14 +29,20 @@ class CandidateTableCellView: NSTableCellView {
     private lazy var candidateAnnotationTextFieldTrailingConstraint: NSLayoutConstraint = {
         self.candidateAnnotationTextField.trailingAnchor.constraint(equalTo: self.trailingAnchor)
     }()
+    private lazy var candidateAnnotationTextFieldWidthConstraint: NSLayoutConstraint = {
+        self.candidateAnnotationTextField.widthAnchor.constraint(lessThanOrEqualToConstant: Self.annotationMaxWidth)
+    }()
 
     override init(frame frameRect: NSRect) {
         self.candidateTextField = NSTextField(labelWithString: "")
         self.candidateTextField.font = NSFont.systemFont(ofSize: 18)
+        self.candidateTextField.lineBreakMode = .byTruncatingTail
         self.candidateAnnotationTextField = NSTextField(labelWithString: "")
-        self.candidateAnnotationTextField.font = NSFont.systemFont(ofSize: 12)
+        self.candidateAnnotationTextField.font = NSFont.systemFont(ofSize: 10)
         self.candidateAnnotationTextField.textColor = .systemGray
         self.candidateAnnotationTextField.alignment = .right
+        self.candidateAnnotationTextField.lineBreakMode = .byWordWrapping
+        self.candidateAnnotationTextField.maximumNumberOfLines = 2
         super.init(frame: frameRect)
         self.addSubview(self.candidateTextField)
         self.addSubview(self.candidateAnnotationTextField)
@@ -46,13 +54,14 @@ class CandidateTableCellView: NSTableCellView {
             self.candidateTextField.centerYAnchor.constraint(equalTo: self.centerYAnchor)
         ])
         self.candidateTextField.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        self.candidateTextField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        self.candidateTextField.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         self.candidateAnnotationTextField.translatesAutoresizingMaskIntoConstraints = false
         self.candidateAnnotationTextField.setContentHuggingPriority(.required, for: .horizontal)
-        self.candidateAnnotationTextField.setContentCompressionResistancePriority(.required, for: .horizontal)
+        self.candidateAnnotationTextField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         NSLayoutConstraint.activate([
+            self.candidateAnnotationTextFieldWidthConstraint,
             self.candidateAnnotationTextField.centerYAnchor.constraint(equalTo: self.centerYAnchor)
         ])
 
@@ -66,6 +75,7 @@ class CandidateTableCellView: NSTableCellView {
         self.candidateAnnotationTextField.isBordered = false
         self.candidateAnnotationTextField.drawsBackground = false
         self.candidateAnnotationTextField.backgroundColor = .clear
+        self.candidateAnnotationTextField.cell?.wraps = true
 
         self.showCandidateAnnotationTextField(false)
     }
@@ -145,7 +155,7 @@ class BaseCandidateViewController: NSViewController {
         self.tableView.delegate = self
         self.tableView.dataSource = self
         self.tableView.selectionHighlightStyle = .regular
-        self.tableView.rowHeight = 32
+        self.tableView.rowHeight = 36
 
         self.view = containerView
     }

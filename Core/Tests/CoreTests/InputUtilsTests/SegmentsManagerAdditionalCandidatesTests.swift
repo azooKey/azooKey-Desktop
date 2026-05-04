@@ -120,3 +120,67 @@ private func makeEditedRangeScenario() -> (manager: SegmentsManager, selectedRub
         Issue.record("Expected selecting state after expanding additional candidates.")
     }
 }
+
+@MainActor
+@Test func userDictionaryAnnotationRequiresDisplayedCandidateTextToMatchEntryWord() async throws {
+    let defaults = UserDefaults.standard
+    let key = Config.UserDictionary.key
+    let revisionKey = Config.UserDictionary.revisionKey
+    let oldData = defaults.data(forKey: key)
+    let oldRevision = defaults.object(forKey: revisionKey)
+    defer {
+        if let oldData {
+            defaults.set(oldData, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+        if let oldRevision {
+            defaults.set(oldRevision, forKey: revisionKey)
+        } else {
+            defaults.removeObject(forKey: revisionKey)
+        }
+    }
+
+    defaults.removeObject(forKey: key)
+    defaults.removeObject(forKey: revisionKey)
+    Config.UserDictionary().value = .init(dictionaries: [
+        .init(
+            name: "数学",
+            items: [
+                .init(word: "Gorenstein", reading: "ごれんしゅたいん", hint: "Gorenstein 環などで知られる数学者")
+            ]
+        )
+    ])
+
+    let manager = makeSegmentsManager()
+    manager.insertAtCursorPosition("ごれんしゅたいん", inputStyle: .direct)
+    manager.update(requestRichCandidates: false)
+
+    let data = [
+        DicdataElement(
+            word: "Gorenstein",
+            ruby: "ゴレンシュタイン",
+            cid: CIDData.固有名詞.cid,
+            mid: MIDData.一般.mid,
+            value: -5
+        )
+    ]
+    let exactCandidate = Candidate(
+        text: "Gorenstein",
+        value: .zero,
+        composingCount: .inputCount(8),
+        lastMid: MIDData.一般.mid,
+        data: data
+    )
+    let unrelatedSurfaceCandidate = Candidate(
+        text: "ご恋シュタイン",
+        value: .zero,
+        composingCount: .inputCount(8),
+        lastMid: MIDData.一般.mid,
+        data: data
+    )
+
+    let presentations = manager.makeCandidatePresentations([exactCandidate, unrelatedSurfaceCandidate])
+    #expect(presentations[0].displayContext.annotationText == "Gorenstein 環などで知られる数学者")
+    #expect(presentations[1].displayContext.annotationText == nil)
+}
