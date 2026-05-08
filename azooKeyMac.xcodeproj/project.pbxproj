@@ -52,7 +52,7 @@
 		551434E22D576B6600A9B5CA /* lm_r_xbx.marisa */ = {isa = PBXFileReference; lastKnownFileType = file; name = lm_r_xbx.marisa; path = base_n5_lm/lm_r_xbx.marisa; sourceTree = "<group>"; };
 		551434E32D576B6600A9B5CA /* lm_u_abx.marisa */ = {isa = PBXFileReference; lastKnownFileType = file; name = lm_u_abx.marisa; path = base_n5_lm/lm_u_abx.marisa; sourceTree = "<group>"; };
 		551434E42D576B6600A9B5CA /* lm_u_xbc.marisa */ = {isa = PBXFileReference; lastKnownFileType = file; name = lm_u_xbc.marisa; path = base_n5_lm/lm_u_xbc.marisa; sourceTree = "<group>"; };
-		551434E92D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ggml-model-Q5_K_M.gguf"; path = "zenz-v3.1-small-gguf/ggml-model-Q5_K_M.gguf"; sourceTree = "<group>"; };
+		551434E92D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ggml-model-Q5_K_M.gguf"; path = "gguf/ggml-model-Q5_K_M.gguf"; sourceTree = "<group>"; };
 		556C52F92BAAAF7D00EB343F /* en.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = en.tiff; sourceTree = "<group>"; };
 		556C52FA2BAAAF7D00EB343F /* en@2x.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; path = "en@2x.tiff"; sourceTree = "<group>"; };
 		55A27D012BAAADDB00512DCD /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
