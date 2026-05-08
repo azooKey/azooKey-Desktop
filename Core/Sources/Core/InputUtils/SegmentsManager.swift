@@ -36,12 +36,6 @@ public final class SegmentsManager {
     private var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
-    private var userDictionary: Config.UserDictionary.Value {
-        Config.UserDictionary().value
-    }
-    private var systemUserDictionary: Config.SystemUserDictionary.Value {
-        Config.SystemUserDictionary().value
-    }
     private var zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value {
         Config.ZenzaiPersonalizationLevel().value
     }
@@ -64,6 +58,19 @@ public final class SegmentsManager {
     private var suggestSelectionIndex: Int?
     private var backspaceAdjustedPredictionCandidate: PredictionCandidate?
     private var backspaceTypoCorrectionLock: BackspaceTypoCorrectionLock?
+    private var didLoadCompiledUserDictionaryState = false
+    private var compiledUserDictionaryModificationDate: Date?
+    private var fallbackUserDictionaryEntriesByFirstRubyCharacter: [Character: [DynamicUserDictionaryEntry]] = [:]
+
+    private var compiledUserDictionaryDirectoryURL: URL {
+        CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir)
+    }
+
+    private struct DynamicUserDictionaryEntry: Sendable {
+        var deduplicationKey: String
+        var ruby: String
+        var element: DicdataElement
+    }
 
     public struct PredictionCandidate: Sendable, Equatable {
         public var displayText: String
@@ -78,6 +85,99 @@ public final class SegmentsManager {
 
     private func candidateReading(_ candidate: Candidate) -> String {
         candidate.data.map(\.ruby).joined()
+    }
+
+    private func reloadCompiledUserDictionaryIfNeeded() -> Bool {
+        let modificationDate = CompiledUserDictionaryStore.modificationDate(memoryDirectoryURL: self.azooKeyMemoryDir)
+        guard !self.didLoadCompiledUserDictionaryState || self.compiledUserDictionaryModificationDate != modificationDate else {
+            return false
+        }
+        self.didLoadCompiledUserDictionaryState = true
+        self.compiledUserDictionaryModificationDate = modificationDate
+        let fallbackEntries = CompiledUserDictionaryStore.fallbackEntries(memoryDirectoryURL: self.azooKeyMemoryDir)
+            .enumerated()
+            .map { offset, entry in
+                DynamicUserDictionaryEntry(
+                    deduplicationKey: "fallback:\(offset):\(entry.ruby):\(entry.word)",
+                    ruby: entry.ruby,
+                    element: entry
+                )
+            }
+        self.fallbackUserDictionaryEntriesByFirstRubyCharacter = Self.entriesByFirstRubyCharacter(fallbackEntries)
+        return true
+    }
+
+    private func dynamicFallbackUserDictionary(for queryRuby: String) -> [DicdataElement] {
+        guard !queryRuby.isEmpty else {
+            return []
+        }
+        var elements: [DicdataElement] = []
+        var seenKeys: Set<String> = []
+        for suffixStart in queryRuby.indices {
+            let suffix = String(queryRuby[suffixStart...])
+            guard let firstRubyCharacter = suffix.first else {
+                continue
+            }
+            let entries = self.fallbackUserDictionaryEntriesByFirstRubyCharacter[firstRubyCharacter] ?? []
+            for entry in entries where Self.dynamicUserDictionaryEntryRuby(entry.ruby, matchesQuerySuffix: suffix) {
+                if seenKeys.insert(entry.deduplicationKey).inserted {
+                    elements.append(entry.element)
+                }
+            }
+        }
+        return elements
+    }
+
+    private static func entriesByFirstRubyCharacter(
+        _ entries: [DynamicUserDictionaryEntry]
+    ) -> [Character: [DynamicUserDictionaryEntry]] {
+        entries.reduce(into: [Character: [DynamicUserDictionaryEntry]]()) { result, entry in
+            guard let firstRubyCharacter = entry.ruby.first else {
+                return
+            }
+            result[firstRubyCharacter, default: []].append(entry)
+        }
+    }
+
+    static func shouldIncludeDynamicUserDictionaryEntry(ruby entryRuby: String, for queryRuby: String) -> Bool {
+        guard !entryRuby.isEmpty, !queryRuby.isEmpty else {
+            return false
+        }
+        return queryRuby.indices.contains { suffixStart in
+            let suffix = String(queryRuby[suffixStart...])
+            return Self.dynamicUserDictionaryEntryRuby(entryRuby, matchesQuerySuffix: suffix)
+        }
+    }
+
+    private static func dynamicUserDictionaryEntryRuby(_ entryRuby: String, matchesQuerySuffix suffix: String) -> Bool {
+        entryRuby.hasPrefix(suffix) || suffix.hasPrefix(entryRuby)
+    }
+
+    private static func makeDynamicShortcuts() -> [DicdataElement] {
+        [
+            ("M/d", -18, DateTemplateLiteral.CalendarType.western),
+            ("yyyy/MM/dd", -18.1, .western),
+            ("yyyy-MM-dd", -18.2, .western),
+            ("M月d日（E）", -18.3, .western),
+            ("yyyy年M月d日", -18.4, .western),
+            ("Gyyyy年M月d日", -18.5, .japanese),
+            ("E曜日", -18.6, .western)
+        ].flatMap { (format, value: PValue, type) in
+            [
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
+                .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
+            ]
+        } + [
+            .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
+            .init(word: DateTemplateLiteral(format: "HH:mm", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
+            .init(word: DateTemplateLiteral(format: "HH時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
+            .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
+        ]
     }
 
     public func makeCandidatePresentations(_ candidates: [Candidate]) -> [CandidatePresentation] {
@@ -185,7 +285,7 @@ public final class SegmentsManager {
             fullWidthRomanCandidate: true,
             learningType: Config.Learning().value.learningType,
             memoryDirectoryURL: self.azooKeyMemoryDir,
-            sharedContainerURL: self.azooKeyMemoryDir,
+            sharedContainerURL: self.compiledUserDictionaryDirectoryURL,
             textReplacer: .withDefaultEmojiDictionary(),
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates),
@@ -480,50 +580,16 @@ public final class SegmentsManager {
             self.kanaKanjiConverter.stopComposition()
             return
         }
-        // ユーザ辞書情報の更新
-        var userDictionary: [DicdataElement] = userDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("userDictionaryCount: \(userDictionary.count)")
-        let systemUserDictionary: [DicdataElement] = systemUserDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("systemUserDictionaryCount: \(systemUserDictionary.count)")
-        userDictionary.append(contentsOf: consume systemUserDictionary)
-
-        /// 日付・時刻変換を事前に入れておく
-        let dynamicShortcuts: [DicdataElement] =
-            [
-                ("M/d", -18, DateTemplateLiteral.CalendarType.western),
-                ("yyyy/MM/dd", -18.1, .western),
-                ("yyyy-MM-dd", -18.2, .western),
-                ("M月d日（E）", -18.3, .western),
-                ("yyyy年M月d日", -18.4, .western),
-                ("Gyyyy年M月d日", -18.5, .japanese),
-                ("E曜日", -18.6, .western)
-            ].flatMap { (format, value: PValue, type) in
-                [
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
-                ]
-            } + [
-                // 月
-                .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                // 年
-                .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                // 時刻
-                .init(word: DateTemplateLiteral(format: "HH:mm", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "HH時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
-            ]
-
-        self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary, shortcuts: dynamicShortcuts)
-
         let prefixComposingText = self.composingText.prefixToCursorPosition()
+        let shouldReloadUserDictionary = self.reloadCompiledUserDictionaryIfNeeded()
+        let queryRuby = prefixComposingText.convertTarget.toKatakana()
+        let userDictionary = self.dynamicFallbackUserDictionary(for: queryRuby)
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            self.compiledUserDictionaryDirectoryURL,
+            forceReload: shouldReloadUserDictionary
+        )
+        self.kanaKanjiConverter.importDynamicUserDictionary(userDictionary, shortcuts: Self.makeDynamicShortcuts())
+
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
         let result = self.kanaKanjiConverter.requestCandidates(
             prefixComposingText,
