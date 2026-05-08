@@ -202,8 +202,87 @@ private func makeControlEvent(
         enableDebugWindow: false,
         enableSuggestion: false
     )
-    guard case .fallthrough = composingAction, case .fallthrough = composingCallback else {
-        Issue.record("Expected unknown action in composing state to fall through, got \(composingAction), \(composingCallback)")
+    // Ctrl修飾付きの.unknownはcomposing中にmarked textを保護するためconsumeに変更されている
+    guard case .consume = composingAction, case .fallthrough = composingCallback else {
+        Issue.record("Expected unknown action with Ctrl in composing state to be consumed, got \(composingAction), \(composingCallback)")
+        return
+    }
+}
+
+@Test func testCtrlUnknownIsConsumedDuringComposingStates() {
+    // Ctrl+Shift+O などの未定義 Ctrl 系キーはcomposing系状態でconsumeされ、marked textの消失を防ぐ
+    let controlShiftOEvent = makeControlEvent(
+        logicalKey: "o",
+        characters: "O",
+        modifiers: [.control, .shift],
+        keyCode: 31
+    )
+    let controlBackquoteEvent = makeControlEvent(
+        logicalKey: "`",
+        characters: "`",
+        modifiers: [.control],
+        keyCode: 50
+    )
+
+    let composingStates: [InputState] = [.composing, .previewing, .selecting, .replaceSuggestion]
+    for state in composingStates {
+        for event in [controlShiftOEvent, controlBackquoteEvent] {
+            let (action, callback) = state.event(
+                eventCore: event,
+                userAction: .unknown,
+                inputLanguage: .japanese,
+                liveConversionEnabled: false,
+                enableDebugWindow: false,
+                enableSuggestion: false
+            )
+            guard case .consume = action, case .fallthrough = callback else {
+                Issue.record("Expected Ctrl unknown to be consumed in \(state) state, got \(action), \(callback)")
+                return
+            }
+        }
+    }
+}
+
+@Test func testCtrlUnknownInNoneStateFallsThrough() {
+    // composing中でない場合は、アプリ側のショートカットが発火するようfallthroughされる
+    let controlShiftOEvent = makeControlEvent(
+        logicalKey: "o",
+        characters: "O",
+        modifiers: [.control, .shift],
+        keyCode: 31
+    )
+    let (action, callback) = InputState.none.event(
+        eventCore: controlShiftOEvent,
+        userAction: .unknown,
+        inputLanguage: .japanese,
+        liveConversionEnabled: false,
+        enableDebugWindow: false,
+        enableSuggestion: false
+    )
+    guard case .fallthrough = action, case .fallthrough = callback else {
+        Issue.record("Expected Ctrl+Shift unknown in none state to fall through, got \(action), \(callback)")
+        return
+    }
+}
+
+@Test func testNonModifierUnknownStillFallsThroughDuringComposing() {
+    // Ctrlを伴わない.unknownは従来通りfallthroughされる（既存挙動の回帰防止）
+    let bareEvent = makeControlEvent(
+        logicalKey: nil,
+        characters: nil,
+        modifiers: [],
+        keyCode: 0
+    )
+    let (action, callback) = InputState.composing.event(
+        eventCore: bareEvent,
+        userAction: .unknown,
+        inputLanguage: .japanese,
+        liveConversionEnabled: false,
+        enableDebugWindow: false,
+        enableSuggestion: false
+    )
+    guard case .fallthrough = action, case .fallthrough = callback else {
+        Issue.record("Expected modifier-less unknown in composing state to fall through, got \(action), \(callback)")
         return
     }
 }
