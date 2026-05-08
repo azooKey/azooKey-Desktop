@@ -649,13 +649,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     private func positionPredictionWindowRightOfCandidateWindow(gap: CGFloat = 8) {
-        guard let screen = self.predictionWindow.screen ?? self.candidatesWindow.screen else {
+        // アンカーである候補ウィンドウの中心が乗っているスクリーンを基準にする。
+        // predictionWindow.screen / candidatesWindow.screen はマルチディスプレイ遷移直後に
+        // 古いディスプレイを返すことがあるため、frame の中心点で能動的に判定する。
+        let anchorFrame = self.candidatesWindow.frame
+        let anchorCenter = CGPoint(x: anchorFrame.midX, y: anchorFrame.midY)
+        guard let screen = ScreenLookup.screen(containing: anchorCenter, fallbackWindow: self.candidatesWindow) else {
             return
         }
 
         let frame = WindowPositioning.frameRightOfAnchor(
             currentFrame: WindowPositioning.Rect(self.predictionWindow.frame),
-            anchorFrame: WindowPositioning.Rect(self.candidatesWindow.frame),
+            anchorFrame: WindowPositioning.Rect(anchorFrame),
             screenRect: WindowPositioning.Rect(screen.visibleFrame),
             gap: Double(gap)
         )
