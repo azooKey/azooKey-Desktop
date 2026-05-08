@@ -46,6 +46,14 @@ public enum InputState: Sendable, Hashable {
                 return (.fallthrough, .fallthrough)
             }
         }
+        if event.modifierFlags.contains(.control) {
+            switch userAction {
+            case .unknown where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
+            default:
+                break
+            }
+        }
         switch self {
         case .none:
             switch userAction {
@@ -193,12 +201,7 @@ public enum InputState: Sendable, Hashable {
                 }
             case .startUnicodeInput:
                 return (.commitMarkedText, .transition(.unicodeInput("")))
-            case .unknown:
-                if event.modifierFlags.contains(.control) {
-                    return (.consume, .fallthrough)
-                }
-                return (.fallthrough, .fallthrough)
-            case .transformSelectedText, .deadKey:
+            case .unknown, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .previewing:
@@ -253,12 +256,7 @@ public enum InputState: Sendable, Hashable {
                 return (.editSegment(count), .transition(.selecting))
             case .startUnicodeInput:
                 return (.commitMarkedText, .transition(.unicodeInput("")))
-            case .unknown:
-                if event.modifierFlags.contains(.control) {
-                    return (.consume, .fallthrough)
-                }
-                return (.fallthrough, .fallthrough)
-            case .suggest, .transformSelectedText, .deadKey:
+            case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .selecting:
@@ -343,12 +341,7 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             case .startUnicodeInput:
                 return (.submitSelectedCandidateAndEnterUnicodeInputMode, .transition(.unicodeInput("")))
-            case .unknown:
-                if event.modifierFlags.contains(.control) {
-                    return (.consume, .fallthrough)
-                }
-                return (.fallthrough, .fallthrough)
-            case .suggest, .transformSelectedText, .deadKey:
+            case .unknown, .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .replaceSuggestion:
@@ -380,12 +373,7 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             case .startUnicodeInput:
                 return (.hideReplaceSuggestionWindow, .transition(.unicodeInput("")))
-            case .unknown:
-                if event.modifierFlags.contains(.control) {
-                    return (.consume, .fallthrough)
-                }
-                return (.fallthrough, .fallthrough)
-            case .function, .number, .editSegment, .transformSelectedText, .deadKey:
+            case .unknown, .function, .number, .editSegment, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .unicodeInput(let codePoint):
