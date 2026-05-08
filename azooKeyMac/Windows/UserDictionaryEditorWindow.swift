@@ -50,6 +50,32 @@ struct UserDictionaryEditorWindow: View {
         self.$userDictionary.wrappedValue = value
     }
 
+    private var userDictionaryMemoryDirectoryURL: URL {
+        let applicationSupportDirectoryURL: URL
+        if #available(macOS 13, *) {
+            applicationSupportDirectoryURL = URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+        } else {
+            applicationSupportDirectoryURL = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+        }
+        return applicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
+    }
+
+    private func exportUserDictionary() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                _ = try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             Text("ユーザ辞書の設定")
@@ -81,6 +107,7 @@ struct UserDictionaryEditorWindow: View {
                         Spacer()
                         Button("完了", systemImage: "checkmark") {
                             self.editTargetID = nil
+                            self.exportUserDictionary()
                         }
                         Spacer()
                     }
@@ -107,6 +134,7 @@ struct UserDictionaryEditorWindow: View {
                                 value.items.append(undoItem)
                             }
                             self.undoItem = nil
+                            self.exportUserDictionary()
                         }
                     }
                     Spacer()
@@ -130,6 +158,7 @@ struct UserDictionaryEditorWindow: View {
                                         value.items.remove(at: itemIndex)
                                     }
                                 }
+                                self.exportUserDictionary()
                             }
                             .buttonStyle(.bordered)
                             .labelStyle(.iconOnly)

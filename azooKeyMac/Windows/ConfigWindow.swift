@@ -74,6 +74,10 @@ struct ConfigWindow: View {
         }
     }
 
+    private var userDictionaryMemoryDirectoryURL: URL {
+        self.azooKeyApplicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
+    }
+
     private var debugTypoCorrectionModelDirectoryURL: URL {
         DebugTypoCorrectionWeights.modelDirectoryURL(
             azooKeyApplicationSupportDirectoryURL: self.azooKeyApplicationSupportDirectoryURL
@@ -145,6 +149,17 @@ struct ConfigWindow: View {
             NSWorkspace.shared.activateFileViewerSelecting([self.azooKeyApplicationSupportDirectoryURL])
         } catch {
             // no-op
+        }
+    }
+
+    private func exportUserDictionary() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                _ = try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
         }
     }
 
@@ -429,6 +444,7 @@ struct ConfigWindow: View {
                                 }
                                 self.systemUserDictionary.value.lastUpdate = .now
                                 self.systemUserDictionaryUpdateMessage = .successfulUpdate
+                                self.exportUserDictionary()
                             } catch {
                                 self.systemUserDictionaryUpdateMessage = .error(error)
                             }
@@ -437,6 +453,7 @@ struct ConfigWindow: View {
                             self.systemUserDictionary.value.lastUpdate = nil
                             self.systemUserDictionary.value.items = []
                             self.systemUserDictionaryUpdateMessage = nil
+                            self.exportUserDictionary()
                         }
                     }
                 } label: {
