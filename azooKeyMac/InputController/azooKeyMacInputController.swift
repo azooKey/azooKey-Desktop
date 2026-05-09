@@ -221,9 +221,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
             if englishMode {
                 // 英語モードへの切り替え通知（実際の処理はhandleで行う）
-                // メニューバー経由の切り替えに対応
-                if self.inputLanguage == .japanese && self.segmentsManager.isEmpty {
+                // メニューバーやshortcut経由の切り替えに対応する。
+                // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
+                if self.inputLanguage == .japanese {
                     self.inputLanguage = .english
+                    self.segmentsManager.stopJapaneseInput()
+                    self.refreshCandidateWindow()
+                    self.refreshPredictionWindow()
                 }
             } else {
                 // 日本語モードへの切り替え
