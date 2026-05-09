@@ -46,6 +46,14 @@ public enum InputState: Sendable, Hashable {
                 return (.fallthrough, .fallthrough)
             }
         }
+        if event.modifierFlags.contains(.control) {
+            switch userAction {
+            case .unknown where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
+            default:
+                break
+            }
+        }
         switch self {
         case .none:
             switch userAction {
