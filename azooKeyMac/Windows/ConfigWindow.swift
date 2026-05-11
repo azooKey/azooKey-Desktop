@@ -74,10 +74,6 @@ struct ConfigWindow: View {
         }
     }
 
-    private var userDictionaryMemoryDirectoryURL: URL {
-        self.azooKeyApplicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
-    }
-
     private var debugTypoCorrectionModelDirectoryURL: URL {
         DebugTypoCorrectionWeights.modelDirectoryURL(
             azooKeyApplicationSupportDirectoryURL: self.azooKeyApplicationSupportDirectoryURL
@@ -153,13 +149,8 @@ struct ConfigWindow: View {
     }
 
     private func exportUserDictionary() {
-        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
-        Task.detached(priority: .utility) {
-            do {
-                _ = try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
-            } catch {
-                print("Failed to export compiled user dictionary: \(error)")
-            }
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            appDelegate.exportUserDictionaryAndReloadConverter()
         }
     }
 

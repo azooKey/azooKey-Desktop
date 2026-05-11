@@ -50,29 +50,9 @@ struct UserDictionaryEditorWindow: View {
         self.$userDictionary.wrappedValue = value
     }
 
-    private var userDictionaryMemoryDirectoryURL: URL {
-        let applicationSupportDirectoryURL: URL
-        if #available(macOS 13, *) {
-            applicationSupportDirectoryURL = URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-        } else {
-            applicationSupportDirectoryURL = FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first!
-                .appendingPathComponent("azooKey", isDirectory: true)
-        }
-        return applicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
-    }
-
     private func exportUserDictionary() {
-        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
-        Task.detached(priority: .utility) {
-            do {
-                _ = try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
-            } catch {
-                print("Failed to export compiled user dictionary: \(error)")
-            }
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            appDelegate.exportUserDictionaryAndReloadConverter()
         }
     }
 

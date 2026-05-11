@@ -53,15 +53,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func exportInitialUserDictionaryIfNeeded() {
         let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
         Task.detached(priority: .utility) {
-            guard CompiledUserDictionaryStore.modificationDate(memoryDirectoryURL: memoryDirectoryURL) == nil else {
+            guard !CompiledUserDictionaryStore.hasExportedDictionary(memoryDirectoryURL: memoryDirectoryURL) else {
                 return
             }
             do {
-                _ = try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
             } catch {
                 print("Failed to export compiled user dictionary: \(error)")
             }
         }
+    }
+
+    func exportUserDictionaryAndReloadConverter() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
+        }
+    }
+
+    private func reloadUserDictionary(memoryDirectoryURL: URL) {
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: memoryDirectoryURL),
+            forceReload: true
+        )
     }
 
     private static func buildSwiftUIWindow(

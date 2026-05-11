@@ -1,35 +1,24 @@
 import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
-public struct CompiledUserDictionaryExportResult: Sendable, Equatable {
-    public var indexedEntryCount: Int
-    public var fallbackEntryCount: Int
-    public var totalEntryCount: Int
-}
-
 public enum CompiledUserDictionaryStore {
+    enum BuildError: Error {
+        case missingCharIDFile
+    }
+
     public static func directoryURL(memoryDirectoryURL: URL) -> URL {
         memoryDirectoryURL.appendingPathComponent("UserDictionary", isDirectory: true)
     }
 
-    public static func exportCurrentDictionaries(memoryDirectoryURL: URL) throws -> CompiledUserDictionaryExportResult {
-        let entries = Self.currentEntries()
-        return try UserDictionaryIndexStore(
+    public static func exportCurrentDictionaries(memoryDirectoryURL: URL) throws {
+        try Self.rebuild(
+            entries: Self.currentEntries(),
             directoryURL: Self.directoryURL(memoryDirectoryURL: memoryDirectoryURL)
-        ).rebuild(entries: entries)
+        )
     }
 
-    public static func fallbackEntries(memoryDirectoryURL: URL) -> [DicdataElement] {
-        UserDictionaryIndexStore(
-            directoryURL: Self.directoryURL(memoryDirectoryURL: memoryDirectoryURL)
-        ).fallbackEntries()
-    }
-
-    public static func modificationDate(memoryDirectoryURL: URL) -> Date? {
-        let metadataURL = Self.directoryURL(memoryDirectoryURL: memoryDirectoryURL)
-            .appendingPathComponent("metadata.json", isDirectory: false)
-        let attributes = try? FileManager.default.attributesOfItem(atPath: metadataURL.path)
-        return attributes?[.modificationDate] as? Date
+    public static func hasExportedDictionary(memoryDirectoryURL: URL) -> Bool {
+        Self.hasCompiledDictionary(at: Self.directoryURL(memoryDirectoryURL: memoryDirectoryURL))
     }
 
     private static func currentEntries() -> [DicdataElement] {
@@ -43,63 +32,14 @@ public enum CompiledUserDictionaryStore {
         }
         return userEntries + systemEntries
     }
-}
 
-struct UserDictionaryIndexStore {
-    enum BuildError: Error {
-        case missingCharIDFile
-    }
-
-    struct Metadata: Codable, Equatable {
-        var indexedEntryCount: Int
-        var fallbackEntryCount: Int
-    }
-
-    private struct FallbackEntry: Codable, Equatable {
-        var word: String
-        var ruby: String
-    }
-
-    let directoryURL: URL
-
-    private var metadataURL: URL {
-        directoryURL.appendingPathComponent("metadata.json", isDirectory: false)
-    }
-
-    private var fallbackURL: URL {
-        directoryURL.appendingPathComponent("fallback.json", isDirectory: false)
-    }
-
-    func metadata() -> Metadata? {
-        guard let data = try? Data(contentsOf: metadataURL) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(Metadata.self, from: data)
-    }
-
-    func hasCompiledDictionary() -> Bool {
-        let requiredFileNames = [
-            "user.louds",
-            "user.loudschars2",
-            "user0.loudstxt3"
-        ]
-        return requiredFileNames.allSatisfy {
+    static func hasCompiledDictionary(at directoryURL: URL) -> Bool {
+        ["user.louds", "user.loudschars2", "user0.loudstxt3"].allSatisfy {
             FileManager.default.fileExists(atPath: directoryURL.appendingPathComponent($0, isDirectory: false).path)
         }
     }
 
-    func fallbackEntries() -> [DicdataElement] {
-        guard let data = try? Data(contentsOf: fallbackURL),
-              let entries = try? JSONDecoder().decode([FallbackEntry].self, from: data) else {
-            return []
-        }
-        return entries.map {
-            DicdataElement(word: $0.word, ruby: $0.ruby, cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-    }
-
-    @discardableResult
-    func rebuild(entries: [DicdataElement]) throws -> CompiledUserDictionaryExportResult {
+    static func rebuild(entries: [DicdataElement], directoryURL: URL, charIDFileURL: URL? = nil) throws {
         let fileManager = FileManager.default
         let parentURL = directoryURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
@@ -111,21 +51,13 @@ struct UserDictionaryIndexStore {
         try fileManager.createDirectory(at: temporaryURL, withIntermediateDirectories: true)
 
         do {
-            let indexableEntries: [DicdataElement]
-            let fallbackEntries: [DicdataElement]
-            if entries.isEmpty {
-                indexableEntries = []
-                fallbackEntries = []
-            } else {
-                guard let charIDFileURL = Self.defaultCharIDFileURL() else {
+            if !entries.isEmpty {
+                guard let charIDFileURL = charIDFileURL ?? Self.defaultCharIDFileURL() else {
                     throw BuildError.missingCharIDFile
                 }
-                let supportedCharacters = try Self.supportedCharacters(from: charIDFileURL)
-                indexableEntries = entries.filter {
-                    Self.canIndex(ruby: $0.ruby, supportedCharacters: supportedCharacters)
-                }
-                fallbackEntries = entries.filter {
-                    !Self.canIndex(ruby: $0.ruby, supportedCharacters: supportedCharacters)
+                let supportedCharacters = Set(try String(contentsOf: charIDFileURL, encoding: .utf8))
+                let indexableEntries = entries.filter {
+                    !$0.ruby.isEmpty && $0.ruby.allSatisfy(supportedCharacters.contains)
                 }
                 if !indexableEntries.isEmpty {
                     try DictionaryBuilder.exportDictionary(
@@ -138,38 +70,17 @@ struct UserDictionaryIndexStore {
                 }
             }
 
-            try Self.writeFallbackEntries(fallbackEntries, to: temporaryURL)
-            try Self.writeMetadata(
-                .init(indexedEntryCount: indexableEntries.count, fallbackEntryCount: fallbackEntries.count),
-                to: temporaryURL
-            )
             if fileManager.fileExists(atPath: directoryURL.path) {
                 try fileManager.removeItem(at: directoryURL)
             }
             try fileManager.moveItem(at: temporaryURL, to: directoryURL)
-            return .init(
-                indexedEntryCount: indexableEntries.count,
-                fallbackEntryCount: fallbackEntries.count,
-                totalEntryCount: entries.count
-            )
         } catch {
             try? fileManager.removeItem(at: temporaryURL)
             throw error
         }
     }
 
-    static func supportedCharacters() throws -> Set<Character> {
-        guard let charIDFileURL = Self.defaultCharIDFileURL() else {
-            throw BuildError.missingCharIDFile
-        }
-        return try Self.supportedCharacters(from: charIDFileURL)
-    }
-
-    static func canIndex(ruby: String, supportedCharacters: Set<Character>) -> Bool {
-        !ruby.isEmpty && ruby.allSatisfy { supportedCharacters.contains($0) }
-    }
-
-    private static func defaultCharIDFileURL() -> URL? {
+    static func defaultCharIDFileURL() -> URL? {
         _ = DicdataStore.withDefaultDictionary(preloadDictionary: false)
         let fileManager = FileManager.default
         var resourceURLs = (Bundle.allBundles + Bundle.allFrameworks).compactMap(\.resourceURL)
@@ -196,23 +107,5 @@ struct UserDictionaryIndexStore {
             .first {
                 fileManager.fileExists(atPath: $0.path)
             }
-    }
-
-    private static func supportedCharacters(from charIDFileURL: URL) throws -> Set<Character> {
-        let text = try String(contentsOf: charIDFileURL, encoding: .utf8)
-        return Set(text)
-    }
-
-    private static func writeFallbackEntries(_ entries: [DicdataElement], to directoryURL: URL) throws {
-        let fallbackEntries = entries.map {
-            FallbackEntry(word: $0.word, ruby: $0.ruby)
-        }
-        let data = try JSONEncoder().encode(fallbackEntries)
-        try data.write(to: directoryURL.appendingPathComponent("fallback.json", isDirectory: false))
-    }
-
-    private static func writeMetadata(_ metadata: Metadata, to directoryURL: URL) throws {
-        let data = try JSONEncoder().encode(metadata)
-        try data.write(to: directoryURL.appendingPathComponent("metadata.json", isDirectory: false))
     }
 }
