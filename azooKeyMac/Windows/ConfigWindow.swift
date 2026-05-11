@@ -8,6 +8,7 @@ struct ConfigWindow: View {
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
+    @ConfigState private var optionDirectFullWidthInput = Config.OptionDirectFullWidthInput()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
@@ -17,6 +18,7 @@ struct ConfigWindow: View {
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var debugPredictiveTyping = Config.DebugPredictiveTyping()
+    @ConfigState private var debugTypoCorrection = Config.DebugTypoCorrection()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
@@ -34,6 +36,9 @@ struct ConfigWindow: View {
     @State private var learningResetMessage: LearningResetMessage?
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
     @State private var availabilityCheckDone = false
+    @State private var debugTypoCorrectionState: DebugTypoCorrectionState = .notDownloaded
+    @State private var debugTypoCorrectionDownloadInProgress = false
+    @State private var debugTypoCorrectionErrorMessage: String?
 
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
@@ -57,6 +62,90 @@ struct ConfigWindow: View {
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
         case successfulUpdate
+    }
+
+    private var azooKeyApplicationSupportDirectoryURL: URL {
+        if #available(macOS 13, *) {
+            URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+        } else {
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+        }
+    }
+
+    private var debugTypoCorrectionModelDirectoryURL: URL {
+        DebugTypoCorrectionWeights.modelDirectoryURL(
+            azooKeyApplicationSupportDirectoryURL: self.azooKeyApplicationSupportDirectoryURL
+        )
+    }
+
+    private var debugTypoCorrectionStatusText: String {
+        if self.debugTypoCorrectionDownloadInProgress {
+            return "ダウンロード中..."
+        }
+        switch self.debugTypoCorrectionState {
+        case .downloaded:
+            return "重み: ダウンロード済み"
+        case .failed:
+            return "重み: ダウンロード失敗"
+        case .notDownloaded:
+            return "重み: ダウンロード未実施"
+        }
+    }
+
+    @MainActor
+    private func refreshDebugTypoCorrectionState() async {
+        let modelDirectoryURL = self.debugTypoCorrectionModelDirectoryURL
+        let state = await Task.detached(priority: .utility) {
+            DebugTypoCorrectionWeights.state(modelDirectoryURL: modelDirectoryURL)
+        }.value
+        self.debugTypoCorrectionState = state
+        if state != .failed {
+            self.debugTypoCorrectionErrorMessage = nil
+        }
+    }
+
+    @MainActor
+    private func downloadDebugTypoCorrectionWeights() {
+        guard !self.debugTypoCorrectionDownloadInProgress else {
+            return
+        }
+        self.debugTypoCorrectionDownloadInProgress = true
+        self.debugTypoCorrectionErrorMessage = nil
+
+        let modelDirectoryURL = self.debugTypoCorrectionModelDirectoryURL
+        Task {
+            do {
+                try await DebugTypoCorrectionWeights.downloadWeights(modelDirectoryURL: modelDirectoryURL)
+                let state = await Task.detached(priority: .utility) {
+                    DebugTypoCorrectionWeights.state(modelDirectoryURL: modelDirectoryURL)
+                }.value
+                await MainActor.run {
+                    self.debugTypoCorrectionState = state
+                    self.debugTypoCorrectionErrorMessage = state == .failed ? "ダウンロード後の整合性チェックに失敗しました" : nil
+                    self.debugTypoCorrectionDownloadInProgress = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.debugTypoCorrectionState = .failed
+                    self.debugTypoCorrectionErrorMessage = error.localizedDescription
+                    self.debugTypoCorrectionDownloadInProgress = false
+                }
+            }
+        }
+    }
+
+    private func openAzooKeyDataDirectoryInFinder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: self.azooKeyApplicationSupportDirectoryURL,
+                withIntermediateDirectories: true
+            )
+            NSWorkspace.shared.activateFileViewerSelecting([self.azooKeyApplicationSupportDirectoryURL])
+        } catch {
+            // no-op
+        }
     }
 
     private func getErrorMessage(for error: OpenAIError) -> String {
@@ -385,6 +474,7 @@ struct ConfigWindow: View {
             Section {
                 Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                 Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Toggle("Optionキーで直接全角英数を入力", isOn: $optionDirectFullWidthInput)
                 Picker("句読点の種類", selection: $punctuationStyle) {
                     Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
                     Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
@@ -460,6 +550,7 @@ struct ConfigWindow: View {
                 Picker("キーボード配列", selection: $keyboardLayout) {
                     Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
                     Text("Australian").tag(Config.KeyboardLayout.Value.australian)
+                    Text("British").tag(Config.KeyboardLayout.Value.british)
                     Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
                     Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
                     Text("Dvorak - QWERTY ⌘").tag(Config.KeyboardLayout.Value.dvorakQwertyCommand)
@@ -513,11 +604,73 @@ struct ConfigWindow: View {
             Section {
                 Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
                 Toggle("開発中の予測入力を有効化", isOn: $debugPredictiveTyping)
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("開発中の入力訂正を有効化", isOn: $debugTypoCorrection)
+                    if self.debugTypoCorrection.value {
+                        HStack {
+                            Text(self.debugTypoCorrectionStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if self.debugTypoCorrectionDownloadInProgress {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Spacer()
+                            switch self.debugTypoCorrectionState {
+                            case .downloaded:
+                                EmptyView()
+                            case .failed:
+                                Button("再ダウンロード") {
+                                    self.downloadDebugTypoCorrectionWeights()
+                                }
+                                .disabled(self.debugTypoCorrectionDownloadInProgress)
+                            case .notDownloaded:
+                                Button("ダウンロード") {
+                                    self.downloadDebugTypoCorrectionWeights()
+                                }
+                                .disabled(self.debugTypoCorrectionDownloadInProgress)
+                            }
+                        }
+                        if case .failed = self.debugTypoCorrectionState,
+                           let errorMessage = self.debugTypoCorrectionErrorMessage {
+                            Text(errorMessage)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .onAppear {
+                    guard self.debugTypoCorrection.value else {
+                        return
+                    }
+                    Task { @MainActor in
+                        await self.refreshDebugTypoCorrectionState()
+                    }
+                }
+                .onChange(of: self.debugTypoCorrection.value) { enabled in
+                    if enabled {
+                        Task { @MainActor in
+                            await self.refreshDebugTypoCorrectionState()
+                        }
+                    } else {
+                        self.debugTypoCorrectionState = .notDownloaded
+                        self.debugTypoCorrectionDownloadInProgress = false
+                        self.debugTypoCorrectionErrorMessage = nil
+                    }
+                }
                 Picker("パーソナライズ", selection: $zenzaiPersonalizationLevel) {
                     Text("オフ").tag(Config.ZenzaiPersonalizationLevel.Value.off)
                     Text("弱く").tag(Config.ZenzaiPersonalizationLevel.Value.soft)
                     Text("普通").tag(Config.ZenzaiPersonalizationLevel.Value.normal)
                     Text("強く").tag(Config.ZenzaiPersonalizationLevel.Value.hard)
+                }
+                LabeledContent("アプリデータ") {
+                    HStack {
+                        Button("Finderで開く") {
+                            self.openAzooKeyDataDirectoryInFinder()
+                        }
+                    }
                 }
             } header: {
                 Label("開発者向け設定", systemImage: "hammer")

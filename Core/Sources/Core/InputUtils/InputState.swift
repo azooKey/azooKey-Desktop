@@ -46,6 +46,14 @@ public enum InputState: Sendable, Hashable {
                 return (.fallthrough, .fallthrough)
             }
         }
+        if event.modifierFlags.contains(.control) {
+            switch userAction {
+            case .unknown where self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion:
+                return (.consume, .fallthrough)
+            default:
+                break
+            }
+        }
         switch self {
         case .none:
             switch userAction {
@@ -140,7 +148,9 @@ public enum InputState: Sendable, Hashable {
             case .escape:
                 return (.stopComposition, .transition(.none))
             case .space:
-                if liveConversionEnabled {
+                if inputLanguage == .english {
+                    return (.appendToMarkedText(" "), .fallthrough)
+                } else if liveConversionEnabled {
                     return (.enterCandidateSelectionMode, .transition(.selecting))
                 } else {
                     return (.enterFirstCandidatePreviewMode, .transition(.previewing))

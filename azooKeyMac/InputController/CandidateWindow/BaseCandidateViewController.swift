@@ -228,7 +228,14 @@ class BaseCandidateViewController: NSViewController {
     }
 
     func resizeWindowToFitContent(cursorLocation: CGPoint) {
-        guard let window = self.view.window, let screen = window.screen else {
+        guard let window = self.view.window else {
+            return
+        }
+        // window.screen は「ウィンドウが現在乗っているスクリーン」を返すため、
+        // マルチディスプレイ環境でカーソルが別ディスプレイへ移動した直後は
+        // カーソル所在のディスプレイと一致しないことがある。
+        // ここでは必ずカーソル位置を含むスクリーンを優先して取得する。
+        guard let screen = ScreenLookup.screen(containing: cursorLocation, fallbackWindow: window) else {
             return
         }
 

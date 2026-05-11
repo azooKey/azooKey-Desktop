@@ -39,15 +39,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     // ピン留めプロンプトのキャッシュ（パフォーマンス向上のため）
     private var pinnedPromptsCache: [PromptHistoryItem] = []
 
-    private static func makeCandidateWindow(contentViewController: NSViewController, inputClient: IMKTextInput?) -> NSWindow {
+    private static func makeCandidateWindow(contentViewController: NSViewController) -> NSWindow {
         let window = NSWindow(contentViewController: contentViewController)
         window.styleMask = [.borderless]
         window.level = .popUpMenu
 
-        var rect: NSRect = .zero
-        inputClient?.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        rect.size = candidateWindowInitialSize
-        window.setFrame(rect, display: true)
+        // Chromium 系アプリの deadlock 回避のため、初期化時に client への
+        // 問い合わせを行わない（Chromium issue 503787240）。
+        // ウィンドウは直後に orderOut されるため origin はユーザーから不可視であり、
+        // 最初の候補表示時に refreshCandidateWindow() で正しい位置に再配置される。
+        var frame = NSRect.zero
+        frame.size = candidateWindowInitialSize
+        window.setFrame(frame, display: true)
         window.setIsVisible(false)
         window.orderOut(nil)
         return window
@@ -110,7 +113,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             .appendingPathComponent("memory", isDirectory: true)
         }
 
-        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.dev.ensan.inputmethod.azooKeyMac")
+        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.azooKeyMacIdentifier)
         self.segmentsManager = SegmentsManager(
             kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
@@ -121,8 +124,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.liveConversionToggleMenuItem = NSMenuItem()
         self.transformSelectedTextMenuItem = NSMenuItem()
 
-        let textInputClient = inputClient as? IMKTextInput
-
         let candidatesViewController = CandidatesViewController()
         let predictionViewController = PredictionCandidatesViewController()
         let replaceSuggestionsViewController = ReplaceSuggestionsViewController()
@@ -131,18 +132,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionViewController = predictionViewController
         self.replaceSuggestionsViewController = replaceSuggestionsViewController
 
-        self.candidatesWindow = Self.makeCandidateWindow(
-            contentViewController: candidatesViewController,
-            inputClient: textInputClient
-        )
-        self.predictionWindow = Self.makeCandidateWindow(
-            contentViewController: predictionViewController,
-            inputClient: textInputClient
-        )
-        self.replaceSuggestionWindow = Self.makeCandidateWindow(
-            contentViewController: replaceSuggestionsViewController,
-            inputClient: textInputClient
-        )
+        self.candidatesWindow = Self.makeCandidateWindow(contentViewController: candidatesViewController)
+        self.predictionWindow = Self.makeCandidateWindow(contentViewController: predictionViewController)
+        self.replaceSuggestionWindow = Self.makeCandidateWindow(contentViewController: replaceSuggestionsViewController)
 
         // PromptInputWindowの初期化
         self.promptInputWindow = PromptInputWindow()
@@ -171,14 +163,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
-            var rect: NSRect = .zero
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: rect.origin)
-        } else {
-            self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         }
-        self.refreshCandidateWindow()
-        self.refreshPredictionWindow()
+        // Chromium 系アプリで JS コンパイル中に activate された場合、
+        // client.attributes(forCharacterIndex:) の同期呼び出しが deadlock を
+        // 引き起こすため呼び出さない（Chromium issue 503787240）。
+        // refreshCandidateWindow / refreshPredictionWindow は composing/selecting 状態で
+        // client.attributes(...) を呼ぶ経路があるため、activate 中は使わずウィンドウを
+        // 明示的に閉じる。
+        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
+        self.candidatesWindow.setIsVisible(false)
+        self.candidatesWindow.orderOut(nil)
+        self.candidatesViewController.hide()
+        self.hidePredictionWindow()
     }
 
     @MainActor
@@ -225,9 +221,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
             if englishMode {
                 // 英語モードへの切り替え通知（実際の処理はhandleで行う）
-                // メニューバー経由の切り替えに対応
-                if self.inputLanguage == .japanese && self.segmentsManager.isEmpty {
+                // メニューバーやshortcut経由の切り替えに対応する。
+                // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
+                if self.inputLanguage == .japanese {
                     self.inputLanguage = .english
+                    self.segmentsManager.stopJapaneseInput()
+                    self.refreshCandidateWindow()
+                    self.refreshPredictionWindow()
                 }
             } else {
                 // 日本語モードへの切り替え
@@ -255,14 +255,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu
     }
 
-    private func isPrintable(_ text: String) -> Bool {
-        let printable: CharacterSet = [.alphanumerics, .symbols, .punctuationCharacters]
-            .reduce(into: CharacterSet()) {
-                $0.formUnion($1)
-            }
-        return CharacterSet(text.unicodeScalars).isSubset(of: printable)
-    }
-
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
@@ -284,6 +276,20 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 }
             }
             // ショートカットがマッチした場合はイベントを消費して他のハンドラに渡さない
+            return true
+        }
+
+        let eventModifiers = KeyEventCore.ModifierFlag(from: event.modifierFlags)
+        let charactersForOptionDirectInput = event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.option))
+        if Config.OptionDirectFullWidthInput().value,
+           let text = OptionDirectInputResolver.resolve(
+            characters: charactersForOptionDirectInput,
+            modifierFlags: eventModifiers,
+            inputLanguage: inputLanguage,
+            inputState: inputState,
+            typeBackSlash: Config.TypeBackSlash().value
+           ) {
+            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             return true
         }
 
@@ -600,7 +606,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        let predictions = self.segmentsManager.requestPredictionCandidates()
+        let predictions = self.requestPreferredPredictionCandidates()
         if predictions.isEmpty {
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
@@ -647,13 +653,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     private func positionPredictionWindowRightOfCandidateWindow(gap: CGFloat = 8) {
-        guard let screen = self.predictionWindow.screen ?? self.candidatesWindow.screen else {
+        // アンカーである候補ウィンドウの中心が乗っているスクリーンを基準にする。
+        // predictionWindow.screen / candidatesWindow.screen はマルチディスプレイ遷移直後に
+        // 古いディスプレイを返すことがあるため、frame の中心点で能動的に判定する。
+        let anchorFrame = self.candidatesWindow.frame
+        let anchorCenter = CGPoint(x: anchorFrame.midX, y: anchorFrame.midY)
+        guard let screen = ScreenLookup.screen(containing: anchorCenter, fallbackWindow: self.candidatesWindow) else {
             return
         }
 
         let frame = WindowPositioning.frameRightOfAnchor(
             currentFrame: WindowPositioning.Rect(self.predictionWindow.frame),
-            anchorFrame: WindowPositioning.Rect(self.candidatesWindow.frame),
+            anchorFrame: WindowPositioning.Rect(anchorFrame),
             screenRect: WindowPositioning.Rect(screen.visibleFrame),
             gap: Double(gap)
         )
@@ -709,23 +720,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     private func acceptPredictionCandidate() {
-        let predictions = self.segmentsManager.requestPredictionCandidates()
+        let predictions = self.requestPreferredPredictionCandidates()
         guard let prediction = predictions.first else {
             return
         }
-
-        let currentTarget = self.segmentsManager.convertTarget
-        var matchTarget = currentTarget
-        if let last = matchTarget.last,
-           last.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) }) {
-            matchTarget.removeLast()
-            self.segmentsManager.deleteBackwardFromCursorPosition(count: 1)
+        let deleteCount = prediction.deleteCount
+        if deleteCount > 0 {
+            self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
         }
-
-        guard !matchTarget.isEmpty else {
-            return
-        }
-
         let appendText = prediction.appendText
 
         guard !appendText.isEmpty else {
@@ -733,6 +735,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
+    }
+
+    private func requestPreferredPredictionCandidates() -> [SegmentsManager.PredictionCandidate] {
+        SegmentsManager.preferredPredictionCandidates(
+            typoCorrectionCandidates: self.segmentsManager.requestTypoCorrectionPredictionCandidates(),
+            predictionCandidates: self.segmentsManager.requestPredictionCandidates()
+        )
     }
 
     var retryCount = 0

@@ -119,6 +119,7 @@ public enum UserAction {
                 }
             }
         }
+
         // Resolve action based on logical key character (ignoring modifiers)
         if let logicalKey = eventCore.charactersIgnoringModifiers?.lowercased() {
             switch (logicalKey, eventCore.modifierFlags) {
@@ -194,6 +195,14 @@ public enum UserAction {
                 break
             }
         }
+
+        if eventCore.modifierFlags.contains(.control), eventCore.keyCode != 51 {
+            // logicalKeyで既知のControlショートカットを処理した後、
+            // 後続の物理キー処理をする前に未定義のControl系をホストアプリへ渡す
+            // Ctrl+Delete(keyCode 51)だけは.forgetとして下のDelete分岐で扱う
+            return .unknown
+        }
+
         // Resolve action based on physical key code
         switch eventCore.keyCode {
         case 0x24, 0x4C: // Enter (0x24) and Numpad Enter (0x4C)
@@ -248,7 +257,9 @@ public enum UserAction {
             // Numpadでそれぞれ「入力先頭にカーソルを移動」「入力末尾にカーソルを移動」「変換候補欄を1ページ戻る」「変換候補欄を1ページ進む」「順方向削除」「入力全消し（より強いエスケープ）」に対応するが、サポート外の動作として明示的に無効化
             return .unknown
         case 18, 19, 20, 21, 23, 22, 26, 28, 25, 29:
-            if !eventCore.modifierFlags.contains(.shift) && !eventCore.modifierFlags.contains(.option) {
+            // Control+数字はアプリやOS側のショートカットとして使われるため、数字入力としない
+            // keyCode分岐に入る前に.unknownとして処理されるが、念のためここでも明示的に扱う
+            if eventCore.modifierFlags.isDisjoint(with: [.shift, .option, .control]) {
                 let number: UserAction.Number = [
                     18: .one,
                     19: .two,

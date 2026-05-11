@@ -32,6 +32,12 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.predictiveTyping"
     }
+    /// 入力訂正のデバッグ機能を有効化する設定
+    public struct DebugTypoCorrection: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.debug.typoCorrection"
+    }
     /// ライブ変換を有効化する設定
     public struct LiveConversion: BoolConfigItem {
         public init() {}
@@ -49,6 +55,12 @@ extension Config {
         public init() {}
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
+    }
+    /// Optionキー押下時に直接全角英数を入力する設定
+    public struct OptionDirectFullWidthInput: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.optionDirectFullWidthInput"
     }
     /// AI変換時にコンテキストを含めるかどうか
     public struct IncludeContextInAITransform: BoolConfigItem {
