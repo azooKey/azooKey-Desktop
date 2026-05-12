@@ -16,8 +16,12 @@ class SimpleConverter final : public IConverter {
   // return false without throwing; rows that fail to parse are skipped.
   bool LoadFromTsv(const std::string& path);
 
-  std::vector<Candidate> Convert(const std::string& kana, const std::string& context) override;
-  std::vector<Candidate> PredictNext(const std::string& kana, const std::string& context) override;
+  std::vector<Candidate> Convert(const std::string& kana, const ConversionContext& context) override;
+  std::vector<Candidate> PredictNext(const std::string& kana, const ConversionContext& context) override;
+  std::vector<Candidate> Correct(const std::string& kana,
+                                 const CorrectionHint& hint,
+                                 const ConversionContext& context) override;
+  void Commit(const Candidate& selected_candidate, const ConversionContext& context) override;
   void Learn(const std::string& committed_surface, const std::string& committed_reading) override;
 
  private:

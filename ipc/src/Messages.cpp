@@ -11,9 +11,13 @@ std::string TypeToString(MessageType type) {
     case MessageType::Handshake: return "Handshake";
     case MessageType::LoadModel: return "LoadModel";
     case MessageType::QueryCandidates: return "QueryCandidates";
+    case MessageType::QueryPredictions: return "QueryPredictions";
+    case MessageType::QueryCorrections: return "QueryCorrections";
     case MessageType::Cancel: return "Cancel";
     case MessageType::CommitObservation: return "CommitObservation";
+    case MessageType::CommitCorrection: return "CommitCorrection";
     case MessageType::AddUserWord: return "AddUserWord";
+    case MessageType::UpdateUserWord: return "UpdateUserWord";
     case MessageType::RemoveUserWord: return "RemoveUserWord";
     case MessageType::Ping: return "Ping";
     case MessageType::Health: return "Health";
@@ -25,9 +29,13 @@ MessageType TypeFromString(const std::string& value) {
   if (value == "Handshake") return MessageType::Handshake;
   if (value == "LoadModel") return MessageType::LoadModel;
   if (value == "QueryCandidates") return MessageType::QueryCandidates;
+  if (value == "QueryPredictions") return MessageType::QueryPredictions;
+  if (value == "QueryCorrections") return MessageType::QueryCorrections;
   if (value == "Cancel") return MessageType::Cancel;
   if (value == "CommitObservation") return MessageType::CommitObservation;
+  if (value == "CommitCorrection") return MessageType::CommitCorrection;
   if (value == "AddUserWord") return MessageType::AddUserWord;
+  if (value == "UpdateUserWord") return MessageType::UpdateUserWord;
   if (value == "RemoveUserWord") return MessageType::RemoveUserWord;
   if (value == "Ping") return MessageType::Ping;
   if (value == "Health") return MessageType::Health;

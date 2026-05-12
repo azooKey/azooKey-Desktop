@@ -55,6 +55,19 @@ void LearningStore::Observe(const std::string& reading, const std::string& surfa
   rec.last_updated_epoch_sec = now_epoch_sec;
 }
 
+
+void LearningStore::ObserveCorrection(const std::string& reading,
+                                      const std::string& rejected_surface,
+                                      const std::string& selected_surface,
+                                      double alpha,
+                                      uint64_t now_epoch_sec) {
+  Observe(reading, selected_surface, alpha, now_epoch_sec);
+
+  auto& rejected = table_[Key(reading, rejected_surface)];
+  rejected.weight = std::max(0.0, rejected.weight - alpha);
+  rejected.last_updated_epoch_sec = now_epoch_sec;
+}
+
 double LearningStore::Score(const std::string& reading, const std::string& surface, uint64_t now_epoch_sec) const {
   const auto it = table_.find(Key(reading, surface));
   if (it == table_.end()) {

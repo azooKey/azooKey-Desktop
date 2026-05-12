@@ -34,6 +34,12 @@ int main() {
   Expect(redecoded->payload_json == decoded->payload_json,
          "payload not stable across re-serialize");
 
+  Expect(azookey::ipc::TypeFromString("QueryPredictions") == azookey::ipc::MessageType::QueryPredictions, "query predictions mapping failed");
+  Expect(azookey::ipc::TypeFromString("QueryCorrections") == azookey::ipc::MessageType::QueryCorrections, "query corrections mapping failed");
+  Expect(azookey::ipc::TypeFromString("CommitCorrection") == azookey::ipc::MessageType::CommitCorrection, "commit correction mapping failed");
+  Expect(azookey::ipc::TypeFromString("UpdateUserWord") == azookey::ipc::MessageType::UpdateUserWord, "update user word mapping failed");
+  Expect(azookey::ipc::TypeToString(azookey::ipc::MessageType::QueryPredictions) == "QueryPredictions", "query predictions reverse mapping failed");
+
   // Length-prefixed framing round trip.
   auto lp = azookey::ipc::EncodeLengthPrefixed(json);
   auto restored = azookey::ipc::DecodeLengthPrefixed(lp);

@@ -7,21 +7,30 @@
 
 namespace azookey::core {
 
+namespace {
+
+bool IsRejectedInContext(const ConversionContext& context, const std::string& surface) {
+  return std::find(context.rejected_surfaces.begin(), context.rejected_surfaces.end(), surface) !=
+         context.rejected_surfaces.end();
+}
+
+}  // namespace
+
 SimpleConverter::SimpleConverter() {
   dictionary_["わたし"] = {
-      Candidate{"私", "わたし", 1.0, "static-dict"},
-      Candidate{"わたし", "わたし", 0.8, "identity"},
-      Candidate{"渡し", "わたし", 0.3, "fallback"},
+      Candidate{"私", "わたし", 1.0, CandidateSource::SystemDictionary, "static-dict"},
+      Candidate{"わたし", "わたし", 0.8, CandidateSource::Heuristic, "identity"},
+      Candidate{"渡し", "わたし", 0.3, CandidateSource::SystemDictionary, "fallback"},
   };
   dictionary_["にほん"] = {
-      Candidate{"日本", "にほん", 1.0, "static-dict"},
-      Candidate{"にほん", "にほん", 0.7, "identity"},
-      Candidate{"二本", "にほん", 0.4, "fallback"},
+      Candidate{"日本", "にほん", 1.0, CandidateSource::SystemDictionary, "static-dict"},
+      Candidate{"にほん", "にほん", 0.7, CandidateSource::Heuristic, "identity"},
+      Candidate{"二本", "にほん", 0.4, CandidateSource::SystemDictionary, "fallback"},
   };
   dictionary_["とうきょう"] = {
-      Candidate{"東京", "とうきょう", 1.0, "static-dict"},
-      Candidate{"とうきょう", "とうきょう", 0.8, "identity"},
-      Candidate{"投棄用", "とうきょう", 0.1, "fallback"},
+      Candidate{"東京", "とうきょう", 1.0, CandidateSource::SystemDictionary, "static-dict"},
+      Candidate{"とうきょう", "とうきょう", 0.8, CandidateSource::Heuristic, "identity"},
+      Candidate{"投棄用", "とうきょう", 0.1, CandidateSource::SystemDictionary, "fallback"},
   };
 }
 
@@ -56,46 +65,79 @@ bool SimpleConverter::LoadFromTsv(const std::string& path) {
   return any;
 }
 
-std::vector<Candidate> SimpleConverter::Convert(const std::string& kana, const std::string& context) {
+std::vector<Candidate> SimpleConverter::Convert(const std::string& kana, const ConversionContext& context) {
+  std::vector<Candidate> candidates;
   auto it = dictionary_.find(kana);
   if (it != dictionary_.end()) {
-    return it->second;
-  }
-
-  // Prefix fallback: any dictionary entry whose reading starts with kana is
-  // surfaced with a damped score, so partial typing still produces results.
-  std::vector<Candidate> prefix_hits;
-  for (const auto& [reading, candidates] : dictionary_) {
-    if (reading.size() > kana.size() && reading.compare(0, kana.size(), kana) == 0) {
-      for (const auto& c : candidates) {
-        Candidate copy = c;
-        copy.score *= 0.5;
-        copy.debug_info = copy.debug_info.empty() ? "prefix" : copy.debug_info + ";prefix";
-        prefix_hits.push_back(std::move(copy));
+    candidates = it->second;
+  } else {
+    // Prefix fallback: any dictionary entry whose reading starts with kana is
+    // surfaced with a damped score, so partial typing still produces results.
+    std::vector<Candidate> prefix_hits;
+    for (const auto& [reading, c_list] : dictionary_) {
+      if (reading.size() > kana.size() && reading.compare(0, kana.size(), kana) == 0) {
+        for (const auto& c : c_list) {
+          Candidate copy = c;
+          copy.score *= 0.5;
+          copy.debug_info = copy.debug_info.empty() ? "prefix" : copy.debug_info + ";prefix";
+          prefix_hits.push_back(std::move(copy));
+        }
       }
     }
-  }
-  if (!prefix_hits.empty()) {
-    std::sort(prefix_hits.begin(), prefix_hits.end(),
-              [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
-    if (prefix_hits.size() > 10) prefix_hits.resize(10);
-    return prefix_hits;
+    if (!prefix_hits.empty()) {
+      std::sort(prefix_hits.begin(), prefix_hits.end(),
+                [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+      if (prefix_hits.size() > 10) prefix_hits.resize(10);
+      candidates = std::move(prefix_hits);
+    } else {
+      candidates = {
+          Candidate{kana, kana, 0.6, CandidateSource::Heuristic, "identity"},
+          Candidate{kana + "ー", kana, 0.2, CandidateSource::Heuristic, "heuristic-long-vowel"},
+          Candidate{"「" + kana + "」", kana, 0.1, CandidateSource::Heuristic, "heuristic-quote"},
+      };
+    }
   }
 
-  return {
-      Candidate{kana, kana, 0.6, "identity"},
-      Candidate{kana + "ー", kana, 0.2, "heuristic-long-vowel"},
-      Candidate{"「" + kana + "」", kana, 0.1, "heuristic-quote"},
-  };
+  for (auto& c : candidates) {
+    if (IsRejectedInContext(context, c.surface)) {
+      c.score -= 1.0;
+      c.debug_info += ";ctx-rejected";
+    }
+    if (context.preceding_text == "にっぽん" && c.surface == "日本") {
+      c.score += 0.15;
+      c.debug_info += ";ctx-bigram";
+    }
+  }
+
+  std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& lhs, const Candidate& rhs) {
+    return lhs.score > rhs.score;
+  });
+  return candidates;
 }
 
-std::vector<Candidate> SimpleConverter::PredictNext(const std::string& kana, const std::string& context) {
+std::vector<Candidate> SimpleConverter::PredictNext(const std::string& kana, const ConversionContext& context) {
   std::vector<Candidate> candidates = Convert(kana, context);
   for (auto& c : candidates) {
     c.debug_info += ";predict";
     c.score *= 0.8;
   }
   return candidates;
+}
+
+std::vector<Candidate> SimpleConverter::Correct(const std::string& kana,
+                                                const CorrectionHint& hint,
+                                                const ConversionContext& context) {
+  auto candidates = Convert(kana, context);
+  std::stable_sort(candidates.begin(), candidates.end(), [&](const Candidate& lhs, const Candidate& rhs) {
+    if (lhs.surface == hint.rejected_surface) return false;
+    if (rhs.surface == hint.rejected_surface) return true;
+    return lhs.score > rhs.score;
+  });
+  return candidates;
+}
+
+void SimpleConverter::Commit(const Candidate& selected_candidate, const ConversionContext&) {
+  Learn(selected_candidate.surface, selected_candidate.reading);
 }
 
 void SimpleConverter::Learn(const std::string& committed_surface, const std::string& committed_reading) {
@@ -108,7 +150,7 @@ void SimpleConverter::Learn(const std::string& committed_surface, const std::str
     found->debug_info = "learned";
     return;
   }
-  bucket.insert(bucket.begin(), Candidate{committed_surface, committed_reading, 1.2, "learned-new"});
+  bucket.insert(bucket.begin(), Candidate{committed_surface, committed_reading, 1.2, CandidateSource::UserDictionary, "learned-new"});
 }
 
 }  // namespace azookey::core

@@ -23,14 +23,23 @@ int main(int argc, char** argv) {
   std::string mock_dict_path;
 
   for (int i = 1; i < argc; ++i) {
-    std::string a = argv[i];
-    if (a == "--cuda") {
+    const std::string arg = argv[i];
+    if (arg == "--cuda") {
       config.backend = azookey::host::BackendKind::Cuda;
-    } else if (a == "--learning" && i + 1 < argc) {
+    } else if (arg == "--cpu") {
+      config.backend = azookey::host::BackendKind::Cpu;
+    } else if (arg == "--backend" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      if (value == "cuda") {
+        config.backend = azookey::host::BackendKind::Cuda;
+      } else if (value == "cpu") {
+        config.backend = azookey::host::BackendKind::Cpu;
+      }
+    } else if (arg == "--learning" && i + 1 < argc) {
       learning_path = argv[++i];
-    } else if (a == "--user-dict" && i + 1 < argc) {
+    } else if (arg == "--user-dict" && i + 1 < argc) {
       user_dict_path = argv[++i];
-    } else if (a == "--mock-dict" && i + 1 < argc) {
+    } else if (arg == "--mock-dict" && i + 1 < argc) {
       mock_dict_path = argv[++i];
     }
   }

@@ -20,6 +20,11 @@ class LearningStore {
   void Reset();
 
   void Observe(const std::string& reading, const std::string& surface, double alpha, uint64_t now_epoch_sec);
+  void ObserveCorrection(const std::string& reading,
+                         const std::string& rejected_surface,
+                         const std::string& selected_surface,
+                         double alpha,
+                         uint64_t now_epoch_sec);
   double Score(const std::string& reading, const std::string& surface, uint64_t now_epoch_sec) const;
 
  private:

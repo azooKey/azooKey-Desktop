@@ -48,7 +48,16 @@ class InferenceEngine {
                                                 const std::string& context,
                                                 uint64_t now_epoch_sec);
 
+  std::vector<core::Candidate> QueryPredictions(const std::string& kana, const std::string& context, uint64_t now_epoch_sec);
+  std::vector<core::Candidate> QueryCorrections(const std::string& kana,
+                                                const std::string& context,
+                                                const std::string& rejected_surface,
+                                                uint64_t now_epoch_sec);
   void CommitObservation(const std::string& reading, const std::string& surface, uint64_t now_epoch_sec);
+  void CommitCorrection(const std::string& reading,
+                        const std::string& rejected_surface,
+                        const std::string& selected_surface,
+                        uint64_t now_epoch_sec);
 
   BackendKind backend() const { return config_.backend; }
   const EngineConfig& config() const { return config_; }

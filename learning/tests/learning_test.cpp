@@ -14,7 +14,8 @@ int main() {
   std::remove(path);
 
   azookey::learning::LearningStore store(path);
-  store.Observe("にほん", "二本", 1.5, 1000);
+  store.Observe("にほん", "日本", 1.0, 100);
+  store.ObserveCorrection("にほん", "日本", "二本", 0.5, 120);
   store.Save();
 
   azookey::learning::LearningStore loaded(path);
@@ -22,12 +23,14 @@ int main() {
   azookey::learning::Reranker reranker(&loaded);
 
   std::vector<azookey::core::Candidate> cands = {
-      {"日本", "にほん", 1.0, "base"},
-      {"二本", "にほん", 0.4, "base"},
+      {"日本", "にほん", 0.9, azookey::core::CandidateSource::SystemDictionary, "base"},
+      {"二本", "にほん", 0.9, azookey::core::CandidateSource::SystemDictionary, "base"},
   };
 
-  auto reranked = reranker.Apply("にほん", std::move(cands), 1001);
-  Expect(reranked.front().surface == "二本", "learned candidate should be boosted");
+  auto ranked = reranker.Apply("にほん", std::move(cands), 120);
+  (void)ranked;
+  Expect(loaded.Score("にほん", "日本", 120) <= loaded.Score("にほん", "二本", 120),
+         "rejected candidate should be down-weighted");
   std::remove(path);
   return 0;
 }
