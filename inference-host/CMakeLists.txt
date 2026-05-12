@@ -1,4 +1,5 @@
 add_library(azookey_host STATIC
+  src/Dispatcher.cpp
   src/InferenceEngine.cpp
   src/RequestScheduler.cpp
 )

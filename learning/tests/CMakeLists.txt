@@ -1,3 +1,7 @@
 add_executable(learning_tests learning_test.cpp)
 target_link_libraries(learning_tests PRIVATE azookey_learning)
 add_test(NAME learning_tests COMMAND learning_tests)
+
+add_executable(user_dictionary_tests user_dictionary_test.cpp)
+target_link_libraries(user_dictionary_tests PRIVATE azookey_learning)
+add_test(NAME user_dictionary_tests COMMAND user_dictionary_tests)

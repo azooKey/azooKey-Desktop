@@ -1,34 +1,78 @@
-#include <chrono>
 #include <iostream>
+#include <memory>
+#include <string>
 
 #include "azookey/core/SimpleConverter.h"
+#include "azookey/host/Dispatcher.h"
 #include "azookey/host/InferenceEngine.h"
+#include "azookey/host/RequestScheduler.h"
+#include "azookey/ipc/Messages.h"
+#include "azookey/learning/LearningStore.h"
+#include "azookey/learning/UserDictionary.h"
+
+namespace {
+
+constexpr const char* kHostVersion = "0.1.0";
+
+}  // namespace
 
 int main(int argc, char** argv) {
   azookey::host::EngineConfig config;
-  if (argc > 1 && std::string(argv[1]) == "--cuda") {
-    config.backend = azookey::host::BackendKind::Cuda;
+  std::string learning_path = "azookey_learning.tsv";
+  std::string user_dict_path = "azookey_user_dict.json";
+  std::string mock_dict_path;
+
+  for (int i = 1; i < argc; ++i) {
+    std::string a = argv[i];
+    if (a == "--cuda") {
+      config.backend = azookey::host::BackendKind::Cuda;
+    } else if (a == "--learning" && i + 1 < argc) {
+      learning_path = argv[++i];
+    } else if (a == "--user-dict" && i + 1 < argc) {
+      user_dict_path = argv[++i];
+    } else if (a == "--mock-dict" && i + 1 < argc) {
+      mock_dict_path = argv[++i];
+    }
   }
 
-  azookey::learning::LearningStore store("azookey_learning.tsv");
+  azookey::learning::LearningStore store(learning_path);
   store.Load();
 
-  azookey::host::InferenceEngine engine(std::make_unique<azookey::core::SimpleConverter>(), &store, config);
-  if (!engine.LoadModel()) {
-    std::cerr << "failed to load model" << std::endl;
-    return 1;
+  azookey::learning::UserDictionary user_dict(user_dict_path);
+  user_dict.Load();
+
+  auto converter = std::make_unique<azookey::core::SimpleConverter>();
+  if (!mock_dict_path.empty()) {
+    converter->LoadFromTsv(mock_dict_path);
   }
 
-  std::cout << "azookey inference-host started. backend="
-            << (engine.backend() == azookey::host::BackendKind::Cuda ? "cuda" : "cpu") << std::endl;
+  azookey::host::InferenceEngine engine(std::move(converter), &store, config);
+  engine.SetUserDictionary(&user_dict);
+  engine.LoadModel();
 
-  std::string kana;
-  while (std::getline(std::cin, kana)) {
-    auto now = static_cast<uint64_t>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
-    const auto cands = engine.QueryCandidates(kana, "", now);
-    if (!cands.empty()) {
-      std::cout << cands.front().surface << std::endl;
-      engine.CommitObservation(kana, cands.front().surface, now);
+  azookey::host::RequestScheduler scheduler;
+  azookey::host::DispatcherConfig dconf;
+  dconf.host_version = kHostVersion;
+  dconf.protocol_version = 1;
+  azookey::host::Dispatcher dispatcher(&engine, &scheduler, &user_dict, dconf);
+
+  std::cerr << "azookey inference-host started. backend="
+            << (engine.backend() == azookey::host::BackendKind::Cuda ? "cuda" : "cpu")
+            << " learning=" << learning_path << " user_dict=" << user_dict_path
+            << std::endl;
+
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    if (line.empty()) continue;
+    auto env = azookey::ipc::Deserialize(line);
+    if (!env) {
+      std::cerr << "warn: failed to parse envelope" << std::endl;
+      continue;
+    }
+    auto resp = dispatcher.Dispatch(*env);
+    if (resp) {
+      std::cout << azookey::ipc::Serialize(*resp) << std::endl;
+      std::cout.flush();
     }
   }
   return 0;

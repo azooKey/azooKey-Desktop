@@ -1,44 +1,10 @@
 #include "azookey/ipc/Messages.h"
 
 #include <algorithm>
-#include <cctype>
-#include <sstream>
+
+#include "azookey/ipc/Json.h"
 
 namespace azookey::ipc {
-namespace {
-
-std::optional<std::string> ExtractString(const std::string& json, const std::string& key) {
-  const std::string token = "\"" + key + "\":\"";
-  const auto start = json.find(token);
-  if (start == std::string::npos) {
-    return std::nullopt;
-  }
-  const auto value_start = start + token.size();
-  const auto end = json.find('"', value_start);
-  if (end == std::string::npos) {
-    return std::nullopt;
-  }
-  return json.substr(value_start, end - value_start);
-}
-
-std::optional<uint64_t> ExtractU64(const std::string& json, const std::string& key) {
-  const std::string token = "\"" + key + "\":";
-  const auto start = json.find(token);
-  if (start == std::string::npos) {
-    return std::nullopt;
-  }
-  auto pos = start + token.size();
-  auto end = pos;
-  while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])) != 0) {
-    ++end;
-  }
-  if (end == pos) {
-    return std::nullopt;
-  }
-  return static_cast<uint64_t>(std::stoull(json.substr(pos, end - pos)));
-}
-
-}  // namespace
 
 std::string TypeToString(MessageType type) {
   switch (type) {
@@ -69,40 +35,54 @@ MessageType TypeFromString(const std::string& value) {
 }
 
 std::string Serialize(const Envelope& env) {
-  std::ostringstream oss;
-  oss << "{"
-      << "\"version\":" << env.version << ","
-      << "\"request_id\":" << env.request_id << ","
-      << "\"trace_id\":\"" << env.trace_id << "\","
-      << "\"type\":\"" << TypeToString(env.type) << "\","
-      << "\"payload\":" << env.payload_json
-      << "}";
-  return oss.str();
+  json::Object o;
+  o.emplace("version", json::Value(static_cast<double>(env.version)));
+  o.emplace("request_id", json::Value(static_cast<double>(env.request_id)));
+  o.emplace("trace_id", json::Value(env.trace_id));
+  o.emplace("type", json::Value(TypeToString(env.type)));
+  if (env.payload_json.empty()) {
+    o.emplace("payload", json::Value(json::Object{}));
+  } else {
+    auto parsed = json::Parse(env.payload_json);
+    if (parsed) {
+      o.emplace("payload", std::move(*parsed));
+    } else {
+      // Fallback: store the raw payload as a string so the envelope is still
+      // well-formed JSON. Callers must avoid malformed payload_json values.
+      o.emplace("payload", json::Value(env.payload_json));
+    }
+  }
+  return json::Stringify(json::Value(std::move(o)));
 }
 
-std::optional<Envelope> Deserialize(const std::string& json) {
-  auto request_id = ExtractU64(json, "request_id");
-  auto type = ExtractString(json, "type");
-  auto trace_id = ExtractString(json, "trace_id");
-  if (!request_id || !type || !trace_id) {
-    return std::nullopt;
-  }
+std::optional<Envelope> Deserialize(const std::string& json_text) {
+  auto v = json::Parse(json_text);
+  if (!v || !v->IsObject()) return std::nullopt;
   Envelope env;
+  if (auto x = v->GetInt("version")) env.version = static_cast<int>(*x);
+  auto request_id = v->GetUInt("request_id");
+  auto type = v->GetString("type");
+  auto trace_id = v->GetString("trace_id");
+  if (!request_id || !type || !trace_id) return std::nullopt;
   env.request_id = *request_id;
   env.type = TypeFromString(*type);
-  env.trace_id = *trace_id;
-  env.payload_json = "{}";
+  env.trace_id = std::move(*trace_id);
+  if (const auto* p = v->Find("payload")) {
+    env.payload_json = json::Stringify(*p);
+  } else {
+    env.payload_json = "{}";
+  }
   return env;
 }
 
-std::vector<uint8_t> EncodeLengthPrefixed(const std::string& json) {
-  std::vector<uint8_t> bytes(4 + json.size());
-  const uint32_t size = static_cast<uint32_t>(json.size());
+std::vector<uint8_t> EncodeLengthPrefixed(const std::string& json_text) {
+  std::vector<uint8_t> bytes(4 + json_text.size());
+  const uint32_t size = static_cast<uint32_t>(json_text.size());
   bytes[0] = static_cast<uint8_t>(size & 0xFF);
   bytes[1] = static_cast<uint8_t>((size >> 8) & 0xFF);
   bytes[2] = static_cast<uint8_t>((size >> 16) & 0xFF);
   bytes[3] = static_cast<uint8_t>((size >> 24) & 0xFF);
-  std::copy(json.begin(), json.end(), bytes.begin() + 4);
+  std::copy(json_text.begin(), json_text.end(), bytes.begin() + 4);
   return bytes;
 }
 

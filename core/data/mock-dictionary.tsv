@@ -1,0 +1,98 @@
+# azookey mock dictionary (M4)
+# Format: reading\tsurface\tscore\tsource
+# Used by SimpleConverter::LoadFromTsv for the round-trip mock conversion
+# until the real Zenzai model lands (M8).
+
+# === 挨拶 ===
+こんにちは	こんにちは	1.0	greeting
+こんにちは	今日は	0.3	greeting
+おはよう	おはよう	1.0	greeting
+おはよう	お早う	0.5	greeting
+ありがとう	ありがとう	1.0	greeting
+ありがとう	有難う	0.4	greeting
+すみません	すみません	1.0	greeting
+すみません	済みません	0.3	greeting
+
+# === 代名詞 / 指示 ===
+あなた	あなた	1.0	pronoun
+あなた	貴方	0.4	pronoun
+かれ	彼	1.0	pronoun
+かのじょ	彼女	1.0	pronoun
+これ	これ	1.0	pronoun
+これ	此れ	0.2	pronoun
+それ	それ	1.0	pronoun
+あれ	あれ	1.0	pronoun
+
+# === 地名 ===
+きょうと	京都	1.0	place
+きょうと	京都府	0.4	place
+おおさか	大阪	1.0	place
+おおさか	大阪府	0.4	place
+ほっかいどう	北海道	1.0	place
+こうべ	神戸	1.0	place
+おきなわ	沖縄	1.0	place
+
+# === 一般語 ===
+にほんご	日本語	1.0	general
+にほんご	二本後	0.2	general
+こんぴゅーた	コンピュータ	1.0	general
+こんぴゅーた	コンピューター	0.7	general
+ぷろぐらむ	プログラム	1.0	general
+ぷろぐらむ	プロブラム	0.1	general
+てすと	テスト	1.0	general
+てすと	手数斗	0.05	general
+ふぁいる	ファイル	1.0	general
+ふぁいる	不愛留	0.05	general
+にゅうりょく	入力	1.0	general
+へんかん	変換	1.0	general
+へんかん	返還	0.4	general
+へんかん	偏官	0.05	general
+かんじ	漢字	1.0	general
+かんじ	感じ	0.6	general
+ひらがな	平仮名	1.0	general
+かたかな	片仮名	1.0	general
+
+# === 形容詞 ===
+たかい	高い	1.0	adj
+たかい	貴い	0.3	adj
+やすい	安い	1.0	adj
+やすい	易い	0.3	adj
+おおきい	大きい	1.0	adj
+ちいさい	小さい	1.0	adj
+はやい	速い	1.0	adj
+はやい	早い	0.7	adj
+おそい	遅い	1.0	adj
+
+# === 動詞 ===
+たべる	食べる	1.0	verb
+のむ	飲む	1.0	verb
+のむ	呑む	0.3	verb
+いく	行く	1.0	verb
+くる	来る	1.0	verb
+する	する	1.0	verb
+する	為る	0.1	verb
+かく	書く	1.0	verb
+かく	描く	0.5	verb
+よむ	読む	1.0	verb
+みる	見る	1.0	verb
+みる	観る	0.4	verb
+
+# === 数 ===
+いち	一	1.0	number
+いち	1	0.5	number
+に	二	1.0	number
+さん	三	1.0	number
+さん	さん	0.6	number
+よん	四	1.0	number
+ひゃく	百	1.0	number
+せん	千	1.0	number
+まん	万	1.0	number
+
+# === 季節・時間 ===
+はる	春	1.0	season
+なつ	夏	1.0	season
+あき	秋	1.0	season
+ふゆ	冬	1.0	season
+あさ	朝	1.0	time
+よる	夜	1.0	time
+ひる	昼	1.0	time
