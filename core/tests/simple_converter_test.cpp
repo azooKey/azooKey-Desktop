@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <stdexcept>
@@ -68,6 +69,32 @@ static void TestPrefixFallback() {
   Expect(!cands.empty(), "prefix fallback must return at least one candidate");
 }
 
+
+
+static void TestDebugInfoFormatting() {
+  azookey::core::SimpleConverter converter;
+
+  azookey::core::ConversionContext rejection_context;
+  rejection_context.rejected_surfaces = {"未知"};
+  const auto unknown = converter.Convert("未知", rejection_context);
+  Expect(!unknown.empty(), "unknown conversion should generate heuristics");
+  auto rejected_it = std::find_if(unknown.begin(), unknown.end(), [](const azookey::core::Candidate& c) {
+    return c.surface == "未知";
+  });
+  Expect(rejected_it != unknown.end(), "unknown conversion should contain identity candidate");
+  Expect(rejected_it->debug_info == "identity;ctx-rejected",
+         "debug info tags should be semicolon-separated without leading delimiter");
+
+  const auto predicted = converter.PredictNext("未知", azookey::core::ConversionContext{});
+  Expect(!predicted.empty(), "predict next should return candidates");
+  auto predicted_it = std::find_if(predicted.begin(), predicted.end(), [](const azookey::core::Candidate& c) {
+    return c.surface == "未知";
+  });
+  Expect(predicted_it != predicted.end(), "predict next should keep identity candidate");
+  Expect(predicted_it->debug_info == "identity;predict",
+         "predict tag should append with semicolon separator");
+}
+
 static void TestContextAware() {
   azookey::core::SimpleConverter converter;
 
@@ -102,5 +129,6 @@ int main() {
   TestTsvLoad();
   TestPrefixFallback();
   TestContextAware();
+  TestDebugInfoFormatting();
   return 0;
 }
