@@ -143,10 +143,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
       *eaten = TRUE;
     } else if (wParam == VK_BACK) {
       if (romaji_.HasPending()) {
-        // Pending romaji buffer (e.g. "n" after typing "kan") takes priority:
-        // clear it first so one Backspace undoes the last typed ASCII character,
-        // not the already-emitted kana codepoint.
-        romaji_.Reset();
+        // Pending romaji buffer (e.g. "n" after "kan", or "h" after "sh") takes
+        // priority: remove only the last ASCII character so multi-character
+        // pending states (like "sh") are corrected one keystroke at a time.
+        romaji_.PopPending();
         *eaten = TRUE;
       } else if (!preedit_kana_.empty()) {
         // Remove last emitted kana codepoint (UTF-8 multi-byte aware).

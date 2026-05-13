@@ -10,6 +10,7 @@ class RomajiKanaConverter {
   std::string Flush();
   void Reset();
   bool HasPending() const { return !pending_.empty(); }
+  void PopPending() { if (!pending_.empty()) pending_.pop_back(); }
 
  private:
   std::string pending_;
