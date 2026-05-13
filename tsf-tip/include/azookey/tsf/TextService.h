@@ -3,9 +3,17 @@
 #include <Windows.h>
 #include <msctf.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "azookey/core/RomajiKanaConverter.h"
+#include "azookey/ipc/NamedPipeTransport.h"
+#include "azookey/ipc/Payloads.h"
 
 namespace azookey::tsf {
 
@@ -18,6 +26,7 @@ class TextService final : public ITfTextInputProcessorEx,
                           public ITfDisplayAttributeProvider {
  public:
   TextService();
+  ~TextService();
 
   STDMETHODIMP QueryInterface(REFIID riid, void** ppvObj) override;
   STDMETHODIMP_(ULONG) AddRef() override;
@@ -47,6 +56,10 @@ class TextService final : public ITfTextInputProcessorEx,
 
   HRESULT RequestPreeditUpdate(ITfContext* context);
 
+  // Accessed by EditSession.
+  std::string preedit_kana_;
+  ITfComposition* composition_{nullptr};
+
  private:
   LONG ref_count_{1};
   ITfThreadMgr* thread_mgr_{nullptr};
@@ -54,7 +67,24 @@ class TextService final : public ITfTextInputProcessorEx,
   DWORD thread_mgr_sink_cookie_{TF_INVALID_COOKIE};
 
   core::RomajiKanaConverter romaji_;
-  std::string preedit_kana_;
+
+  // IPC worker thread state.
+  std::mutex ipc_mtx_;
+  std::condition_variable ipc_cv_;
+  std::thread ipc_thread_;
+  std::atomic<bool> ipc_stop_{false};
+  std::string ipc_pending_reading_;
+  uint64_t ipc_pending_id_{0};
+  bool ipc_has_request_{false};
+
+  // Latest candidates from Host (written by IPC thread, read by TIP thread).
+  std::mutex candidates_mtx_;
+  std::vector<ipc::CandidateField> candidates_;
+
+  void StartIpcWorker();
+  void StopIpcWorker();
+  void IpcWorkerThread();
+  void PostQueryCandidates(const std::string& reading);
 };
 
 class EditSession final : public ITfEditSession {

@@ -1,10 +1,12 @@
 #include "azookey/tsf/TextService.h"
 
+#include <chrono>
 #include <optional>
 #include <thread>
 
 #include "azookey/ipc/NamedPipeTransport.h"
 #include "azookey/ipc/Payloads.h"
+#include "azookey/tsf/DisplayAttribute.h"
 
 namespace {
 
@@ -18,66 +20,15 @@ void DebugLog(const std::string& message) {
 #endif
 }
 
-void StartDebugIpcProbe() {
-#ifdef _DEBUG
-  std::thread([]() {
-    using namespace azookey::ipc;
-
-    NamedPipeClient client;
-    const auto pipe_name = DefaultPipeName();
-    if (!client.Connect(pipe_name, 250)) {
-      DebugLog("host pipe unavailable: " + pipe_name);
-      return;
-    }
-
-    HandshakeRequest handshake;
-    handshake.tip_version = kTipVersion;
-    handshake.protocol_version = 1;
-    handshake.capabilities = {"ping"};
-
-    Envelope henv;
-    henv.version = 1;
-    henv.request_id = 1;
-    henv.trace_id = "tip-activate-handshake";
-    henv.type = MessageType::Handshake;
-    henv.payload_json = BuildHandshakeRequest(handshake);
-    if (!client.Send(henv)) {
-      DebugLog("handshake send failed");
-      return;
-    }
-
-    auto hres = client.Receive();
-    auto hpayload = hres ? ParseHandshakeResponse(hres->payload_json) : std::nullopt;
-    if (!hpayload || !hpayload->accepted) {
-      DebugLog("handshake rejected or missing");
-      return;
-    }
-    DebugLog("handshake accepted by host " + hpayload->host_version);
-
-    PingPayload ping;
-    ping.nonce = GetTickCount64();
-    ping.t_ms = ping.nonce;
-
-    Envelope penv;
-    penv.version = 1;
-    penv.request_id = 2;
-    penv.trace_id = "tip-activate-ping";
-    penv.type = MessageType::Ping;
-    penv.payload_json = BuildPing(ping);
-    if (!client.Send(penv)) {
-      DebugLog("ping send failed");
-      return;
-    }
-
-    auto pres = client.Receive();
-    auto ppayload = pres ? ParsePing(pres->payload_json) : std::nullopt;
-    if (ppayload && ppayload->nonce == ping.nonce) {
-      DebugLog("ping roundtrip ok");
-    } else {
-      DebugLog("ping response missing or invalid");
-    }
-  }).detach();
-#endif
+// Convert UTF-8 string to UTF-16.
+std::wstring Utf8ToWide(const std::string& utf8) {
+  if (utf8.empty()) return {};
+  const int len = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()),
+                                      nullptr, 0);
+  if (len <= 0) return {};
+  std::wstring result(len, L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()), result.data(), len);
+  return result;
 }
 
 }  // namespace
@@ -85,6 +36,10 @@ void StartDebugIpcProbe() {
 namespace azookey::tsf {
 
 TextService::TextService() = default;
+
+TextService::~TextService() {
+  StopIpcWorker();
+}
 
 STDMETHODIMP TextService::QueryInterface(REFIID riid, void** ppvObj) {
   if (!ppvObj) return E_INVALIDARG;
@@ -120,11 +75,16 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD d
   thread_mgr_ = ptim;
   client_id_ = tid;
   if (thread_mgr_) thread_mgr_->AddRef();
-  StartDebugIpcProbe();
+  StartIpcWorker();
   return S_OK;
 }
 
 STDMETHODIMP TextService::Deactivate() {
+  StopIpcWorker();
+  if (composition_) {
+    composition_->Release();
+    composition_ = nullptr;
+  }
   if (thread_mgr_) {
     thread_mgr_->Release();
     thread_mgr_ = nullptr;
@@ -139,7 +99,8 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
-  *eaten = (wParam == VK_SPACE || wParam == VK_RETURN || wParam == VK_ESCAPE || (wParam >= 'A' && wParam <= 'Z'));
+  *eaten = (wParam == VK_BACK || wParam == VK_SPACE || wParam == VK_RETURN ||
+            wParam == VK_ESCAPE || (wParam >= 'A' && wParam <= 'Z'));
   return S_OK;
 }
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
@@ -156,7 +117,22 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     if (wParam >= 'A' && wParam <= 'Z') {
       preedit_kana_ += romaji_.Feed(static_cast<char>(wParam));
       RequestPreeditUpdate(context);
+      PostQueryCandidates(preedit_kana_);
       *eaten = TRUE;
+    } else if (wParam == VK_BACK) {
+      if (!preedit_kana_.empty()) {
+        // Remove last UTF-8 character (may be multi-byte).
+        auto& s = preedit_kana_;
+        size_t i = s.size();
+        // Walk back past continuation bytes (10xxxxxx).
+        while (i > 0 && (s[i - 1] & 0xC0) == 0x80) --i;
+        if (i > 0) --i;  // remove the leading byte
+        s.erase(i);
+        romaji_.Reset();
+        RequestPreeditUpdate(context);
+        if (!preedit_kana_.empty()) PostQueryCandidates(preedit_kana_);
+        *eaten = TRUE;
+      }
     } else if (wParam == VK_ESCAPE) {
       preedit_kana_.clear();
       romaji_.Reset();
@@ -189,20 +165,30 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* pdimFocus, ITfDocumentMgr* 
 STDMETHODIMP TextService::OnPushContext(ITfContext* pic) { UNREFERENCED_PARAMETER(pic); return S_OK; }
 STDMETHODIMP TextService::OnPopContext(ITfContext* pic) { UNREFERENCED_PARAMETER(pic); return S_OK; }
 
-STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition* pComposition) {
-  UNREFERENCED_PARAMETER(ecWrite); UNREFERENCED_PARAMETER(pComposition); return S_OK;
+STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie /*ecWrite*/, ITfComposition* pComposition) {
+  if (composition_ == pComposition) {
+    composition_->Release();
+    composition_ = nullptr;
+  }
+  preedit_kana_.clear();
+  romaji_.Reset();
+  return S_OK;
 }
 
 STDMETHODIMP TextService::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) {
   if (!ppEnum) return E_INVALIDARG;
-  *ppEnum = nullptr;
-  return E_NOTIMPL;
+  *ppEnum = new azookey::tsf::EnumDisplayAttributeInfo();
+  return S_OK;
 }
+
 STDMETHODIMP TextService::GetDisplayAttributeInfo(REFGUID guidInfo, ITfDisplayAttributeInfo** ppInfo) {
-  UNREFERENCED_PARAMETER(guidInfo);
   if (!ppInfo) return E_INVALIDARG;
   *ppInfo = nullptr;
-  return E_NOTIMPL;
+  if (IsEqualGUID(guidInfo, kInputAttributeGuid)) {
+    *ppInfo = new InputDisplayAttributeInfo();
+    return S_OK;
+  }
+  return E_INVALIDARG;
 }
 
 HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
@@ -214,7 +200,113 @@ HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
   return hr;
 }
 
-EditSession::EditSession(TextService* service, ITfContext* context) : service_(service), context_(context) {
+// --- IPC worker ---
+
+void TextService::StartIpcWorker() {
+  ipc_stop_.store(false);
+  ipc_thread_ = std::thread(&TextService::IpcWorkerThread, this);
+}
+
+void TextService::StopIpcWorker() {
+  if (!ipc_thread_.joinable()) return;
+  {
+    std::lock_guard<std::mutex> lock(ipc_mtx_);
+    ipc_stop_.store(true);
+  }
+  ipc_cv_.notify_one();
+  ipc_thread_.join();
+}
+
+void TextService::IpcWorkerThread() {
+  using namespace azookey::ipc;
+
+  NamedPipeClient client;
+  const auto pipe_name = DefaultPipeName();
+  if (!client.Connect(pipe_name, 5000)) {
+    DebugLog("IPC: host pipe unavailable: " + pipe_name);
+    return;
+  }
+
+  // Handshake
+  HandshakeRequest hs;
+  hs.tip_version = kTipVersion;
+  hs.protocol_version = 1;
+  hs.capabilities = {"ping", "query_candidates"};
+
+  Envelope henv;
+  henv.version = 1;
+  henv.request_id = 1;
+  henv.trace_id = "tip-activate-handshake";
+  henv.type = MessageType::Handshake;
+  henv.payload_json = BuildHandshakeRequest(hs);
+
+  if (!client.Send(henv)) { DebugLog("IPC: handshake send failed"); return; }
+  auto hres = client.Receive();
+  auto hpayload = hres ? ParseHandshakeResponse(hres->payload_json) : std::nullopt;
+  if (!hpayload || !hpayload->accepted) { DebugLog("IPC: handshake rejected"); return; }
+  DebugLog("IPC: connected to host " + hpayload->host_version);
+
+  uint64_t next_id = 2;
+
+  while (true) {
+    std::string reading;
+    uint64_t req_id = 0;
+
+    {
+      std::unique_lock<std::mutex> lock(ipc_mtx_);
+      ipc_cv_.wait(lock, [this] { return ipc_stop_.load() || ipc_has_request_; });
+      if (ipc_stop_.load()) break;
+      reading = ipc_pending_reading_;
+      req_id = ipc_pending_id_;
+      ipc_has_request_ = false;
+    }
+
+    if (reading.empty()) continue;
+
+    QueryCandidatesRequest qreq;
+    qreq.reading = reading;
+    qreq.left_context = "";
+    qreq.max_candidates = 10;
+    qreq.live = true;
+
+    Envelope qenv;
+    qenv.version = 1;
+    qenv.request_id = req_id;
+    qenv.trace_id = "tip-key-query";
+    qenv.type = MessageType::QueryCandidates;
+    qenv.payload_json = BuildQueryCandidatesRequest(qreq);
+
+    if (!client.Send(qenv)) { DebugLog("IPC: QueryCandidates send failed"); break; }
+
+    auto qres = client.Receive();
+    if (!qres) { DebugLog("IPC: QueryCandidates receive failed"); break; }
+
+    auto qpayload = ParseQueryCandidatesResponse(qres->payload_json);
+    if (qpayload && !qpayload->candidates.empty()) {
+      DebugLog("IPC: " + std::to_string(qpayload->candidates.size()) +
+               " candidates for [" + reading + "] top=" + qpayload->candidates[0].surface);
+      std::lock_guard<std::mutex> lock(candidates_mtx_);
+      candidates_ = qpayload->candidates;
+    }
+
+    ++next_id;
+  }
+
+  DebugLog("IPC: worker exiting");
+}
+
+void TextService::PostQueryCandidates(const std::string& reading) {
+  std::lock_guard<std::mutex> lock(ipc_mtx_);
+  ipc_pending_reading_ = reading;
+  ++ipc_pending_id_;
+  ipc_has_request_ = true;
+  ipc_cv_.notify_one();
+}
+
+// --- EditSession ---
+
+EditSession::EditSession(TextService* service, ITfContext* context)
+    : service_(service), context_(context) {
   if (context_) context_->AddRef();
 }
 STDMETHODIMP EditSession::QueryInterface(REFIID riid, void** ppvObj) {
@@ -236,9 +328,72 @@ STDMETHODIMP_(ULONG) EditSession::Release() {
   }
   return c;
 }
+
 STDMETHODIMP EditSession::DoEditSession(TfEditCookie ec) {
-  UNREFERENCED_PARAMETER(ec);
-  // TODO: update composition range + display attribute.
+  const std::wstring kana = Utf8ToWide(service_->preedit_kana_);
+
+  // End composition when preedit is empty.
+  if (kana.empty()) {
+    if (service_->composition_) {
+      service_->composition_->EndComposition(ec);
+      service_->composition_->Release();
+      service_->composition_ = nullptr;
+    }
+    return S_OK;
+  }
+
+  // Create composition if not active.
+  if (!service_->composition_) {
+    ITfContextComposition* pCtxComp = nullptr;
+    if (FAILED(context_->QueryInterface(IID_ITfContextComposition,
+                                        reinterpret_cast<void**>(&pCtxComp))) ||
+        !pCtxComp)
+      return E_FAIL;
+
+    TF_SELECTION sel{};
+    ULONG fetched = 0;
+    context_->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched);
+    if (fetched == 0) {
+      pCtxComp->Release();
+      return E_FAIL;
+    }
+
+    sel.range->Collapse(ec, TF_ANCHOR_END);
+    HRESULT hr = pCtxComp->StartComposition(ec, sel.range, service_,
+                                             &service_->composition_);
+    sel.range->Release();
+    pCtxComp->Release();
+    if (FAILED(hr) || !service_->composition_) return hr;
+  }
+
+  // Update composition text.
+  ITfRange* pRange = nullptr;
+  if (FAILED(service_->composition_->GetRange(&pRange)) || !pRange) return E_FAIL;
+
+  pRange->SetText(ec, 0, kana.c_str(), static_cast<LONG>(kana.size()));
+
+  // Apply underline display attribute via GUID_PROP_ATTRIBUTE.
+  ITfProperty* pProp = nullptr;
+  if (SUCCEEDED(context_->GetProperty(GUID_PROP_ATTRIBUTE, &pProp)) && pProp) {
+    // Register the GUID as a TfGuidAtom via ITfCategoryMgr.
+    ITfCategoryMgr* pCatMgr = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_ITfCategoryMgr, reinterpret_cast<void**>(&pCatMgr))) &&
+        pCatMgr) {
+      TfGuidAtom atom = TF_INVALID_GUIDATOM;
+      pCatMgr->RegisterGUID(kInputAttributeGuid, &atom);
+      if (atom != TF_INVALID_GUIDATOM) {
+        VARIANT var;
+        var.vt = VT_I4;
+        var.lVal = static_cast<LONG>(atom);
+        pProp->SetValue(ec, pRange, &var);
+      }
+      pCatMgr->Release();
+    }
+    pProp->Release();
+  }
+
+  pRange->Release();
   return S_OK;
 }
 
