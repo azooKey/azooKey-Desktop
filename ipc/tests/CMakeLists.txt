@@ -9,3 +9,7 @@ add_test(NAME ipc_payloads_tests COMMAND ipc_payloads_tests)
 add_executable(ipc_named_pipe_transport_tests named_pipe_transport_test.cpp)
 target_link_libraries(ipc_named_pipe_transport_tests PRIVATE azookey_ipc)
 add_test(NAME ipc_named_pipe_transport_tests COMMAND ipc_named_pipe_transport_tests)
+
+add_executable(ipc_tip_client_tests tip_client_ipc_test.cpp)
+target_link_libraries(ipc_tip_client_tests PRIVATE azookey_ipc)
+add_test(NAME ipc_tip_client_tests COMMAND ipc_tip_client_tests)
