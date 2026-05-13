@@ -63,7 +63,7 @@ TIP 側の Composition・候補 UI・登録周りと、M8 (Zenzai)・M11 (パッ
    `Envelope{type=QueryCandidates, payload=QueryCandidatesRequest{kana, context}}`
    を NamedPipeClient で送信し、応答を保持。Host 側 `Dispatcher` は完成済み。
 
-検証: クリーン Win11 VM で `regsvr32` + `scripts/register.ps1` + `inference-host.exe --pipe` を起動し、メモ帳で `nihongo` を打鍵してアンダーライン付き preedit が表示され、Host の stderr に `QueryCandidates` 受信が記録されること。
+検証: クリーン Win11 VM で `regsvr32` + `scripts/register.ps1` + `azookey_inference_host.exe --pipe` を起動し、メモ帳で `nihongo` を打鍵してアンダーライン付き preedit が表示され、Host の stderr に `QueryCandidates` 受信が記録されること。
 
 ### Phase B: 候補選択と確定動線 — 「候補から日本語を選んで確定できる」(2〜3 週)
 
@@ -138,7 +138,7 @@ TIP 側の Composition・候補 UI・登録周りと、M8 (Zenzai)・M11 (パッ
    IPC/Core/Learning/Host のテストが緑であること
 3. **Windows 実機テスト**（Win11 VM 推奨）:
    - `scripts/register.ps1` で TIP DLL を登録
-   - `inference-host.exe --pipe` を別プロセスで起動
+   - `azookey_inference_host.exe --pipe` を別プロセスで起動
    - メモ帳で azooKey を選択し、`nihongo` 等を入力して preedit が表示される
    - Host の stderr ログに `QueryCandidates` 受信が記録される
    - `scripts/unregister.ps1` でクリーンに解除される

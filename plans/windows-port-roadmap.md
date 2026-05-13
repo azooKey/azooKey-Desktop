@@ -60,7 +60,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - バージョン不一致時の切断ポリシー
 - **現状**:
   - `ipc/src/NamedPipeTransport.cpp` (522行) はサーバ/クライアント・DACL・長さプリフィックスフレーミングまで実装済み。
-  - `ipc/src/Messages.cpp` / `ipc/src/Payloads.cpp` で全 14 種のメッセージ型と build/parse 関数を定義済み。
+  - `ipc/src/Messages.cpp` で全 14 種の `MessageType` を定義。`ipc/src/Payloads.cpp` では 9 種（Handshake/Ping/Health/LoadModel/QueryCandidates/Cancel/CommitObservation/AddUserWord/RemoveUserWord）の build/parse 関数を実装済み。`QueryPredictions`/`QueryCorrections`/`CommitCorrection`/`UpdateUserWord` は enum のみで Payload 未実装。
   - `ipc/tests/named_pipe_transport_test.cpp`, `messages_test.cpp`, `payloads_test.cpp` で Handshake/Ping のラウンドトリップを検証。
   - `inference-host/src/main.cpp` は `--pipe` 起動で `NamedPipeServer` を立ち上げ、`Dispatcher` を MessageHandler として登録済み。
   - `tsf-tip/src/TextService.cpp` の `StartDebugIpcProbe` (21-81 行) で Activate 後に Handshake/Ping を実機確認できる。
