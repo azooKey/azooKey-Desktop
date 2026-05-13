@@ -125,7 +125,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 - **現状**:
   - `inference-host/src/InferenceEngine.cpp` (119行) で `QueryCandidates` を実装。`atomic<bool>* cancel` でキャンセル対応。
   - `inference-host/src/RequestScheduler.cpp` (27行) で `NextRequestId`/`Cancel`/`IsCanceled`/`MarkLatest`/`IsLatest` を実装。
-  - `inference-host/src/Dispatcher.cpp` (183行) で全 14 ハンドラ実装済み（`HandleHandshake`/`HandlePing`/`HandleQueryCandidates` 等）。
+  - `inference-host/src/Dispatcher.cpp` (183行) で全 9 ハンドラ実装済み（`Handshake`/`Ping`/`Health`/`LoadModel`/`QueryCandidates`/`Cancel`/`CommitObservation`/`AddUserWord`/`RemoveUserWord`）。
   - `core/src/SimpleConverter.cpp` (164行) で固定辞書テーブル + TSV ロード + prefix fallback + bigram context bonus + `Learn()` を実装。
   - `inference-host/tests/engine_test.cpp` で `QueryWithLearningBoost`, `UserDictionaryInjection`, `CancelEarlyReturn` を検証済み。
 - **残作業**:
@@ -213,7 +213,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - 永続化フォーマット定義
 - **現状**:
   - `learning/src/UserDictionary.cpp` で JSON 永続化（`{version, entries: [{word, ruby, cid, mid, value}]}`）、`Load`/`Save`/`Lookup`/`Add`/`Remove` を実装済み。
-  - Payloads.cpp に `AddUserWordRequest`/`Response`、`UpdateUserWordRequest`、`RemoveUserWordRequest`/`Response` 定義済み。
+  - Payloads.cpp に `AddUserWordRequest`/`Response`、`RemoveUserWordRequest`/`Response` 定義済み（`UpdateUserWord` は MessageType enum のみ、Payload 未実装）。
   - `Dispatcher::HandleAddUserWord`/`HandleRemoveUserWord` で永続化まで実行。
   - `InferenceEngine::QueryCandidates` が `user_dict_->Lookup` を最優先で返す統合済み。
   - `learning/tests/user_dictionary_test.cpp` で検証済み。
