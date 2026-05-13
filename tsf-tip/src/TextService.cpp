@@ -119,7 +119,9 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
-  *eaten = (wParam == VK_BACK || wParam == VK_SPACE || wParam == VK_RETURN ||
+  // VK_BACK is only consumed when there is active preedit to match OnKeyDown behaviour.
+  const bool has_preedit = !preedit_kana_.empty();
+  *eaten = ((wParam == VK_BACK && has_preedit) || wParam == VK_SPACE || wParam == VK_RETURN ||
             wParam == VK_ESCAPE || (wParam >= 'A' && wParam <= 'Z'));
   return S_OK;
 }
@@ -322,9 +324,12 @@ void TextService::IpcWorkerThread() {
     }
 
     auto qpayload = ParseQueryCandidatesResponse(qres->payload_json);
-    if (qpayload && !qpayload->candidates.empty()) {
-      DebugLog("IPC: " + std::to_string(qpayload->candidates.size()) +
-               " candidates for [" + reading + "] top=" + qpayload->candidates[0].surface);
+    if (qpayload) {
+      if (!qpayload->candidates.empty()) {
+        DebugLog("IPC: " + std::to_string(qpayload->candidates.size()) +
+                 " candidates for [" + reading + "] top=" + qpayload->candidates[0].surface);
+      }
+      // Always replace cached candidates so an empty response clears stale results.
       std::lock_guard<std::mutex> lock(candidates_mtx_);
       candidates_ = qpayload->candidates;
     }
