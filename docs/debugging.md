@@ -26,10 +26,11 @@ ctest --test-dir build -C Debug --output-on-failure
 
 ## 手動確認（Windows）
 
-1. `scripts/register.ps1` でTIP登録。
-2. Notepadでローマ字入力しプレエディット表示を確認。
-3. Spaceで候補、Enterで確定、Escでキャンセル。
-4. Chrome / VSCode / Officeでも基本操作確認。
+1. `build/inference-host/Debug/azookey_inference_host.exe --pipe` でHostを起動。
+2. `scripts/register.ps1` でTIP登録。
+3. Notepadでローマ字入力しプレエディット表示を確認。
+4. Spaceで候補、Enterで確定、Escでキャンセル。
+5. Chrome / VSCode / Officeでも基本操作確認。
 
 ## ログ収集候補
 

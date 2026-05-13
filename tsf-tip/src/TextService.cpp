@@ -1,5 +1,87 @@
 #include "azookey/tsf/TextService.h"
 
+#include <optional>
+#include <thread>
+
+#include "azookey/ipc/NamedPipeTransport.h"
+#include "azookey/ipc/Payloads.h"
+
+namespace {
+
+constexpr const char* kTipVersion = "0.1.0";
+
+void DebugLog(const std::string& message) {
+#ifdef _DEBUG
+  OutputDebugStringA(("[azooKey TIP] " + message + "\n").c_str());
+#else
+  UNREFERENCED_PARAMETER(message);
+#endif
+}
+
+void StartDebugIpcProbe() {
+#ifdef _DEBUG
+  std::thread([]() {
+    using namespace azookey::ipc;
+
+    NamedPipeClient client;
+    const auto pipe_name = DefaultPipeName();
+    if (!client.Connect(pipe_name, 250)) {
+      DebugLog("host pipe unavailable: " + pipe_name);
+      return;
+    }
+
+    HandshakeRequest handshake;
+    handshake.tip_version = kTipVersion;
+    handshake.protocol_version = 1;
+    handshake.capabilities = {"ping"};
+
+    Envelope henv;
+    henv.version = 1;
+    henv.request_id = 1;
+    henv.trace_id = "tip-activate-handshake";
+    henv.type = MessageType::Handshake;
+    henv.payload_json = BuildHandshakeRequest(handshake);
+    if (!client.Send(henv)) {
+      DebugLog("handshake send failed");
+      return;
+    }
+
+    auto hres = client.Receive();
+    auto hpayload = hres ? ParseHandshakeResponse(hres->payload_json) : std::nullopt;
+    if (!hpayload || !hpayload->accepted) {
+      DebugLog("handshake rejected or missing");
+      return;
+    }
+    DebugLog("handshake accepted by host " + hpayload->host_version);
+
+    PingPayload ping;
+    ping.nonce = GetTickCount64();
+    ping.t_ms = ping.nonce;
+
+    Envelope penv;
+    penv.version = 1;
+    penv.request_id = 2;
+    penv.trace_id = "tip-activate-ping";
+    penv.type = MessageType::Ping;
+    penv.payload_json = BuildPing(ping);
+    if (!client.Send(penv)) {
+      DebugLog("ping send failed");
+      return;
+    }
+
+    auto pres = client.Receive();
+    auto ppayload = pres ? ParsePing(pres->payload_json) : std::nullopt;
+    if (ppayload && ppayload->nonce == ping.nonce) {
+      DebugLog("ping roundtrip ok");
+    } else {
+      DebugLog("ping response missing or invalid");
+    }
+  }).detach();
+#endif
+}
+
+}  // namespace
+
 namespace azookey::tsf {
 
 TextService::TextService() = default;
@@ -38,6 +120,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD d
   thread_mgr_ = ptim;
   client_id_ = tid;
   if (thread_mgr_) thread_mgr_->AddRef();
+  StartDebugIpcProbe();
   return S_OK;
 }
 
