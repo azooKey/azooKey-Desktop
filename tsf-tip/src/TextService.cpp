@@ -81,9 +81,24 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD d
 
 STDMETHODIMP TextService::Deactivate() {
   StopIpcWorker();
-  if (composition_) {
+
+  // Properly end any active composition via a synchronous write edit session
+  // so TSF can clean up the composing range in the document (P2).
+  if (composition_ && active_context_) {
+    preedit_kana_.clear();
+    romaji_.Reset();
+    ITfEditSession* edit = new EditSession(this, active_context_);
+    HRESULT hr = S_OK;
+    active_context_->RequestEditSession(client_id_, edit, TF_ES_SYNC | TF_ES_READWRITE, &hr);
+    edit->Release();
+  } else if (composition_) {
     composition_->Release();
     composition_ = nullptr;
+  }
+
+  if (active_context_) {
+    active_context_->Release();
+    active_context_ = nullptr;
   }
   if (thread_mgr_) {
     thread_mgr_->Release();
@@ -193,6 +208,12 @@ STDMETHODIMP TextService::GetDisplayAttributeInfo(REFGUID guidInfo, ITfDisplayAt
 
 HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
   if (!context) return E_INVALIDARG;
+  // Keep a reference to the last active context so Deactivate can end composition.
+  if (active_context_ != context) {
+    if (active_context_) active_context_->Release();
+    active_context_ = context;
+    active_context_->AddRef();
+  }
   ITfEditSession* edit = new EditSession(this, context);
   HRESULT hr = S_OK;
   context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &hr);
@@ -214,15 +235,17 @@ void TextService::StopIpcWorker() {
     ipc_stop_.store(true);
   }
   ipc_cv_.notify_one();
+  // Disconnect the pipe so any blocking Receive() in the worker returns
+  // immediately with an error rather than waiting for the next message (P1).
+  ipc_client_.Disconnect();
   ipc_thread_.join();
 }
 
 void TextService::IpcWorkerThread() {
   using namespace azookey::ipc;
 
-  NamedPipeClient client;
   const auto pipe_name = DefaultPipeName();
-  if (!client.Connect(pipe_name, 5000)) {
+  if (!ipc_client_.Connect(pipe_name, 5000)) {
     DebugLog("IPC: host pipe unavailable: " + pipe_name);
     return;
   }
@@ -240,8 +263,8 @@ void TextService::IpcWorkerThread() {
   henv.type = MessageType::Handshake;
   henv.payload_json = BuildHandshakeRequest(hs);
 
-  if (!client.Send(henv)) { DebugLog("IPC: handshake send failed"); return; }
-  auto hres = client.Receive();
+  if (!ipc_client_.Send(henv)) { DebugLog("IPC: handshake send failed"); return; }
+  auto hres = ipc_client_.Receive();
   auto hpayload = hres ? ParseHandshakeResponse(hres->payload_json) : std::nullopt;
   if (!hpayload || !hpayload->accepted) { DebugLog("IPC: handshake rejected"); return; }
   DebugLog("IPC: connected to host " + hpayload->host_version);
@@ -276,10 +299,14 @@ void TextService::IpcWorkerThread() {
     qenv.type = MessageType::QueryCandidates;
     qenv.payload_json = BuildQueryCandidatesRequest(qreq);
 
-    if (!client.Send(qenv)) { DebugLog("IPC: QueryCandidates send failed"); break; }
+    if (!ipc_client_.Send(qenv)) { DebugLog("IPC: QueryCandidates send failed"); break; }
 
-    auto qres = client.Receive();
-    if (!qres) { DebugLog("IPC: QueryCandidates receive failed"); break; }
+    // Receive() returns nullopt if Disconnect() closed the pipe during shutdown.
+    auto qres = ipc_client_.Receive();
+    if (!qres) {
+      if (!ipc_stop_.load()) DebugLog("IPC: QueryCandidates receive failed");
+      break;
+    }
 
     auto qpayload = ParseQueryCandidatesResponse(qres->payload_json);
     if (qpayload && !qpayload->candidates.empty()) {

@@ -68,7 +68,15 @@ class TextService final : public ITfTextInputProcessorEx,
 
   core::RomajiKanaConverter romaji_;
 
+  // Last context used for preedit updates; allows Deactivate to end composition.
+  ITfContext* active_context_{nullptr};
+
   // IPC worker thread state.
+  // ipc_client_ is accessed from both the worker thread (Connect/Send/Receive)
+  // and the main thread (Disconnect on shutdown); NamedPipeClient is internally
+  // mutex-protected so this is safe, and closing the handle from the main thread
+  // causes any blocking Receive() in the worker to return immediately.
+  ipc::NamedPipeClient ipc_client_;
   std::mutex ipc_mtx_;
   std::condition_variable ipc_cv_;
   std::thread ipc_thread_;
