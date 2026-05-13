@@ -380,9 +380,13 @@ STDMETHODIMP EditSession::DoEditSession(TfEditCookie ec) {
   // End composition when preedit is empty.
   if (kana.empty()) {
     if (service_->composition_) {
-      service_->composition_->EndComposition(ec);
-      service_->composition_->Release();
+      // Null the member before calling EndComposition so that the
+      // OnCompositionTerminated callback (which also releases) does not fire
+      // on an already-released pointer (double-release guard).
+      ITfComposition* comp = service_->composition_;
       service_->composition_ = nullptr;
+      comp->EndComposition(ec);
+      comp->Release();
     }
     return S_OK;
   }

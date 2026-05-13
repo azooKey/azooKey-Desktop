@@ -1,8 +1,10 @@
 #include <Windows.h>
+#include <msctf.h>
 #include <shlwapi.h>
 
 #include <string>
 
+#include "azookey/tsf/DisplayAttribute.h"
 #include "azookey/tsf/TextServiceFactory.h"
 
 static HMODULE g_hmod = nullptr;
@@ -67,6 +69,19 @@ extern "C" STDAPI DllRegisterServer() {
   if (!RegSetSz(HKEY_CURRENT_USER, profile_key.c_str(), L"DisplayName", L"azooKey"))
     return SELFREG_E_CLASS;
 
+  // Register the TIP as a display-attribute provider so TSF can resolve
+  // ITfDisplayAttributeProvider queries for kInputAttributeGuid.
+  ITfCategoryMgr* pCatMgr = nullptr;
+  if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_ITfCategoryMgr,
+                                  reinterpret_cast<void**>(&pCatMgr))) &&
+      pCatMgr) {
+    pCatMgr->RegisterCategory(azookey::tsf::kTextServiceClsid,
+                               GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                               azookey::tsf::kTextServiceClsid);
+    pCatMgr->Release();
+  }
+
   return S_OK;
 }
 
@@ -77,5 +92,18 @@ extern "C" STDAPI DllUnregisterServer() {
 
   // Delete the entire CLSID subtree; SHDeleteKey handles non-existent keys gracefully.
   SHDeleteKeyW(HKEY_CURRENT_USER, clsid_key.c_str());
+
+  // Remove display-attribute provider category registration.
+  ITfCategoryMgr* pCatMgr = nullptr;
+  if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_ITfCategoryMgr,
+                                  reinterpret_cast<void**>(&pCatMgr))) &&
+      pCatMgr) {
+    pCatMgr->UnregisterCategory(azookey::tsf::kTextServiceClsid,
+                                 GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                                 azookey::tsf::kTextServiceClsid);
+    pCatMgr->Release();
+  }
+
   return S_OK;
 }
