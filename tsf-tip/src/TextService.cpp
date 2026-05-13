@@ -119,9 +119,9 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
-  // VK_BACK is only consumed when there is active preedit to match OnKeyDown behaviour.
-  const bool has_preedit = !preedit_kana_.empty();
-  *eaten = ((wParam == VK_BACK && has_preedit) || wParam == VK_SPACE || wParam == VK_RETURN ||
+  // VK_BACK is consumed when preedit text OR pending romaji buffer is non-empty.
+  const bool has_input = !preedit_kana_.empty() || romaji_.HasPending();
+  *eaten = ((wParam == VK_BACK && has_input) || wParam == VK_SPACE || wParam == VK_RETURN ||
             wParam == VK_ESCAPE || (wParam >= 'A' && wParam <= 'Z'));
   return S_OK;
 }
@@ -153,6 +153,11 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         romaji_.Reset();
         RequestPreeditUpdate(context);
         if (!preedit_kana_.empty()) PostQueryCandidates(preedit_kana_);
+        *eaten = TRUE;
+      } else if (romaji_.HasPending()) {
+        // Pending romaji (e.g. "k", "n") with no emitted preedit yet:
+        // discard the pending buffer so the converter is clean for the next key.
+        romaji_.Reset();
         *eaten = TRUE;
       }
     } else if (wParam == VK_ESCAPE) {

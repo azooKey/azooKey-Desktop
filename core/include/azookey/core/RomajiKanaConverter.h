@@ -9,6 +9,7 @@ class RomajiKanaConverter {
   std::string Feed(char ascii);
   std::string Flush();
   void Reset();
+  bool HasPending() const { return !pending_.empty(); }
 
  private:
   std::string pending_;

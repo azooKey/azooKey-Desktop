@@ -72,15 +72,15 @@ extern "C" STDAPI DllRegisterServer() {
   // Register the TIP as a display-attribute provider so TSF can resolve
   // ITfDisplayAttributeProvider queries for kInputAttributeGuid.
   ITfCategoryMgr* pCatMgr = nullptr;
-  if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
-                                  IID_ITfCategoryMgr,
-                                  reinterpret_cast<void**>(&pCatMgr))) &&
-      pCatMgr) {
-    pCatMgr->RegisterCategory(azookey::tsf::kTextServiceClsid,
-                               GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-                               azookey::tsf::kTextServiceClsid);
-    pCatMgr->Release();
-  }
+  HRESULT cat_hr = CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                    IID_ITfCategoryMgr,
+                                    reinterpret_cast<void**>(&pCatMgr));
+  if (FAILED(cat_hr) || !pCatMgr) return SELFREG_E_CLASS;
+  cat_hr = pCatMgr->RegisterCategory(azookey::tsf::kTextServiceClsid,
+                                     GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                                     azookey::tsf::kTextServiceClsid);
+  pCatMgr->Release();
+  if (FAILED(cat_hr)) return SELFREG_E_CLASS;
 
   return S_OK;
 }
