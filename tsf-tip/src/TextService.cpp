@@ -83,7 +83,9 @@ STDMETHODIMP TextService::Deactivate() {
   StopIpcWorker();
 
   // Properly end any active composition via a synchronous write edit session
-  // so TSF can clean up the composing range in the document (P2).
+  // so TSF can clean up the composing range in the document.
+  // TF_ES_SYNC can fail (e.g. TF_E_SYNCHRONOUS outside a key handler), so we
+  // always fall through to the direct Release as a safety net.
   if (composition_ && active_context_) {
     preedit_kana_.clear();
     romaji_.Reset();
@@ -91,7 +93,10 @@ STDMETHODIMP TextService::Deactivate() {
     HRESULT hr = S_OK;
     active_context_->RequestEditSession(client_id_, edit, TF_ES_SYNC | TF_ES_READWRITE, &hr);
     edit->Release();
-  } else if (composition_) {
+  }
+  // Fallback: if the sync session didn't run (or there was no context),
+  // release the composition pointer directly so nothing is left dangling.
+  if (composition_) {
     composition_->Release();
     composition_ = nullptr;
   }
@@ -244,9 +249,17 @@ void TextService::StopIpcWorker() {
 void TextService::IpcWorkerThread() {
   using namespace azookey::ipc;
 
+  // Connect in short slices so StopIpcWorker() can interrupt during the
+  // connect phase (e.g. activate then quickly deactivate while host is down).
   const auto pipe_name = DefaultPipeName();
-  if (!ipc_client_.Connect(pipe_name, 5000)) {
-    DebugLog("IPC: host pipe unavailable: " + pipe_name);
+  constexpr uint32_t kSliceMs = 250;
+  constexpr uint32_t kTotalMs = 5000;
+  bool connected = false;
+  for (uint32_t elapsed = 0; elapsed < kTotalMs && !ipc_stop_.load(); elapsed += kSliceMs) {
+    if (ipc_client_.Connect(pipe_name, kSliceMs)) { connected = true; break; }
+  }
+  if (!connected) {
+    if (!ipc_stop_.load()) DebugLog("IPC: host pipe unavailable: " + pipe_name);
     return;
   }
 
