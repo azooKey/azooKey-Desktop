@@ -19,7 +19,7 @@ New-ItemProperty -Path $profileKey -Name "DisplayName" -Value "azooKey" -Propert
 
 if (Test-Path $HostExePath) {
   $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-  New-ItemProperty -Path $runKey -Name "azooKeyInferenceHost" -Value "`"$HostExePath`"" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $runKey -Name "azooKeyInferenceHost" -Value "`"$HostExePath`" --pipe" -PropertyType String -Force | Out-Null
 }
 
 Write-Host "TSF TIP registration complete."

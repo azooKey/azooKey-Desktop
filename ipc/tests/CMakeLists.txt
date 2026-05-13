@@ -5,3 +5,7 @@ add_test(NAME ipc_tests COMMAND ipc_tests)
 add_executable(ipc_payloads_tests payloads_test.cpp)
 target_link_libraries(ipc_payloads_tests PRIVATE azookey_ipc)
 add_test(NAME ipc_payloads_tests COMMAND ipc_payloads_tests)
+
+add_executable(ipc_named_pipe_transport_tests named_pipe_transport_test.cpp)
+target_link_libraries(ipc_named_pipe_transport_tests PRIVATE azookey_ipc)
+add_test(NAME ipc_named_pipe_transport_tests COMMAND ipc_named_pipe_transport_tests)

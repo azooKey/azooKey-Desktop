@@ -9,6 +9,7 @@ xcuserdata/
 build/
 Package.resolved
 DerivedData/
+.vs/
 *.moved-aside
 *.pbxuser
 *.mode1v3
