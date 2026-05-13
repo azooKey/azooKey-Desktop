@@ -142,22 +142,21 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
       PostQueryCandidates(preedit_kana_);
       *eaten = TRUE;
     } else if (wParam == VK_BACK) {
-      if (!preedit_kana_.empty()) {
-        // Remove last UTF-8 character (may be multi-byte).
+      if (romaji_.HasPending()) {
+        // Pending romaji buffer (e.g. "n" after typing "kan") takes priority:
+        // clear it first so one Backspace undoes the last typed ASCII character,
+        // not the already-emitted kana codepoint.
+        romaji_.Reset();
+        *eaten = TRUE;
+      } else if (!preedit_kana_.empty()) {
+        // Remove last emitted kana codepoint (UTF-8 multi-byte aware).
         auto& s = preedit_kana_;
         size_t i = s.size();
-        // Walk back past continuation bytes (10xxxxxx).
         while (i > 0 && (s[i - 1] & 0xC0) == 0x80) --i;
-        if (i > 0) --i;  // remove the leading byte
+        if (i > 0) --i;
         s.erase(i);
-        romaji_.Reset();
         RequestPreeditUpdate(context);
         if (!preedit_kana_.empty()) PostQueryCandidates(preedit_kana_);
-        *eaten = TRUE;
-      } else if (romaji_.HasPending()) {
-        // Pending romaji (e.g. "k", "n") with no emitted preedit yet:
-        // discard the pending buffer so the converter is clean for the next key.
-        romaji_.Reset();
         *eaten = TRUE;
       }
     } else if (wParam == VK_ESCAPE) {
