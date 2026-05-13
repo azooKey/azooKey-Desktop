@@ -13,8 +13,11 @@ TIP 側の Composition・候補 UI・登録周りと、M8 (Zenzai)・M11 (パッ
 再構築する。macOS 版（Issue #181）は本プランの対象外。
 
 詳細なマイルストーン定義と実装現状は `plans/windows-port-roadmap.md` を参照。
+**本ファイルはフェーズ実行計画のみを管理する。各マイルストーンのステータスは `plans/windows-port-roadmap.md` を正典とする。**
 
-## 実装実態の再評価サマリ
+## 実装実態の再評価サマリ（2026-05 時点のスナップショット）
+
+> 最新ステータスは `plans/windows-port-roadmap.md` を参照。以下は本プラン策定時点の状況。
 
 | MS | 表記 | 実態 | 残作業 |
 |---|---|---|---|
@@ -34,10 +37,15 @@ TIP 側の Composition・候補 UI・登録周りと、M8 (Zenzai)・M11 (パッ
 
 ## フェーズ計画
 
-### Phase A: TIP 基盤完成 — 「タイプしたら候補が往復する」(2〜3 週)
+### Phase A: TIP 基盤完成 — 「タイプしたら候補が往復する」(2〜3 週、M3 は 1〜2 週かかる場合あり)
 
 目的: Windows 上で実機 IME としてローマ字を打鍵し、Host から候補を取得して
 ログで往復確認できる体験を成立させる。
+
+**前提条件（Phase A 着手前に完了させること）**:
+- Win11 VM (Hyper-V または UTM) の構築
+- DebugView または WinDbg のインストール
+- `cmake -S . -B build && cmake --build build && ctest --test-dir build` の通過確認
 
 1. **M1 仕上げ** — `tsf-tip/` 向けに NamedPipeClient ラウンドトリップの自動
    テストを `ipc/tests/` パターンで追加し、CTest に統合。`StartDebugIpcProbe`
@@ -46,7 +54,8 @@ TIP 側の Composition・候補 UI・登録周りと、M8 (Zenzai)・M11 (パッ
    `DllUnregisterServer` を実装。CLSID `{71EE04FA-B35D-4EB8-87A1-582D44A9A58C}`、
    Profile GUID `{A8F74D91-8DF3-4DA1-B80B-01F7C73D4A90}`、Lang `0x0411` を
    `scripts/register.ps1` と整合。register.ps1 のエラー処理強化。
-3. **M3 完了** — `tsf-tip/src/TextService.cpp:241` の TODO を解消。
+3. **M3 完了**（TSF EditSession に慣れていない場合は 1〜2 週を見込む）—
+   `tsf-tip/src/TextService.cpp:241` の TODO を解消。
    `ITfContext::RequestEditSession` 経由で `ITfComposition` を保持し、
    `preedit_kana_` を `SetText` で挿入。`EnumDisplayAttributeInfo` /
    `GetDisplayAttributeInfo` を本実装し、アンダーラインを表示。

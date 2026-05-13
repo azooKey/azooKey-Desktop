@@ -49,7 +49,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `ime-tsf` への参照がリポジトリ全体に残らない
   - ルート `CMakeLists.txt` のサブディレクトリが現行構成と一致
 
-### M1: IPC ハンドシェイク疎通 ⚠️ ほぼ完了（仕上げのみ残）
+### M1: IPC ハンドシェイク疎通 ✅ ほぼ完了（仕上げのみ残）
 
 - **目的**: TIP と Host 間で Named Pipe を確立し `Handshake` + `Ping` が
   往復するところまで到達。
@@ -89,7 +89,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `scripts/register.ps1` のレジストリ書込みエラーハンドリング強化。
 - **受け入れ条件**:
   - 開発機にビルド成果物をインストールして言語切替で azooKey が選べる
-  - キー押下が `ITfKeyEventSink::OnKeyDown` まで到達することをログで確認 ✅
+  - キー押下が `ITfKeyEventSink::OnKeyDown` まで到達することをログで確認（確認済み）
 
 ### M3: Composition / Preedit 表示 ⚠️ 基盤完成・本体未実装
 
@@ -131,9 +131,8 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 - **残作業**:
   - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、応答を保持する配線。
 - **受け入れ条件**:
-  - `inference-host/tests` で固定 kana → 期待候補リストが返る ✅
-  - TIP デバッグログで Composition 中の kana に対する候補リストが
-    Host から受信できている
+  - `inference-host/tests` で固定 kana → 期待候補リストが返る（確認済み）
+  - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、TIP デバッグログで候補リストが Host から受信されること
 
 ### M5: 候補 UI 表示
 
@@ -163,7 +162,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - TIP 側で確定時に `CommitObservationRequest` を送信する経路。
 - **受け入れ条件**:
   - 確定時にアプリへ最終テキストが入る
-  - `learning.db` 相当に observation 行が増える（tests で検証）✅ Host 単体テスト済み
+  - `learning.db` 相当に observation 行が増える（Host 単体テスト済み、TIP 配線後に E2E 確認）
 
 ### M7: 学習による再ランキング ✅ ほぼ完成
 
@@ -178,8 +177,8 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 - **残作業**:
   - 手動: 実機で 3 回確定後 4 回目に第一候補で出ることの確認（M6 TIP 配線完了後）。
 - **受け入れ条件**:
-  - 単体テスト: 同一 context で複数回確定した候補が上位に来る ✅
-  - 手動: 同じ語を 3 回確定後、4 回目に第一候補で出る
+  - 単体テスト: 同一 context で複数回確定した候補が上位に来る（確認済み）
+  - 手動: 同じ語を 3 回確定後、4 回目に第一候補で出る（M6 TIP 配線後に実機確認）
 
 ### M8: Zenzai モデルのロード ⚠️ スケルトンのみ
 
