@@ -22,37 +22,28 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Test
-        id: ctest
+      - name: Run each test binary directly
+        id: run_tests
         continue-on-error: true
-        run: ctest --test-dir build --output-on-failure -VV
-
-      - name: Dump test results to job summary
-        if: always()
         shell: pwsh
         run: |
-          $summary = $env:GITHUB_STEP_SUMMARY
-
-          "## CTest results" | Out-File $summary -Append -Encoding utf8
-
-          $logPath = "build/Testing/Temporary/LastTest.log"
-          if (Test-Path $logPath) {
-            "### LastTest.log" | Out-File $summary -Append -Encoding utf8
-            '```' | Out-File $summary -Append -Encoding utf8
-            Get-Content $logPath | Out-File $summary -Append -Encoding utf8
-            '```' | Out-File $summary -Append -Encoding utf8
-          } else {
-            "No LastTest.log found — build may have failed before tests ran." |
-              Out-File $summary -Append -Encoding utf8
+          $failed = $false
+          $tests = Get-ChildItem -Path build -Recurse -Filter "*_tests.exe"
+          foreach ($t in $tests) {
+            Write-Host "=== Running $($t.Name) ==="
+            $out = & $t.FullName 2>&1
+            $ec = $LASTEXITCODE
+            Write-Host $out
+            if ($ec -ne 0) {
+              $msg = "$($t.Name) FAILED (exit $ec): $out"
+              Write-Host "::error::$msg"
+              $failed = $true
+            } else {
+              Write-Host "::notice::$($t.Name) passed"
+            }
           }
-
-          "### Test binaries" | Out-File $summary -Append -Encoding utf8
-          if (Test-Path build) {
-            Get-ChildItem -Path build -Recurse -Filter "*.exe" |
-              ForEach-Object { "- $($_.FullName)" } |
-              Out-File $summary -Append -Encoding utf8
-          }
+          if ($failed) { exit 1 }
 
       - name: Fail if tests failed
-        if: steps.ctest.outcome == 'failure'
+        if: steps.run_tests.outcome == 'failure'
         run: exit 1
