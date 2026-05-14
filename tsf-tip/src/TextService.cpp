@@ -399,13 +399,15 @@ void TextService::CommitSelected(ITfContext* context) {
     bool need_notify = false;
     if (ipc_has_request_) {
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false});
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false,
+           ipc_pending_id_});
       ipc_has_request_ = false;
       need_notify = true;
     }
     if (ipc_inflight_id_ != 0) {
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false});
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false,
+           ipc_inflight_id_});
       need_notify = true;
     }
     ++ipc_pending_id_;
@@ -456,13 +458,15 @@ void TextService::CommitPreeditAsIs(ITfContext* context) {
     bool need_notify = false;
     if (ipc_has_request_) {
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false});
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false,
+           ipc_pending_id_});
       ipc_has_request_ = false;
       need_notify = true;
     }
     if (ipc_inflight_id_ != 0) {
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false});
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false,
+           ipc_inflight_id_});
       need_notify = true;
     }
     ++ipc_pending_id_;
@@ -608,6 +612,12 @@ void TextService::IpcWorkerThread() {
       break;
     }
 
+    // If a Cancel targeting our just-sent QC arrives, the host returns no
+    // response (Dispatcher::HandleQueryCandidates returns std::nullopt for
+    // canceled requests).  Track that so we abandon the receive instead of
+    // spinning until the pipe disconnects.
+    bool cancel_inflight = false;
+
     // Drain fire-and-forget items (Cancel) that were enqueued while we were
     // preparing/sending this query.  Only items that do NOT expect a response
     // are sent here — response-awaiting items (CommitObservation) stay in the
@@ -636,13 +646,15 @@ void TextService::IpcWorkerThread() {
         env.payload_json = item.payload_json;
         if (!ipc_client_.Send(env))
           DebugLog("IPC: post-qc cancel send failed for type=" + TypeToString(item.type));
+        if (item.type == MessageType::Cancel && item.cancel_target_id == req_id)
+          cancel_inflight = true;
       }
     }
 
     // Poll in 50ms slices so cancels enqueued while the host processes the
     // query can be forwarded without waiting for the full response.
     std::optional<ipc::Envelope> qres;
-    while (!ipc_stop_.load() && ipc_client_.IsConnected()) {
+    while (!cancel_inflight && !ipc_stop_.load() && ipc_client_.IsConnected()) {
       qres = ipc_client_.ReceiveWithTimeout(50);
       if (qres) break;
       // Drain fire-and-forget items (Cancel) that arrived while we waited.
@@ -668,11 +680,21 @@ void TextService::IpcWorkerThread() {
         if (!ipc_client_.Send(env))
           DebugLog("IPC: mid-receive cancel send failed for type=" +
                    ipc::TypeToString(item.type));
+        if (item.type == ipc::MessageType::Cancel && item.cancel_target_id == req_id)
+          cancel_inflight = true;
       }
     }
     {
       std::lock_guard<std::mutex> lock(ipc_mtx_);
       ipc_inflight_id_ = 0;
+    }
+    if (cancel_inflight) {
+      // Host will not reply to a canceled request; resume the outer loop and
+      // wait for the next QueryCandidates / send-queue event.
+      DebugLog("IPC: in-flight req_id=" + std::to_string(req_id) +
+               " canceled, skipping receive");
+      ++next_id;
+      continue;
     }
     if (!qres) {
       if (!ipc_stop_.load()) DebugLog("IPC: QueryCandidates receive failed");
@@ -740,12 +762,16 @@ void TextService::PostCommitObservation(const std::string& reading,
 }
 
 void TextService::PostCancel(uint64_t target_request_id) {
-  PostIpcSend(ipc::MessageType::Cancel, ipc::BuildCancel({target_request_id}), false);
+  std::lock_guard<std::mutex> lock(ipc_mtx_);
+  ipc_send_queue_.push_back(
+      {ipc::MessageType::Cancel, ipc::BuildCancel({target_request_id}), false,
+       target_request_id});
+  ipc_cv_.notify_one();
 }
 
 void TextService::PostIpcSend(ipc::MessageType type, std::string payload, bool expects_response) {
   std::lock_guard<std::mutex> lock(ipc_mtx_);
-  ipc_send_queue_.push_back({type, std::move(payload), expects_response});
+  ipc_send_queue_.push_back({type, std::move(payload), expects_response, 0});
   ipc_cv_.notify_one();
 }
 

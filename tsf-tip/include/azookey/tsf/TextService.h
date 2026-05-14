@@ -97,10 +97,14 @@ class TextService final : public ITfTextInputProcessorEx,
   uint64_t ipc_inflight_id_{0};
 
   // Fire-and-forget IPC send queue: CommitObservation, Cancel (M6, M10).
+  // For Cancel items, cancel_target_id carries the target_request_id so the
+  // worker can detect a cancel that targets the currently in-flight query and
+  // abandon its receive (the host returns no response for canceled requests).
   struct IpcSendItem {
     ipc::MessageType type;
     std::string payload_json;
     bool expects_response{false};
+    uint64_t cancel_target_id{0};
   };
   std::vector<IpcSendItem> ipc_send_queue_;  // protected by ipc_mtx_
 
