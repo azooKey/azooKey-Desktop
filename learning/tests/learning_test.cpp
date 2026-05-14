@@ -14,7 +14,7 @@ static void Expect(bool cond, const char* msg) {
 int main() {
   const std::string path =
       (std::filesystem::temp_directory_path() / "azookey_learning_test.tsv").string();
-  std::remove(path);
+  std::remove(path.c_str());
 
   azookey::learning::LearningStore store(path);
   store.Observe("にほん", "日本", 1.0, 100);
