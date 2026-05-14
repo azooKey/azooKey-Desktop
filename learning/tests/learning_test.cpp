@@ -1,5 +1,7 @@
 #include <cstdio>
+#include <filesystem>
 #include <stdexcept>
+#include <string>
 
 #include "azookey/core/Candidate.h"
 #include "azookey/learning/LearningStore.h"
@@ -10,7 +12,8 @@ static void Expect(bool cond, const char* msg) {
 }
 
 int main() {
-  const char* path = "/tmp/azookey_learning_test.tsv";
+  const std::string path =
+      (std::filesystem::temp_directory_path() / "azookey_learning_test.tsv").string();
   std::remove(path);
 
   azookey::learning::LearningStore store(path);
@@ -31,6 +34,6 @@ int main() {
   (void)ranked;
   Expect(loaded.Score("にほん", "日本", 120) <= loaded.Score("にほん", "二本", 120),
          "rejected candidate should be down-weighted");
-  std::remove(path);
+  std::remove(path.c_str());
   return 0;
 }

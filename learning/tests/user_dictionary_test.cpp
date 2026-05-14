@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 
@@ -9,7 +10,9 @@ static void Expect(bool cond, const char* msg) {
 }
 
 static void TestAddLookupRemove() {
-  azookey::learning::UserDictionary dict("/tmp/azookey_user_dict_t_ignored.json");
+  const std::string p1 =
+      (std::filesystem::temp_directory_path() / "azookey_user_dict_t_ignored.json").string();
+  azookey::learning::UserDictionary dict(p1);
   azookey::learning::UserWord w1;
   w1.word = "azooKey";
   w1.ruby = "あずきい";
@@ -88,7 +91,9 @@ static void TestSaveLoadRoundTrip() {
 }
 
 static void TestLoadMissingFileIsOk() {
-  azookey::learning::UserDictionary dict("/tmp/azookey_user_dict_definitely_missing.json");
+  const std::string p2 =
+      (std::filesystem::temp_directory_path() / "azookey_user_dict_definitely_missing.json").string();
+  azookey::learning::UserDictionary dict(p2);
   Expect(dict.Load(), "missing file load returns true with empty dict");
   Expect(dict.Size() == 0, "empty after missing-file load");
 }
