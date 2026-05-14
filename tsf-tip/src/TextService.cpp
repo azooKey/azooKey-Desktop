@@ -654,7 +654,7 @@ void TextService::IpcWorkerThread() {
     // Poll in 50ms slices so cancels enqueued while the host processes the
     // query can be forwarded without waiting for the full response.
     std::optional<ipc::Envelope> qres;
-    while (!cancel_inflight && !ipc_stop_.load() && ipc_client_.IsConnected()) {
+    while (!ipc_stop_.load() && ipc_client_.IsConnected()) {
       qres = ipc_client_.ReceiveWithTimeout(50);
       if (qres) break;
       // Drain fire-and-forget items (Cancel) that arrived while we waited.
@@ -688,17 +688,19 @@ void TextService::IpcWorkerThread() {
       std::lock_guard<std::mutex> lock(ipc_mtx_);
       ipc_inflight_id_ = 0;
     }
-    if (cancel_inflight) {
-      // Host will not reply to a canceled request; resume the outer loop and
-      // wait for the next QueryCandidates / send-queue event.
-      DebugLog("IPC: in-flight req_id=" + std::to_string(req_id) +
-               " canceled, skipping receive");
-      ++next_id;
-      continue;
-    }
     if (!qres) {
       if (!ipc_stop_.load()) DebugLog("IPC: QueryCandidates receive failed");
       break;
+    }
+
+    if (cancel_inflight) {
+      // Even when cancel is sent, host processes one request at a time and
+      // still returns this query response before seeing Cancel. Consume and
+      // discard here to keep stream framing aligned for subsequent receives.
+      DebugLog("IPC: in-flight req_id=" + std::to_string(req_id) +
+               " canceled, consumed pending query reply");
+      ++next_id;
+      continue;
     }
 
     auto qpayload = ParseQueryCandidatesResponse(qres->payload_json);
