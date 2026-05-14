@@ -412,14 +412,17 @@ void TextService::CommitSelected(ITfContext* context) {
   committing_ = true;
   preedit_kana_.clear();
   romaji_.Reset();
-  if (FAILED(RequestPreeditUpdate(context))) {
+  const bool session_ok = SUCCEEDED(RequestPreeditUpdate(context));
+  if (!session_ok) {
     // Session was rejected (context teardown, lock denial, etc.).
     // Clear the latched commit state so no future edit session commits stale text.
     committing_ = false;
     commit_surface_.clear();
   }
 
-  if (!chosen.surface.empty() && !reading.empty()) {
+  // Only record the learning event when the edit session was accepted; an
+  // observation for a commit that never happened would skew ranking data.
+  if (session_ok && !chosen.surface.empty() && !reading.empty()) {
     PostCommitObservation(reading, chosen, shown);
   }
 }
@@ -627,7 +630,37 @@ void TextService::IpcWorkerThread() {
       }
     }
 
-    auto qres = ipc_client_.Receive();
+    // Poll in 50ms slices so cancels enqueued while the host processes the
+    // query can be forwarded without waiting for the full response.
+    std::optional<ipc::Envelope> qres;
+    while (!ipc_stop_.load() && ipc_client_.IsConnected()) {
+      qres = ipc_client_.ReceiveWithTimeout(50);
+      if (qres) break;
+      // Drain fire-and-forget items (Cancel) that arrived while we waited.
+      std::vector<IpcSendItem> mid_faf;
+      {
+        std::lock_guard<std::mutex> lk(ipc_mtx_);
+        std::vector<IpcSendItem> deferred;
+        for (auto& item : ipc_send_queue_) {
+          if (!item.expects_response)
+            mid_faf.push_back(std::move(item));
+          else
+            deferred.push_back(std::move(item));
+        }
+        ipc_send_queue_ = std::move(deferred);
+      }
+      for (auto& item : mid_faf) {
+        ipc::Envelope env;
+        env.version = 1;
+        env.request_id = next_id++;
+        env.trace_id = "tip-faf-mid";
+        env.type = item.type;
+        env.payload_json = item.payload_json;
+        if (!ipc_client_.Send(env))
+          DebugLog("IPC: mid-receive cancel send failed for type=" +
+                   ipc::TypeToString(item.type));
+      }
+    }
     {
       std::lock_guard<std::mutex> lock(ipc_mtx_);
       ipc_inflight_id_ = 0;
@@ -754,6 +787,18 @@ STDMETHODIMP EditSession::DoEditSession(TfEditCookie ec) {
       service_->composition_ = nullptr;
       comp->EndComposition(ec);
       comp->Release();
+    } else if (!surface.empty()) {
+      // No active composition (e.g. commit triggered before the async preedit
+      // session ran); insert the surface text directly at the cursor.
+      TF_SELECTION sel{};
+      ULONG fetched = 0;
+      if (SUCCEEDED(context_->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched)) &&
+          fetched > 0) {
+        sel.range->SetText(ec, 0, surface.c_str(), static_cast<LONG>(surface.size()));
+        sel.range->Collapse(ec, TF_ANCHOR_END);
+        context_->SetSelection(ec, 1, &sel);
+        sel.range->Release();
+      }
     }
     return S_OK;
   }

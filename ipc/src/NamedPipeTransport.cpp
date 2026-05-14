@@ -486,6 +486,29 @@ std::optional<Envelope> NamedPipeClient::Receive() {
   return envelope;
 }
 
+std::optional<Envelope> NamedPipeClient::ReceiveWithTimeout(uint32_t timeout_ms) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  while (std::chrono::steady_clock::now() < deadline) {
+    HANDLE pipe = INVALID_HANDLE_VALUE;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      if (!impl_->connected) return std::nullopt;
+      pipe = impl_->pipe;
+    }
+    DWORD avail = 0;
+    if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &avail, nullptr)) {
+      Disconnect();
+      return std::nullopt;
+    }
+    if (avail > 0) {
+      return Receive();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  return std::nullopt;
+}
+
 std::string DefaultPipeName() {
   const auto sid = CurrentUserSidString();
   if (sid.empty()) {
@@ -512,6 +535,7 @@ void NamedPipeClient::Disconnect() {}
 bool NamedPipeClient::IsConnected() const { return false; }
 bool NamedPipeClient::Send(const Envelope&) { return false; }
 std::optional<Envelope> NamedPipeClient::Receive() { return std::nullopt; }
+std::optional<Envelope> NamedPipeClient::ReceiveWithTimeout(uint32_t) { return std::nullopt; }
 
 std::string DefaultPipeName() {
   return "/tmp/azookey-namedpipe-unsupported";
