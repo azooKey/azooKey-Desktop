@@ -356,10 +356,10 @@ HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
     active_context_->AddRef();
   }
   ITfEditSession* edit = new EditSession(this, context);
-  HRESULT hr = S_OK;
-  context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &hr);
+  HRESULT hr_session = S_OK;
+  HRESULT hr = context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &hr_session);
   edit->Release();
-  return hr;
+  return hr;  // whether the session was accepted, not what DoEditSession returned
 }
 
 // --- Commit helpers (M5) ---
@@ -412,7 +412,12 @@ void TextService::CommitSelected(ITfContext* context) {
   committing_ = true;
   preedit_kana_.clear();
   romaji_.Reset();
-  RequestPreeditUpdate(context);
+  if (FAILED(RequestPreeditUpdate(context))) {
+    // Session was rejected (context teardown, lock denial, etc.).
+    // Clear the latched commit state so no future edit session commits stale text.
+    committing_ = false;
+    commit_surface_.clear();
+  }
 
   if (!chosen.surface.empty() && !reading.empty()) {
     PostCommitObservation(reading, chosen, shown);
@@ -459,7 +464,10 @@ void TextService::CommitPreeditAsIs(ITfContext* context) {
   committing_ = true;
   preedit_kana_.clear();
   romaji_.Reset();
-  RequestPreeditUpdate(context);
+  if (FAILED(RequestPreeditUpdate(context))) {
+    committing_ = false;
+    commit_surface_.clear();
+  }
 }
 
 // --- IPC worker (M4 + M6 + M10) ---
