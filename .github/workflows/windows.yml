@@ -20,7 +20,39 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --verbose
+        run: cmake --build build
 
       - name: Test
+        id: ctest
+        continue-on-error: true
         run: ctest --test-dir build --output-on-failure -VV
+
+      - name: Dump test results to job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summary = $env:GITHUB_STEP_SUMMARY
+
+          "## CTest results" | Out-File $summary -Append -Encoding utf8
+
+          $logPath = "build/Testing/Temporary/LastTest.log"
+          if (Test-Path $logPath) {
+            "### LastTest.log" | Out-File $summary -Append -Encoding utf8
+            '```' | Out-File $summary -Append -Encoding utf8
+            Get-Content $logPath | Out-File $summary -Append -Encoding utf8
+            '```' | Out-File $summary -Append -Encoding utf8
+          } else {
+            "No LastTest.log found — build may have failed before tests ran." |
+              Out-File $summary -Append -Encoding utf8
+          }
+
+          "### Test binaries" | Out-File $summary -Append -Encoding utf8
+          if (Test-Path build) {
+            Get-ChildItem -Path build -Recurse -Filter "*.exe" |
+              ForEach-Object { "- $($_.FullName)" } |
+              Out-File $summary -Append -Encoding utf8
+          }
+
+      - name: Fail if tests failed
+        if: steps.ctest.outcome == 'failure'
+        run: exit 1
