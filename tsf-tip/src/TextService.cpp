@@ -201,24 +201,28 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         RequestPreeditUpdate(context);
       }
       if (!preedit_kana_.empty()) {
-        std::vector<std::wstring> items;
-        {
-          std::lock_guard<std::mutex> lk(candidates_mtx_);
-          for (auto& c : candidates_) items.push_back(Utf8ToWide(c.surface));
-        }
-        if (!items.empty()) {
-          if (cand_visible) {
-            // Cycle to next candidate.
-            candidate_window_.MoveSelection(+1);
-            selected_candidate_idx_ = candidate_window_.GetSelected();
-          } else {
-            // Show window with first candidate selected.
+        // Always eat Space during preedit — even if candidates haven't arrived
+        // yet — to prevent a literal space leaking into the application.
+        *eaten = TRUE;
+        if (cand_visible) {
+          // Cycle to next candidate using the existing snapshot.
+          candidate_window_.MoveSelection(+1);
+          selected_candidate_idx_ = candidate_window_.GetSelected();
+        } else {
+          // Snapshot the candidate list so commit always reflects what was
+          // displayed, even if a late QueryCandidates response arrives later.
+          {
+            std::lock_guard<std::mutex> lk(candidates_mtx_);
+            shown_candidates_ = candidates_;
+          }
+          std::vector<std::wstring> items;
+          for (auto& c : shown_candidates_) items.push_back(Utf8ToWide(c.surface));
+          if (!items.empty()) {
             selected_candidate_idx_ = 0;
             POINT pt = caret_pt_;
             if (pt.x == 0 && pt.y == 0) GetCursorPos(&pt);
             candidate_window_.Show(pt, items, 0);
           }
-          *eaten = TRUE;
         }
       }
 
@@ -346,21 +350,21 @@ HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
 void TextService::CommitSelected(ITfContext* context) {
   if (!context) return;
 
-  std::string reading;
+  // Use the snapshot taken when Space opened the window so that a late
+  // QueryCandidates response cannot silently alter what gets committed.
   ipc::CandidateField chosen;
-  std::vector<ipc::CandidateField> shown;
-
+  std::vector<ipc::CandidateField> shown = shown_candidates_;
+  if (!shown_candidates_.empty() &&
+      selected_candidate_idx_ >= 0 &&
+      selected_candidate_idx_ < static_cast<int>(shown_candidates_.size())) {
+    chosen = shown_candidates_[selected_candidate_idx_];
+  }
+  shown_candidates_.clear();
   {
     std::lock_guard<std::mutex> lk(candidates_mtx_);
-    if (!candidates_.empty() &&
-        selected_candidate_idx_ >= 0 &&
-        selected_candidate_idx_ < static_cast<int>(candidates_.size())) {
-      chosen = candidates_[selected_candidate_idx_];
-      shown = candidates_;
-    }
     candidates_.clear();
   }
-  reading = preedit_kana_;
+  const std::string reading = preedit_kana_;
 
   candidate_window_.Hide();
   selected_candidate_idx_ = 0;
@@ -373,6 +377,7 @@ void TextService::CommitSelected(ITfContext* context) {
       ipc_has_request_ = false;
       ipc_send_queue_.push_back(
           {ipc::MessageType::Cancel, ipc::BuildCancel({old_id}), false});
+      ipc_cv_.notify_one();
     }
   }
 
@@ -411,6 +416,7 @@ void TextService::CommitPreeditAsIs(ITfContext* context) {
       ipc_has_request_ = false;
       ipc_send_queue_.push_back(
           {ipc::MessageType::Cancel, ipc::BuildCancel({old_id}), false});
+      ipc_cv_.notify_one();
     }
   }
 

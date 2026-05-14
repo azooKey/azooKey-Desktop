@@ -79,6 +79,9 @@ class TextService final : public ITfTextInputProcessorEx,
   // Candidate window (M5).
   CandidateWindow candidate_window_;
   int selected_candidate_idx_{0};
+  // Snapshot of candidates taken when the window was opened (used for commit
+  // so that a late QueryCandidates response cannot change what is confirmed).
+  std::vector<ipc::CandidateField> shown_candidates_;
 
   // IPC worker thread state.
   ipc::NamedPipeClient ipc_client_;
