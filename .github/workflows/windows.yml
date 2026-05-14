@@ -13,11 +13,14 @@ jobs:
         with:
           submodules: false
 
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure
-        run: cmake -S . -B build -A x64
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --config Debug
+        run: cmake --build build --verbose
 
       - name: Test
-        run: ctest --test-dir build -C Debug --output-on-failure
+        run: ctest --test-dir build --output-on-failure -VV
