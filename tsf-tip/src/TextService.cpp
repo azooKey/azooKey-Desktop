@@ -268,11 +268,11 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
 
     } else if (wParam >= '1' && wParam <= '9') {
       if (cand_visible) {
+        *eaten = TRUE;
         int idx = static_cast<int>(wParam - '1');
         if (idx < candidate_window_.GetCount()) {
           selected_candidate_idx_ = idx;
           CommitSelected(context);
-          *eaten = TRUE;
         }
       }
 
