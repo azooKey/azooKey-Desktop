@@ -7,6 +7,16 @@ namespace azookey::tsf {
 
 namespace {
 constexpr wchar_t kClassName[] = L"azooKeyCandidateWnd";
+
+HMODULE GetTipModuleHandle() {
+  HMODULE module = nullptr;
+  if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         reinterpret_cast<LPCWSTR>(&GetTipModuleHandle), &module)) {
+    return module;
+  }
+  return nullptr;
+}
 }
 
 CandidateWindow::CandidateWindow() = default;
@@ -19,7 +29,7 @@ ATOM CandidateWindow::RegisterWindowClass() {
   wc.cbSize = sizeof(wc);
   wc.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
   wc.lpfnWndProc = WndProc;
-  wc.hInstance = GetModuleHandleW(nullptr);
+  wc.hInstance = GetTipModuleHandle();
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
   wc.lpszClassName = kClassName;
@@ -28,7 +38,7 @@ ATOM CandidateWindow::RegisterWindowClass() {
     // Already registered from a previous activation; retrieve the atom.
     WNDCLASSEXW existing{};
     existing.cbSize = sizeof(existing);
-    GetClassInfoExW(GetModuleHandleW(nullptr), kClassName, &existing);
+    GetClassInfoExW(GetTipModuleHandle(), kClassName, &existing);
     a = static_cast<ATOM>(GetClassLongW(
         FindWindowW(kClassName, nullptr) ? FindWindowW(kClassName, nullptr)
                                          : HWND_DESKTOP,
@@ -49,7 +59,7 @@ bool CandidateWindow::Create() {
       WS_POPUP | WS_BORDER,
       0, 0, 200, kItemHeight,
       nullptr, nullptr,
-      GetModuleHandleW(nullptr), this);
+      GetTipModuleHandle(), this);
   return hwnd_ != nullptr;
 }
 
