@@ -166,6 +166,11 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
       if (cand_visible) {
         candidate_window_.Hide();
         selected_candidate_idx_ = 0;
+      }
+      // Always clear stale candidates when the reading changes, not only when
+      // the window is visible — otherwise a Space press before the fresh
+      // QueryCandidates response arrives snapshots the old cache.
+      {
         std::lock_guard<std::mutex> lk(candidates_mtx_);
         candidates_.clear();
       }
@@ -183,6 +188,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         romaji_.PopPending();
         *eaten = TRUE;
       } else if (!preedit_kana_.empty()) {
+        {
+          std::lock_guard<std::mutex> lk(candidates_mtx_);
+          candidates_.clear();
+        }
         auto& s = preedit_kana_;
         size_t i = s.size();
         while (i > 0 && (s[i - 1] & 0xC0) == 0x80) --i;
@@ -199,6 +208,14 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
       if (!flushed.empty()) {
         preedit_kana_ += flushed;
         RequestPreeditUpdate(context);
+        // Reading changed due to romaji flush; old candidates are now stale.
+        // Clear them and query for the updated reading so the candidate window
+        // (opened below) reflects the complete input, not the pre-flush state.
+        {
+          std::lock_guard<std::mutex> lk(candidates_mtx_);
+          candidates_.clear();
+        }
+        PostQueryCandidates(preedit_kana_);
       }
       if (!preedit_kana_.empty()) {
         // Always eat Space during preedit — even if candidates haven't arrived
