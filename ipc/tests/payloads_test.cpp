@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -177,15 +178,20 @@ static void TestMalformedRejection() {
 }
 
 int main() {
-  TestJsonEscapeAndRoundTrip();
-  TestHandshake();
-  TestPing();
-  TestHealth();
-  TestLoadModel();
-  TestQueryCandidates();
-  TestCancel();
-  TestCommitObservation();
-  TestUserWord();
-  TestMalformedRejection();
-  return 0;
+  try {
+    TestJsonEscapeAndRoundTrip();
+    TestHandshake();
+    TestPing();
+    TestHealth();
+    TestLoadModel();
+    TestQueryCandidates();
+    TestCancel();
+    TestCommitObservation();
+    TestUserWord();
+    TestMalformedRejection();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }

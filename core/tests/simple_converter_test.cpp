@@ -124,11 +124,16 @@ static void TestContextAware() {
 }
 
 int main() {
-  RunRomajiTests();
-  TestBuiltinDictionary();
-  TestTsvLoad();
-  TestPrefixFallback();
-  TestContextAware();
-  TestDebugInfoFormatting();
-  return 0;
+  try {
+    RunRomajiTests();
+    TestBuiltinDictionary();
+    TestTsvLoad();
+    TestPrefixFallback();
+    TestContextAware();
+    TestDebugInfoFormatting();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }

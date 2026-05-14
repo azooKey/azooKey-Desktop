@@ -1,5 +1,6 @@
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
@@ -116,9 +117,14 @@ static void TestLegacyOverloadStillWorks() {
 }
 
 int main() {
-  TestQueryWithLearningBoost();
-  TestUserDictionaryInjection();
-  TestCancelEarlyReturn();
-  TestLegacyOverloadStillWorks();
-  return 0;
+  try {
+    TestQueryWithLearningBoost();
+    TestUserDictionaryInjection();
+    TestCancelEarlyReturn();
+    TestLegacyOverloadStillWorks();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }

@@ -112,9 +112,14 @@ static void TestLoadMalformedRejects() {
 }
 
 int main() {
-  TestAddLookupRemove();
-  TestSaveLoadRoundTrip();
-  TestLoadMissingFileIsOk();
-  TestLoadMalformedRejects();
-  return 0;
+  try {
+    TestAddLookupRemove();
+    TestSaveLoadRoundTrip();
+    TestLoadMissingFileIsOk();
+    TestLoadMalformedRejects();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }
