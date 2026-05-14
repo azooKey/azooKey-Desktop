@@ -588,6 +588,37 @@ void TextService::IpcWorkerThread() {
       break;
     }
 
+    // Drain fire-and-forget items (Cancel) that were enqueued while we were
+    // preparing/sending this query.  Only items that do NOT expect a response
+    // are sent here — response-awaiting items (CommitObservation) stay in the
+    // queue for the next loop iteration so their response isn't confused with
+    // the pending QueryCandidates response.  Sending cancels here rather than
+    // after Receive() means they reach the host pipeline as soon as possible.
+    {
+      std::vector<IpcSendItem> faf_now;
+      {
+        std::lock_guard<std::mutex> lock(ipc_mtx_);
+        std::vector<IpcSendItem> deferred;
+        for (auto& item : ipc_send_queue_) {
+          if (!item.expects_response)
+            faf_now.push_back(std::move(item));
+          else
+            deferred.push_back(std::move(item));
+        }
+        ipc_send_queue_ = std::move(deferred);
+      }
+      for (auto& item : faf_now) {
+        Envelope env;
+        env.version = 1;
+        env.request_id = next_id++;
+        env.trace_id = "tip-faf";
+        env.type = item.type;
+        env.payload_json = item.payload_json;
+        if (!ipc_client_.Send(env))
+          DebugLog("IPC: post-qc cancel send failed for type=" + TypeToString(item.type));
+      }
+    }
+
     auto qres = ipc_client_.Receive();
     {
       std::lock_guard<std::mutex> lock(ipc_mtx_);
