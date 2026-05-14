@@ -359,7 +359,11 @@ HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
   HRESULT hr_session = S_OK;
   HRESULT hr = context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &hr_session);
   edit->Release();
-  return hr;  // whether the session was accepted, not what DoEditSession returned
+  // For synchronous sessions TSF writes DoEditSession's result into hr_session
+  // while returning S_OK from RequestEditSession itself.  Return hr_session so
+  // callers see real failures.  For async sessions hr_session stays S_OK
+  // (initialized value), so this is always safe to return.
+  return SUCCEEDED(hr) ? hr_session : hr;
 }
 
 // --- Commit helpers (M5) ---
@@ -410,12 +414,14 @@ void TextService::CommitSelected(ITfContext* context) {
 
   commit_surface_ = chosen.surface.empty() ? preedit_kana_ : chosen.surface;
   committing_ = true;
-  preedit_kana_.clear();
-  romaji_.Reset();
+  // Defer clearing preedit until the session is accepted so that if TSF
+  // rejects the request (lock denial, context teardown) the composition text
+  // is not lost and the user can still see/retry their input.
   const bool session_ok = SUCCEEDED(RequestPreeditUpdate(context));
-  if (!session_ok) {
-    // Session was rejected (context teardown, lock denial, etc.).
-    // Clear the latched commit state so no future edit session commits stale text.
+  if (session_ok) {
+    preedit_kana_.clear();
+    romaji_.Reset();
+  } else {
     committing_ = false;
     commit_surface_.clear();
   }
@@ -465,9 +471,12 @@ void TextService::CommitPreeditAsIs(ITfContext* context) {
 
   commit_surface_ = preedit_kana_;
   committing_ = true;
-  preedit_kana_.clear();
-  romaji_.Reset();
-  if (FAILED(RequestPreeditUpdate(context))) {
+  // Same deferred-clear pattern as CommitSelected: preserve preedit until the
+  // session is accepted so rejection does not silently discard the reading.
+  if (SUCCEEDED(RequestPreeditUpdate(context))) {
+    preedit_kana_.clear();
+    romaji_.Reset();
+  } else {
     committing_ = false;
     commit_surface_.clear();
   }
