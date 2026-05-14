@@ -1,4 +1,5 @@
 add_library(azookey_tsf_tip SHARED
+  src/CandidateWindow.cpp
   src/DllMain.cpp
   src/DisplayAttribute.cpp
   src/TextService.cpp

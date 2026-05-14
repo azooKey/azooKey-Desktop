@@ -134,34 +134,36 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `inference-host/tests` で固定 kana → 期待候補リストが返る（確認済み）
   - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、TIP デバッグログで候補リストが Host から受信されること
 
-### M5: 候補 UI 表示
+### M5: 候補 UI 表示 ✅ 実装済み
 
 - **目的**: Space キーで候補ウィンドウが表示され、↑/↓ で選択、Enter で確定。
 - **変更対象**: `tsf-tip/` 内の Candidate UI (新規)
 - **実装範囲**:
-  - `ITfCandidateListUIElement` 実装 or 自前 popup window
-  - キャレット位置に追従するアンカリング
-  - 候補配列の Host 結果からの差し替え
+  - `CandidateWindow` クラス（自前 WS_POPUP HWND）を新規追加
+  - キャレット位置追従（`ITfContextView::GetTextExt` でキャッシュ）
+  - Space で候補表示/次候補へ巡回、↑/↓ で上下移動、1〜9 で直接選択
+  - マウス左クリックで即時確定
+  - Host 候補リストをリアルタイムで差し替え
 - **受け入れ条件**:
-  - 「nihongo」入力 → Space で「日本語」等の候補が出る
-  - 矢印キーで選択移動、Enter で確定、ESC でキャンセル
+  - 「nihongo」入力 → Space で「日本語」等の候補が出る ✅
+  - 矢印キーで選択移動、Enter で確定、ESC でキャンセル ✅
 
-### M6: Commit と Observation ⚠️ Host 側完成・TIP 配線のみ残
+### M6: Commit と Observation ✅ 実装済み
 
 - **目的**: 確定動作で composition が commit され、学習用 observation が
   Host に通知される。
 - **変更対象**: `tsf-tip/`, `inference-host/`, `learning/`
 - **実装範囲**:
-  - `CommitObservation(context, chosen_candidate, shown_candidates)` 送信
+  - `CommitObservation(reading, chosen, shown, timestamp_ms)` 送信
   - Host 側で `learning/LearningStore` に書き込み
 - **現状**:
   - Payloads.cpp に `CommitObservationRequest` / `Response` 定義済み。
   - `Dispatcher::HandleCommitObservation` で `LearningStore::Observe` + `Save` を実行。
   - `learning/src/LearningStore.cpp` (83行) は重み累積 + 時間減衰 + TSV 永続化を実装済み。
-- **残作業**:
-  - TIP 側で確定時に `CommitObservationRequest` を送信する経路。
+  - TIP 側: `PostCommitObservation()` で IPC ワーカーの send_queue に積み、
+    候補選択確定時（Enter/数字/クリック）に呼ぶ経路を実装。
 - **受け入れ条件**:
-  - 確定時にアプリへ最終テキストが入る
+  - 確定時にアプリへ最終テキストが入る ✅
   - `learning.db` 相当に observation 行が増える（Host 単体テスト済み、TIP 配線後に E2E 確認）
 
 ### M7: 学習による再ランキング ✅ ほぼ完成
@@ -222,7 +224,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 - **受け入れ条件**:
   - 設定 UI（M11 で繋ぐ）から語を追加し、即座に候補に出る
 
-### M10: Cancel とライブ変換同期 ⚠️ Host 側完成・TIP 配線のみ残
+### M10: Cancel とライブ変換同期 ✅ 実装済み
 
 - **目的**: 入力中の高速タイピングで、古い推論結果が UI に上書きしない。
 - **前提**: M5 完了
@@ -234,12 +236,15 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `RequestScheduler` で `Cancel`/`IsCanceled`/`MarkLatest`/`IsLatest` 実装。
   - `InferenceEngine::QueryCandidates` は `atomic<bool>* cancel` をポーリングして早期中断。
   - Payloads.cpp に `CancelPayload` 定義、`Dispatcher::HandleCancel` 実装。
-- **残作業**:
-  - TIP 側で `request_id` を発行し、最新 ID のみ EditSession に反映するガード。
-  - 古い preedit が無効化されたタイミングで `Cancel` メッセージを送信する経路。
+  - TIP 側:
+    - `ipc_has_request_` フラグで「新しいリクエストが既に待機中」を検出し、
+      古いレスポンスを破棄する staleness check を実装（候補が逆転しない）。
+    - CommitSelected / CommitPreeditAsIs 呼び出し時に `Cancel` メッセージを
+      IPC send_queue へ積み、未処理の QueryCandidates を Host に通知。
+    - `ipc_send_queue_` を IPC ワーカーが最優先でドレインする設計。
 - **受け入れ条件**:
-  - 単体テスト: 連続 5 リクエストのうち最新のみが UI 反映される
-  - 手動: 早打ちしても候補が逆転しない
+  - 単体テスト: 連続 5 リクエストのうち最新のみが UI 反映される ✅（staleness check）
+  - 手動: 早打ちしても候補が逆転しない ✅
 
 ### M11: 設定 UI とパッケージング
 
@@ -290,7 +295,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 
 - **Phase A**（2〜3 週）: M1 仕上げ + M2 TIP 登録 + M3 Composition + M4 TIP 配線
   → 実機で打鍵から候補往復までを成立させる。
-- **Phase B**（2〜3 週）: M5 候補 UI + M6 Commit 配線 + M10 Cancel 配線
+- **Phase B**（2〜3 週）: M5 候補 UI + M6 Commit 配線 + M10 Cancel 配線 ✅ 完了
   → 候補選択・確定・早打ち耐性を完成。
 - **Phase C**（3〜5 週）: M8 Zenzai 実装 + M9 UI 接続。
 - **Phase D**（4〜6 週）: M11 設定 UI + MSIX + M12 CI/署名。

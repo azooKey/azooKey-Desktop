@@ -12,8 +12,10 @@
 #include <vector>
 
 #include "azookey/core/RomajiKanaConverter.h"
+#include "azookey/ipc/Messages.h"
 #include "azookey/ipc/NamedPipeTransport.h"
 #include "azookey/ipc/Payloads.h"
+#include "azookey/tsf/CandidateWindow.h"
 
 namespace azookey::tsf {
 
@@ -59,6 +61,9 @@ class TextService final : public ITfTextInputProcessorEx,
   // Accessed by EditSession.
   std::string preedit_kana_;
   ITfComposition* composition_{nullptr};
+  bool committing_{false};
+  std::string commit_surface_;
+  POINT caret_pt_{0, 0};
 
  private:
   LONG ref_count_{1};
@@ -71,11 +76,14 @@ class TextService final : public ITfTextInputProcessorEx,
   // Last context used for preedit updates; allows Deactivate to end composition.
   ITfContext* active_context_{nullptr};
 
+  // Candidate window (M5).
+  CandidateWindow candidate_window_;
+  int selected_candidate_idx_{0};
+  // Snapshot of candidates taken when the window was opened (used for commit
+  // so that a late QueryCandidates response cannot change what is confirmed).
+  std::vector<ipc::CandidateField> shown_candidates_;
+
   // IPC worker thread state.
-  // ipc_client_ is accessed from both the worker thread (Connect/Send/Receive)
-  // and the main thread (Disconnect on shutdown); NamedPipeClient is internally
-  // mutex-protected so this is safe, and closing the handle from the main thread
-  // causes any blocking Receive() in the worker to return immediately.
   ipc::NamedPipeClient ipc_client_;
   std::mutex ipc_mtx_;
   std::condition_variable ipc_cv_;
@@ -84,6 +92,21 @@ class TextService final : public ITfTextInputProcessorEx,
   std::string ipc_pending_reading_;
   uint64_t ipc_pending_id_{0};
   bool ipc_has_request_{false};
+  // ID of the QueryCandidates currently sent but not yet received (0 = none).
+  // Protected by ipc_mtx_; written by the worker thread, read by TIP thread.
+  uint64_t ipc_inflight_id_{0};
+
+  // Fire-and-forget IPC send queue: CommitObservation, Cancel (M6, M10).
+  // For Cancel items, cancel_target_id carries the target_request_id so the
+  // worker can detect a cancel that targets the currently in-flight query and
+  // abandon its receive (the host returns no response for canceled requests).
+  struct IpcSendItem {
+    ipc::MessageType type;
+    std::string payload_json;
+    bool expects_response{false};
+    uint64_t cancel_target_id{0};
+  };
+  std::vector<IpcSendItem> ipc_send_queue_;  // protected by ipc_mtx_
 
   // Latest candidates from Host (written by IPC thread, read by TIP thread).
   std::mutex candidates_mtx_;
@@ -93,6 +116,19 @@ class TextService final : public ITfTextInputProcessorEx,
   void StopIpcWorker();
   void IpcWorkerThread();
   void PostQueryCandidates(const std::string& reading);
+
+  // M6: enqueue a CommitObservation to the IPC worker.
+  void PostCommitObservation(const std::string& reading,
+                             const ipc::CandidateField& chosen,
+                             const std::vector<ipc::CandidateField>& shown);
+  // M10: enqueue a Cancel message to the IPC worker.
+  void PostCancel(uint64_t target_request_id);
+  // Internal: push an item onto ipc_send_queue_ and notify the worker.
+  void PostIpcSend(ipc::MessageType type, std::string payload, bool expects_response);
+
+  // M5 commit helpers.
+  void CommitSelected(ITfContext* context);
+  void CommitPreeditAsIs(ITfContext* context);
 };
 
 class EditSession final : public ITfEditSession {
