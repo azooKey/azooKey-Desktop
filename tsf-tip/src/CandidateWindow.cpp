@@ -137,11 +137,11 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
   } else {
     self = reinterpret_cast<CandidateWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
   }
-  if (self) return self->HandleMessage(msg, wParam, lParam);
+  if (self) return self->HandleMessage(hwnd, msg, wParam, lParam);
   return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-LRESULT CandidateWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CandidateWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
   switch (msg) {
     case WM_MOUSEACTIVATE:
       return MA_NOACTIVATE;
@@ -194,7 +194,10 @@ LRESULT CandidateWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
       return 0;
 
     default:
-      return DefWindowProcW(hwnd_, msg, wParam, lParam);
+      // Use the hwnd parameter from WndProc, not the hwnd_ member: after
+      // WM_DESTROY sets hwnd_ to nullptr, trailing messages (e.g. WM_NCDESTROY)
+      // would otherwise forward with a null handle.
+      return DefWindowProcW(hwnd, msg, wParam, lParam);
   }
 }
 

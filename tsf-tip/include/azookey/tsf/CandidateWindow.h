@@ -49,7 +49,10 @@ class CandidateWindow {
 
   static ATOM RegisterWindowClass();
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-  LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
+  // hwnd is the HWND from the WndProc delivery (authoritative; hwnd_ may be
+  // null after WM_DESTROY, but trailing messages like WM_NCDESTROY still need
+  // a valid handle for DefWindowProcW).
+  LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
   void Repaint() const;
 };
 
