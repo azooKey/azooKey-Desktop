@@ -92,6 +92,9 @@ class TextService final : public ITfTextInputProcessorEx,
   std::string ipc_pending_reading_;
   uint64_t ipc_pending_id_{0};
   bool ipc_has_request_{false};
+  // ID of the QueryCandidates currently sent but not yet received (0 = none).
+  // Protected by ipc_mtx_; written by the worker thread, read by TIP thread.
+  uint64_t ipc_inflight_id_{0};
 
   // Fire-and-forget IPC send queue: CommitObservation, Cancel (M6, M10).
   struct IpcSendItem {

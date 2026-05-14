@@ -369,16 +369,26 @@ void TextService::CommitSelected(ITfContext* context) {
   candidate_window_.Hide();
   selected_candidate_idx_ = 0;
 
-  // M10: cancel any outstanding QueryCandidates so the host can abort early.
+  // M10: cancel queued AND in-flight QC so the host can abort early.
+  // Also bump ipc_pending_id_ so any response already en-route fails the
+  // staleness check (req_id == ipc_pending_id_) even if no new request is
+  // queued after this commit.
   {
     std::lock_guard<std::mutex> lk(ipc_mtx_);
+    bool need_notify = false;
     if (ipc_has_request_) {
-      const uint64_t old_id = ipc_pending_id_;
-      ipc_has_request_ = false;
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({old_id}), false});
-      ipc_cv_.notify_one();
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false});
+      ipc_has_request_ = false;
+      need_notify = true;
     }
+    if (ipc_inflight_id_ != 0) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false});
+      need_notify = true;
+    }
+    ++ipc_pending_id_;
+    if (need_notify) ipc_cv_.notify_one();
   }
 
   commit_surface_ = chosen.surface.empty() ? preedit_kana_ : chosen.surface;
@@ -408,16 +418,24 @@ void TextService::CommitPreeditAsIs(ITfContext* context) {
     candidates_.clear();
   }
 
-  // M10: cancel any outstanding QueryCandidates.
+  // M10: cancel queued AND in-flight QC; bump pending_id to invalidate
+  // any response already en-route (mirrors CommitSelected logic).
   {
     std::lock_guard<std::mutex> lk(ipc_mtx_);
+    bool need_notify = false;
     if (ipc_has_request_) {
-      const uint64_t old_id = ipc_pending_id_;
-      ipc_has_request_ = false;
       ipc_send_queue_.push_back(
-          {ipc::MessageType::Cancel, ipc::BuildCancel({old_id}), false});
-      ipc_cv_.notify_one();
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false});
+      ipc_has_request_ = false;
+      need_notify = true;
     }
+    if (ipc_inflight_id_ != 0) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false});
+      need_notify = true;
+    }
+    ++ipc_pending_id_;
+    if (need_notify) ipc_cv_.notify_one();
   }
 
   commit_surface_ = preedit_kana_;
@@ -539,9 +557,25 @@ void TextService::IpcWorkerThread() {
     qenv.type = MessageType::QueryCandidates;
     qenv.payload_json = BuildQueryCandidatesRequest(qreq);
 
-    if (!ipc_client_.Send(qenv)) { DebugLog("IPC: QueryCandidates send failed"); break; }
+    // Mark the request as in-flight so CommitSelected can cancel it even
+    // after ipc_has_request_ has been cleared by this thread.
+    {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = req_id;
+    }
+
+    if (!ipc_client_.Send(qenv)) {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = 0;
+      DebugLog("IPC: QueryCandidates send failed");
+      break;
+    }
 
     auto qres = ipc_client_.Receive();
+    {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = 0;
+    }
     if (!qres) {
       if (!ipc_stop_.load()) DebugLog("IPC: QueryCandidates receive failed");
       break;
@@ -553,11 +587,15 @@ void TextService::IpcWorkerThread() {
       continue;
     }
 
-    // M10: discard stale response — a newer request is already pending.
+    // M10: discard stale responses.
+    // Conditions for freshness:
+    //   1. No newer QC is already queued (ipc_has_request_ false).
+    //   2. ipc_pending_id_ still equals req_id — no commit/clear bumped it
+    //      while this response was in-transit.
     bool is_fresh = false;
     {
       std::lock_guard<std::mutex> lock(ipc_mtx_);
-      is_fresh = !ipc_has_request_;
+      is_fresh = !ipc_has_request_ && (req_id == ipc_pending_id_);
     }
 
     if (is_fresh) {
