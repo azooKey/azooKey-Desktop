@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   windows-build:
     runs-on: windows-latest
@@ -59,6 +63,14 @@ jobs:
             $body | Set-Content -Path pr_comment.md
             gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md --repo ${{ github.repository }}
           }
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test_report.md
+          if-no-files-found: ignore
 
       - name: Fail if tests failed
         if: steps.run_tests.outputs.tests_failed == 'true'
