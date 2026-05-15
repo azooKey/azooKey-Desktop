@@ -28,22 +28,38 @@ jobs:
         shell: pwsh
         run: |
           $failed = $false
+          $report = @()
           $tests = Get-ChildItem -Path build -Recurse -Filter "*_tests.exe"
           foreach ($t in $tests) {
             Write-Host "=== Running $($t.Name) ==="
-            $out = & $t.FullName 2>&1
+            $out = & $t.FullName 2>&1 | Out-String
             $ec = $LASTEXITCODE
             Write-Host $out
             if ($ec -ne 0) {
-              $msg = "$($t.Name) FAILED (exit $ec): $out"
-              Write-Host "::error::$msg"
+              $report += "### FAIL: $($t.Name) (exit $ec)`n``````\n$out`n``````"
+              Write-Host "::error::$($t.Name) FAILED (exit $ec)"
               $failed = $true
             } else {
+              $report += "PASS: $($t.Name)"
               Write-Host "::notice::$($t.Name) passed"
             }
           }
-          if ($failed) { exit 1 }
+          $reportText = $report -join "`n`n"
+          Set-Content -Path test_report.md -Value $reportText
+          if ($failed) { "tests_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
+
+      - name: Post test results to PR
+        if: always() && github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (Test-Path test_report.md) {
+            $body = "## Windows test results (run $env:GITHUB_RUN_ID)`n`n" + (Get-Content test_report.md -Raw)
+            $body | Set-Content -Path pr_comment.md
+            gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md --repo ${{ github.repository }}
+          }
 
       - name: Fail if tests failed
-        if: steps.run_tests.outcome == 'failure'
+        if: steps.run_tests.outputs.tests_failed == 'true'
         run: exit 1
