@@ -67,7 +67,7 @@ jobs:
           if ($failed) { "tests_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
 
       - name: Post diagnostic comment to PR
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         uses: actions/github-script@v7
         with:
           script: |
