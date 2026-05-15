@@ -31,8 +31,9 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          Set-Content -Path test_report.md -Value "Windows test run started"
           $failed = $false
-          $report = @()
+          $lines = New-Object System.Collections.ArrayList
           $tests = Get-ChildItem -Path build -Recurse -Filter "*_tests.exe"
           foreach ($t in $tests) {
             Write-Host "=== Running $($t.Name) ==="
@@ -40,16 +41,19 @@ jobs:
             $ec = $LASTEXITCODE
             Write-Host $out
             if ($ec -ne 0) {
-              $report += "### FAIL: $($t.Name) (exit $ec)`n``````\n$out`n``````"
+              [void]$lines.Add("FAIL: $($t.Name) exit=$ec")
+              [void]$lines.Add("--- output ---")
+              [void]$lines.Add($out)
+              [void]$lines.Add("--- end ---")
               Write-Host "::error::$($t.Name) FAILED (exit $ec)"
               $failed = $true
             } else {
-              $report += "PASS: $($t.Name)"
+              [void]$lines.Add("PASS: $($t.Name)")
               Write-Host "::notice::$($t.Name) passed"
             }
           }
-          $reportText = $report -join "`n`n"
-          Set-Content -Path test_report.md -Value $reportText
+          $lines -join "`r`n" | Set-Content -Path test_report.md
+          Get-Content test_report.md
           if ($failed) { "tests_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
 
       - name: Post test results to PR
