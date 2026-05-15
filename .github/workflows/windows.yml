@@ -54,15 +54,22 @@ jobs:
 
       - name: Post test results to PR
         if: always() && github.event_name == 'pull_request'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if (Test-Path test_report.md) {
-            $body = "## Windows test results (run $env:GITHUB_RUN_ID)`n`n" + (Get-Content test_report.md -Raw)
-            $body | Set-Content -Path pr_comment.md
-            gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md --repo ${{ github.repository }}
-          }
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('test_report.md')) {
+              core.warning('test_report.md not found');
+              return;
+            }
+            const report = fs.readFileSync('test_report.md', 'utf8');
+            const body = `## Windows test results (run ${context.runId})\n\n${report}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
 
       - name: Upload test report artifact
         if: always()
