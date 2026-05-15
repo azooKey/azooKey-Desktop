@@ -17,6 +17,8 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
 }
 
 extern "C" STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
+  if (!ppv) return E_INVALIDARG;
+  *ppv = nullptr;
   if (rclsid != azookey::tsf::kTextServiceClsid) return CLASS_E_CLASSNOTAVAILABLE;
   auto* factory = new azookey::tsf::TextServiceFactory();
   const auto hr = factory->QueryInterface(riid, ppv);
@@ -39,6 +41,20 @@ static bool RegSetSz(HKEY root, const wchar_t* subkey, const wchar_t* name,
   RegCloseKey(hkey);
   return st == ERROR_SUCCESS;
 }
+
+class ScopedComInit {
+ public:
+  ScopedComInit() : hr_(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+  ~ScopedComInit() {
+    if (hr_ == S_OK || hr_ == S_FALSE) CoUninitialize();
+  }
+
+  HRESULT hr() const { return hr_; }
+  bool ok() const { return SUCCEEDED(hr_) || hr_ == RPC_E_CHANGED_MODE; }
+
+ private:
+  HRESULT hr_;
+};
 
 extern "C" STDAPI DllRegisterServer() {
   if (!g_hmod) return E_UNEXPECTED;
@@ -71,17 +87,21 @@ extern "C" STDAPI DllRegisterServer() {
     return SELFREG_E_CLASS;
 
   // Register the TIP as a display-attribute provider so TSF can resolve
-  // ITfDisplayAttributeProvider queries for kInputAttributeGuid.
+  // ITfDisplayAttributeProvider queries for kInputAttributeGuid. This can fail
+  // on user-scope installs, so keep the COM/Profile registration usable.
+  ScopedComInit com;
+  if (!com.ok()) return S_OK;
+
   ITfCategoryMgr* pCatMgr = nullptr;
   HRESULT cat_hr = CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                     IID_ITfCategoryMgr,
                                     reinterpret_cast<void**>(&pCatMgr));
-  if (FAILED(cat_hr) || !pCatMgr) return SELFREG_E_CLASS;
-  cat_hr = pCatMgr->RegisterCategory(azookey::tsf::kTextServiceClsid,
-                                     GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-                                     azookey::tsf::kTextServiceClsid);
-  pCatMgr->Release();
-  if (FAILED(cat_hr)) return SELFREG_E_CLASS;
+  if (SUCCEEDED(cat_hr) && pCatMgr) {
+    pCatMgr->RegisterCategory(azookey::tsf::kTextServiceClsid,
+                              GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                              azookey::tsf::kTextServiceClsid);
+    pCatMgr->Release();
+  }
 
   return S_OK;
 }
@@ -93,6 +113,9 @@ extern "C" STDAPI DllUnregisterServer() {
 
   // Delete the entire CLSID subtree; SHDeleteKey handles non-existent keys gracefully.
   SHDeleteKeyW(HKEY_CURRENT_USER, clsid_key.c_str());
+
+  ScopedComInit com;
+  if (!com.ok()) return S_OK;
 
   // Remove display-attribute provider category registration.
   ITfCategoryMgr* pCatMgr = nullptr;
