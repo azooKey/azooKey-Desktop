@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <stdexcept>
 #include <optional>
 #include <string>
@@ -18,6 +19,7 @@ int main() {
 #ifndef _WIN32
   return 0;
 #else
+  try {
   const std::string pipe_name =
       "\\\\.\\pipe\\azookey-ipc-test-" + std::to_string(GetCurrentProcessId());
 
@@ -100,5 +102,9 @@ int main() {
   client.Disconnect();
   server.Stop();
   return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 #endif
 }

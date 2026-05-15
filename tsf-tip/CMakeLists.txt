@@ -7,5 +7,5 @@ add_library(azookey_tsf_tip SHARED
 )
 
 target_include_directories(azookey_tsf_tip PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(azookey_tsf_tip PRIVATE azookey_core azookey_ipc ole32 uuid shlwapi msctf)
-target_compile_definitions(azookey_tsf_tip PRIVATE UNICODE _UNICODE)
+target_link_libraries(azookey_tsf_tip PRIVATE azookey_core azookey_ipc ole32 uuid shlwapi)
+target_compile_definitions(azookey_tsf_tip PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)

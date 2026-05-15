@@ -21,8 +21,8 @@ class InputDisplayAttributeInfo final : public ITfDisplayAttributeInfo {
 
   STDMETHODIMP GetGUID(GUID* pguid) override;
   STDMETHODIMP GetDescription(BSTR* pbstrDesc) override;
-  STDMETHODIMP GetDisplayAttribute(TF_DISPLAYATTRIBUTE* pda) override;
-  STDMETHODIMP SetDisplayAttribute(const TF_DISPLAYATTRIBUTE* pda) override;
+  STDMETHODIMP GetAttributeInfo(TF_DISPLAYATTRIBUTE* pda) override;
+  STDMETHODIMP SetAttributeInfo(const TF_DISPLAYATTRIBUTE* pda) override;
   STDMETHODIMP Reset() override;
 
  private:

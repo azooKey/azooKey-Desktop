@@ -1,0 +1,118 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        id: configure
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug 2>&1 | Tee-Object -FilePath configure.log
+          "configure_ec=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cmake --build build 2>&1 | Tee-Object -FilePath build.log
+          "build_ec=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Run each test binary directly
+        id: run_tests
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Set-Content -Path test_report.md -Value "Windows test run started"
+          $failed = $false
+          $lines = New-Object System.Collections.ArrayList
+          $tests = Get-ChildItem -Path build -Recurse -Filter "*_tests.exe"
+          foreach ($t in $tests) {
+            Write-Host "=== Running $($t.Name) ==="
+            $out = & $t.FullName 2>&1 | Out-String
+            $ec = $LASTEXITCODE
+            Write-Host $out
+            if ($ec -ne 0) {
+              [void]$lines.Add("FAIL: $($t.Name) exit=$ec")
+              [void]$lines.Add("--- output ---")
+              [void]$lines.Add($out)
+              [void]$lines.Add("--- end ---")
+              Write-Host "::error::$($t.Name) FAILED (exit $ec)"
+              $failed = $true
+            } else {
+              [void]$lines.Add("PASS: $($t.Name)")
+              Write-Host "::notice::$($t.Name) passed"
+            }
+          }
+          $lines -join "`r`n" | Set-Content -Path test_report.md
+          Get-Content test_report.md
+          if ($failed) { "tests_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
+
+      - name: Post diagnostic comment to PR
+        if: always() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const readSafe = (p) => fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '(not produced)';
+            const configureLog = readSafe('configure.log');
+            const buildLog = readSafe('build.log');
+            const testReport = readSafe('test_report.md');
+            const truncate = (s, n) => s.length > n ? s.slice(-n) + '\n...[truncated]' : s;
+            const body = [
+              `## Windows CI diagnostic (run ${context.runId})`,
+              '',
+              `### Configure (tail)`,
+              '```',
+              truncate(configureLog, 4000),
+              '```',
+              `### Build (tail)`,
+              '```',
+              truncate(buildLog, 6000),
+              '```',
+              `### Tests`,
+              '```',
+              truncate(testReport, 6000),
+              '```',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test_report.md
+          if-no-files-found: ignore
+
+      - name: Fail if any step failed
+        shell: pwsh
+        run: |
+          $cfg = '${{ steps.configure.outputs.configure_ec }}'
+          $bld = '${{ steps.build.outputs.build_ec }}'
+          $tst = '${{ steps.run_tests.outputs.tests_failed }}'
+          Write-Host "configure_ec=$cfg build_ec=$bld tests_failed=$tst"
+          if ($cfg -ne '0' -or $bld -ne '0' -or $tst -eq 'true') { exit 1 }

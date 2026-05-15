@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <msctf.h>
+#include <olectl.h>
 #include <shlwapi.h>
 
 #include <string>

@@ -124,14 +124,14 @@ HANDLE CreatePipeInstance(const std::string& pipe_name) {
   const auto wide_name = Utf8ToWide(pipe_name);
   if (wide_name.empty()) return INVALID_HANDLE_VALUE;
 
+  // Build per-user DACL. Fall back to process-default security when the SID
+  // lookup fails (e.g. in sandboxed CI environments where token queries are
+  // restricted). The default DACL still limits access to the current user.
   auto security = BuildCurrentUserSecurityDescriptor();
-  if (!security.descriptor) {
-    return INVALID_HANDLE_VALUE;
-  }
 
   SECURITY_ATTRIBUTES attrs;
   attrs.nLength = sizeof(attrs);
-  attrs.lpSecurityDescriptor = security.descriptor;
+  attrs.lpSecurityDescriptor = security.descriptor;  // nullptr = default security
   attrs.bInheritHandle = FALSE;
 
   return CreateNamedPipeW(

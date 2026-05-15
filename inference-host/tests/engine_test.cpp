@@ -1,5 +1,7 @@
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -58,7 +60,9 @@ static void TestUserDictionaryInjection() {
   azookey::learning::LearningStore store(lpath);
   auto engine = MakeEngine(store);
 
-  azookey::learning::UserDictionary dict("/tmp/azookey_host_engine_user.json");
+  const std::string udict_path =
+      (std::filesystem::temp_directory_path() / "azookey_host_engine_user.json").string();
+  azookey::learning::UserDictionary dict(udict_path);
   azookey::learning::UserWord w;
   w.word = "azooKey";
   w.ruby = "あずきい";
@@ -113,9 +117,14 @@ static void TestLegacyOverloadStillWorks() {
 }
 
 int main() {
-  TestQueryWithLearningBoost();
-  TestUserDictionaryInjection();
-  TestCancelEarlyReturn();
-  TestLegacyOverloadStillWorks();
-  return 0;
+  try {
+    TestQueryWithLearningBoost();
+    TestUserDictionaryInjection();
+    TestCancelEarlyReturn();
+    TestLegacyOverloadStillWorks();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }
