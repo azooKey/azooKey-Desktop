@@ -35,7 +35,7 @@ STDMETHODIMP InputDisplayAttributeInfo::GetDescription(BSTR* pbstrDesc) {
   return *pbstrDesc ? S_OK : E_OUTOFMEMORY;
 }
 
-STDMETHODIMP InputDisplayAttributeInfo::GetDisplayAttribute(TF_DISPLAYATTRIBUTE* pda) {
+STDMETHODIMP InputDisplayAttributeInfo::GetAttributeInfo(TF_DISPLAYATTRIBUTE* pda) {
   if (!pda) return E_INVALIDARG;
   pda->crText.type = TF_CT_NONE;
   pda->crBk.type = TF_CT_NONE;
@@ -46,7 +46,7 @@ STDMETHODIMP InputDisplayAttributeInfo::GetDisplayAttribute(TF_DISPLAYATTRIBUTE*
   return S_OK;
 }
 
-STDMETHODIMP InputDisplayAttributeInfo::SetDisplayAttribute(const TF_DISPLAYATTRIBUTE* /*pda*/) {
+STDMETHODIMP InputDisplayAttributeInfo::SetAttributeInfo(const TF_DISPLAYATTRIBUTE* /*pda*/) {
   return E_NOTIMPL;
 }
 
