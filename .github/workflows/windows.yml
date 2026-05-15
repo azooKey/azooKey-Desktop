@@ -21,10 +21,20 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+        id: configure
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug 2>&1 | Tee-Object -FilePath configure.log
+          "configure_ec=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Build
-        run: cmake --build build
+        id: build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cmake --build build 2>&1 | Tee-Object -FilePath build.log
+          "build_ec=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Run each test binary directly
         id: run_tests
@@ -56,18 +66,33 @@ jobs:
           Get-Content test_report.md
           if ($failed) { "tests_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
 
-      - name: Post test results to PR
+      - name: Post diagnostic comment to PR
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            if (!fs.existsSync('test_report.md')) {
-              core.warning('test_report.md not found');
-              return;
-            }
-            const report = fs.readFileSync('test_report.md', 'utf8');
-            const body = `## Windows test results (run ${context.runId})\n\n${report}`;
+            const readSafe = (p) => fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '(not produced)';
+            const configureLog = readSafe('configure.log');
+            const buildLog = readSafe('build.log');
+            const testReport = readSafe('test_report.md');
+            const truncate = (s, n) => s.length > n ? s.slice(-n) + '\n...[truncated]' : s;
+            const body = [
+              `## Windows CI diagnostic (run ${context.runId})`,
+              '',
+              `### Configure (tail)`,
+              '```',
+              truncate(configureLog, 4000),
+              '```',
+              `### Build (tail)`,
+              '```',
+              truncate(buildLog, 6000),
+              '```',
+              `### Tests`,
+              '```',
+              truncate(testReport, 6000),
+              '```',
+            ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -83,6 +108,11 @@ jobs:
           path: test_report.md
           if-no-files-found: ignore
 
-      - name: Fail if tests failed
-        if: steps.run_tests.outputs.tests_failed == 'true'
-        run: exit 1
+      - name: Fail if any step failed
+        shell: pwsh
+        run: |
+          $cfg = '${{ steps.configure.outputs.configure_ec }}'
+          $bld = '${{ steps.build.outputs.build_ec }}'
+          $tst = '${{ steps.run_tests.outputs.tests_failed }}'
+          Write-Host "configure_ec=$cfg build_ec=$bld tests_failed=$tst"
+          if ($cfg -ne '0' -or $bld -ne '0' -or $tst -eq 'true') { exit 1 }
