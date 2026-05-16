@@ -5,3 +5,7 @@ add_test(NAME learning_tests COMMAND learning_tests)
 add_executable(user_dictionary_tests user_dictionary_test.cpp)
 target_link_libraries(user_dictionary_tests PRIVATE azookey_learning)
 add_test(NAME user_dictionary_tests COMMAND user_dictionary_tests)
+
+add_executable(reranker_tests reranker_test.cpp)
+target_link_libraries(reranker_tests PRIVATE azookey_learning)
+add_test(NAME reranker_tests COMMAND reranker_tests)

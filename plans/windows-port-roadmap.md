@@ -49,7 +49,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `ime-tsf` への参照がリポジトリ全体に残らない
   - ルート `CMakeLists.txt` のサブディレクトリが現行構成と一致
 
-### M1: IPC ハンドシェイク疎通 ✅ ほぼ完了（仕上げのみ残）
+### M1: IPC ハンドシェイク疎通 ✅ 完了
 
 - **目的**: TIP と Host 間で Named Pipe を確立し `Handshake` + `Ping` が
   往復するところまで到達。
@@ -60,38 +60,34 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - バージョン不一致時の切断ポリシー
 - **現状**:
   - `ipc/src/NamedPipeTransport.cpp` (522行) はサーバ/クライアント・DACL・長さプリフィックスフレーミングまで実装済み。
-  - `ipc/src/Messages.cpp` で全 14 種の `MessageType` を定義。`ipc/src/Payloads.cpp` では 9 種（Handshake/Ping/Health/LoadModel/QueryCandidates/Cancel/CommitObservation/AddUserWord/RemoveUserWord）の build/parse 関数を実装済み。`QueryPredictions`/`QueryCorrections`/`CommitCorrection`/`UpdateUserWord` は enum のみで Payload 未実装。
+  - `ipc/src/Messages.cpp` で全 14 種の `MessageType` を定義。`ipc/src/Payloads.cpp` では 9 種（Handshake/Ping/Health/LoadModel/QueryCandidates/Cancel/CommitObservation/AddUserWord/RemoveUserWord）の build/parse 関数を実装済み。`QueryPredictions`/`QueryCorrections`/`CommitCorrection`/`UpdateUserWord` は enum のみで Payload 未実装（M11/M12 で必要になった時点で追加）。
   - `ipc/tests/named_pipe_transport_test.cpp`, `messages_test.cpp`, `payloads_test.cpp` で Handshake/Ping のラウンドトリップを検証。
   - `inference-host/src/main.cpp` は `--pipe` 起動で `NamedPipeServer` を立ち上げ、`Dispatcher` を MessageHandler として登録済み。
-  - `tsf-tip/src/TextService.cpp` の `StartDebugIpcProbe` (21-81 行) で Activate 後に Handshake/Ping を実機確認できる。
-- **残作業**:
-  - `tsf-tip/` 側 NamedPipeClient のラウンドトリップを CTest に統合し、回帰可能なテストに昇格する。
+  - `tsf-tip/src/TextService.cpp` の `IpcWorkerThread` で Activate 後に Handshake → QueryCandidates ループを実走。
+  - **`ipc/tests/tip_client_ipc_test.cpp` を追加し、TIP-client 経路（Connect→Handshake→Ping→QueryCandidates）を CTest に統合**。
 - **受け入れ条件**:
   - `ipc/tests` に Handshake/Ping のラウンドトリップ単体テストが通る ✅
-  - TIP 側 NamedPipeClient のテストが CTest に統合される
+  - TIP 側 NamedPipeClient のテストが CTest に統合される ✅
 
-### M2: TIP 登録と最小キーボード活性化 ⚠️ 部分実装
+### M2: TIP 登録と最小キーボード活性化 ✅ 完了
 
 - **目的**: Windows 側に TIP として登録され、IME バーから選択でき、
   キーイベントが TIP に届く。
-- **変更対象**: `tsf-tip/src/Registrar` 相当の処理（M0 で削除した旧資産の
-  正しい実装を `tsf-tip/` 側に再構築）、`DllMain.cpp`、レジストリ登録スクリプト。
+- **変更対象**: `tsf-tip/src/DllMain.cpp`、`scripts/register.ps1`、`scripts/unregister.ps1`
 - **実装範囲**:
   - `regsvr32` / インストーラ向けの自己登録ロジック
   - 言語バー有効化
   - `ITfKeyEventSink` 接続
 - **現状**:
-  - `tsf-tip/src/TextService.cpp` の `Activate`/`Deactivate`、`OnTestKeyDown`/`OnKeyDown` まで実装済み。A-Z は `romaji_.Feed()` で蓄積。
-  - `scripts/register.ps1` / `scripts/unregister.ps1` はレジストリ書込みと Host の Run キー登録を実装済み（CLSID `{71EE04FA-B35D-4EB8-87A1-582D44A9A58C}`、Profile GUID `{A8F74D91-8DF3-4DA1-B80B-01F7C73D4A90}`、Lang `0x0411`）。
-  - `tsf-tip/src/DllMain.cpp` の `DllRegisterServer`/`DllUnregisterServer` は `S_OK` を返すスタブのみ。
-- **残作業**:
-  - `DllRegisterServer`/`DllUnregisterServer` を本実装し、`regsvr32` 経由でも整合する自己登録ロジックを書く。
-  - `scripts/register.ps1` のレジストリ書込みエラーハンドリング強化。
+  - `tsf-tip/src/TextService.cpp::Activate/ActivateEx/Deactivate`、`OnTestKeyDown`/`OnKeyDown` まで実装済み。A-Z は `romaji_.Feed()` で蓄積。
+  - `tsf-tip/src/DllMain.cpp::DllRegisterServer/DllUnregisterServer` を本実装。HKCU 配下の CLSID `InprocServer32` + Profile GUID + Lang `0x0411` キー作成、`ITfCategoryMgr::RegisterCategory(GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER)` まで処理。
+  - `scripts/register.ps1` / `scripts/unregister.ps1` は `regsvr32` を呼び出して `DllRegisterServer/DllUnregisterServer` 経由で統一登録、Run キーへの Host EXE 登録は best-effort。`tsf-tip/tests/com_smoke_test.cpp` で DLL の `DllGetClassObject` 経由の `IClassFactory::CreateInstance(IID_IUnknown)` 成功を回帰保護。
 - **受け入れ条件**:
-  - 開発機にビルド成果物をインストールして言語切替で azooKey が選べる
-  - キー押下が `ITfKeyEventSink::OnKeyDown` まで到達することをログで確認（確認済み）
+  - 開発機にビルド成果物をインストールして言語切替で azooKey が選べる ✅
+  - キー押下が `ITfKeyEventSink::OnKeyDown` まで到達することをログで確認 ✅
+  - `regsvr32` 単体で CLSID + Profile が登録されること ✅
 
-### M3: Composition / Preedit 表示 ⚠️ 基盤完成・本体未実装
+### M3: Composition / Preedit 表示 ✅ 完了
 
 - **目的**: ローマ字キー入力が preedit としてアプリ側 (例: メモ帳) に
   表示され、Backspace で削除でき、ESC で破棄できる。
@@ -99,25 +95,23 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 - **実装範囲**:
   - `ITfCompositionSink` / `ITfComposition` の保持
   - `RequestEditSession` 経由でのテキスト挿入・置換
-  - ローマ字 → かな変換テーブル（最低限）
+  - ローマ字 → かな変換テーブル
 - **現状**:
   - `core/src/RomajiKanaConverter.cpp` (119行) でローマ字→かなは完全実装（小書きっ・ん・長音対応）。`tests/romaji_kana_converter_test.cpp` で `konnichiha`→`こんにちは`, `gakkou`→`がっこう` 等を検証済み。
-  - `TextService::EditSession::DoEditSession` (`tsf-tip/src/TextService.cpp:241`) は `// TODO: update composition range + display attribute.` のまま `S_OK` を返す。
-  - `EnumDisplayAttributeInfo` / `GetDisplayAttributeInfo` は `E_NOTIMPL`。
-- **残作業**:
-  - `ITfContext::RequestEditSession` 経由で `ITfComposition` を作成・保持し、`preedit_kana_` を `SetText` でレンジ挿入する本実装。
-  - Display attribute (アンダーライン) の `EnumDisplayAttributeInfo`/`GetDisplayAttributeInfo` 実装。
+  - `TextService::EditSession::DoEditSession` (`tsf-tip/src/TextService.cpp:807-921`) で composition lifecycle を本実装。`ITfContextComposition::StartComposition` → `ITfRange::SetText` → `GUID_PROP_ATTRIBUTE` で `kInputAttributeGuid` プロパティ設定 → caret 位置を `ITfContextView::GetTextExt` でキャッシュ。
+  - `EnumDisplayAttributeInfo` / `GetDisplayAttributeInfo` を `azookey::tsf::EnumDisplayAttributeInfo` / `InputDisplayAttributeInfo` で本実装（アンダーライン）。
+  - `DllRegisterServer` で `GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER` カテゴリ登録済み。
 - **受け入れ条件**:
-  - 「ka」「ki」等の入力で「か」「き」がアンダーライン付きで表示される
-  - ESC で composition がクリアされる
-  - Backspace で 1 文字戻る
+  - 「ka」「ki」等の入力で「か」「き」がアンダーライン付きで表示される ✅
+  - ESC で composition がクリアされる ✅
+  - Backspace で 1 文字戻る ✅
 
-### M4: モック候補生成（Host 経由） ✅ Host 側完成・TIP 配線のみ残
+### M4: モック候補生成（Host 経由） ✅ 完了
 
 - **目的**: Host 側に固定テーブルベースの簡易変換を実装し、
   `QueryCandidates` の往復が成立する。
 - **変更対象**: `inference-host/src/InferenceEngine.cpp`,
-  `inference-host/src/RequestScheduler.cpp`, `ipc/`
+  `inference-host/src/RequestScheduler.cpp`, `tsf-tip/src/TextService.cpp`, `ipc/`
 - **実装範囲**:
   - `QueryCandidates(request_id, kana, context)` の Host 実装
   - 固定テーブル or 簡易 N-best
@@ -128,11 +122,10 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - `inference-host/src/Dispatcher.cpp` (183行) で全 9 ハンドラ実装済み（`Handshake`/`Ping`/`Health`/`LoadModel`/`QueryCandidates`/`Cancel`/`CommitObservation`/`AddUserWord`/`RemoveUserWord`）。
   - `core/src/SimpleConverter.cpp` (164行) で固定辞書テーブル + TSV ロード + prefix fallback + bigram context bonus + `Learn()` を実装。
   - `inference-host/tests/engine_test.cpp` で `QueryWithLearningBoost`, `UserDictionaryInjection`, `CancelEarlyReturn` を検証済み。
-- **残作業**:
-  - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、応答を保持する配線。
+  - **`tsf-tip/src/TextService.cpp::IpcWorkerThread` で `PostQueryCandidates` → `QueryCandidates` Envelope 送信 → 応答を `candidates_` に格納するワーカースレッドを実装**。`ipc/tests/tip_client_ipc_test.cpp` で TIP-client 側のメッセージ構築・パースを CTest に統合。
 - **受け入れ条件**:
-  - `inference-host/tests` で固定 kana → 期待候補リストが返る（確認済み）
-  - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、TIP デバッグログで候補リストが Host から受信されること
+  - `inference-host/tests` で固定 kana → 期待候補リストが返る ✅
+  - TIP 側で `OnKeyDown` から `QueryCandidatesRequest` を `NamedPipeClient` 経由で送信し、TIP デバッグログで候補リストが Host から受信されること ✅
 
 ### M5: 候補 UI 表示 ✅ 実装済み
 
@@ -205,7 +198,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - 未配置時も Host が落ちず、固定テーブル候補が動く
   - GPU/CPU 切替が設定で効く
 
-### M9: ユーザー辞書 ✅ バックエンド完成・UI 接続のみ
+### M9: ユーザー辞書 ⚠️ バックエンド完成・UI 接続のみ
 
 - **目的**: ユーザー登録語の追加・削除がランタイムで反映される。
 - **前提**: M6 完了
@@ -259,7 +252,7 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - クリーンな Win11 VM でインストール → IME 選択 → 入力 → 確定が動く
   - アンインストールでレジストリ・ファイルが残らない
 
-### M12: 配布署名と CI
+### M12: 配布署名と CI ⚠️ build/test のみ完了
 
 - **目的**: 署名済みリリースを GitHub Release から提供。
 - **変更対象**: `.github/workflows/`, `pkg/`
@@ -267,18 +260,63 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
   - Windows ランナーでのビルド + 単体テスト
   - コード署名（証明書手当ては別途）
   - リリースタグ → アーティファクト自動公開
+- **現状**:
+  - `.github/workflows/windows.yml` で windows-latest + msvc-dev-cmd + Ninja で configure → build → 各 `*_tests.exe` を個別実行 → 失敗時 PR コメントと test_report.md artifact をアップ。
+- **残作業**:
+  - signtool ステップ（EV/OV 証明書）。
+  - MSIX/MSI 生成ステップ（M11 で `pkg/` 構成決定後）。
+  - タグ push トリガで MSIX を Release に自動公開。
 - **受け入れ条件**:
-  - main への merge で CI が緑
+  - main への merge で CI が緑 ✅（テストが個別 exe 実行で全件 pass）
   - タグ push で署名済み MSIX/MSI が Release に上がる
 
 ## 横断的な作業
 
 - **テスト**: 各マイルストーンで `*/tests/` 配下に最低 1 件の単体テストを
   追加する。Windows 依存のないものは Linux/macOS CI でも回す。
+  詳細なテストカバレッジとギャップは `## テスト体系` 章を参照。
 - **ログ**: TIP/Host とも構造化ログ（JSON Lines）を `%LOCALAPPDATA%\azooKey\logs\`
-  に出す。
+  に出す。現状は TIP=`OutputDebugStringA`（DebugView）/ Host=stderr。
+  Phase D で JSON Lines ファイルログに切替予定。
 - **ドキュメント**: 各マイルストーン完了時に `docs/windows-tsf-host-architecture.md`
   を実装に合わせて更新する。
+
+## テスト体系（2026-05 現在）
+
+### 現存テスト一覧
+
+| ターゲット | テスト | 主要シナリオ |
+|---|---|---|
+| `core_tests`（`core/tests/`） | `romaji_kana_converter_test.cpp` | `Feed`/`Flush`/`Preview`/`ConvertForCommit`（小書きっ・ん・長音） |
+| `core_tests` | `simple_converter_test.cpp` | 固定辞書、TSV ロード、prefix fallback、bigram コンテキスト、`Correct`、`Learn` |
+| `ipc_tests` | `messages_test.cpp` | Envelope シリアライズ、length-prefix フレーミング、`MessageType` mapping |
+| `ipc_payloads_tests` | `payloads_test.cpp` | Handshake/Ping/Health/LoadModel/QueryCandidates/Cancel/Commit/UserWord の build/parse + malformed reject |
+| `ipc_named_pipe_transport_tests` | `named_pipe_transport_test.cpp` | サーバ起動 → クライアント接続 → Handshake/Ping ラウンドトリップ |
+| `ipc_tip_client_tests` | `tip_client_ipc_test.cpp` | TIP-client 経路（StartDebugIpcProbe 相当）の Handshake → Ping → QueryCandidates |
+| `learning_tests` | `learning_test.cpp` | `LearningStore::Observe/ObserveCorrection/Score`、`Reranker::Apply` 間接テスト |
+| `user_dictionary_tests` | `user_dictionary_test.cpp` | Add/Lookup/Remove、Save/Load round trip、missing file、malformed JSON |
+| `host_engine_tests` | `engine_test.cpp` | 学習ブースト、user-dict 注入、cancel 早期 return、legacy overload |
+| `host_dispatcher_tests` | `dispatcher_test.cpp` | Handshake/Ping/QueryCandidates/Cancel/Commit/AddUserWord/RemoveUserWord/Health の全 8 ハンドラ |
+| `tsf_tip_com_smoke_tests` | `com_smoke_test.cpp` | DLL `DllGetClassObject` → `IClassFactory::CreateInstance(IID_IUnknown)` |
+
+### 既知のテストギャップ（Phase C/D 着手前に解消したい）
+
+短期（Phase C 着手前）:
+1. **`Reranker` 直接テスト** — 現状 `learning_test.cpp` で間接的に検証するのみ。`store_ == nullptr` パス、空 candidates、複数候補の安定ソート順、時間減衰 (`exp(-0.15 * days)`) の境界を直接 assertion 化。
+2. **`RequestScheduler` 直接テスト** — `dispatcher_test.cpp` の `TestQueryCancelBeforeReply`/`TestCancelMessageNoReply` で間接的に検証するのみ。`NextRequestId` 連番、`Cancel` → `IsCanceled` セット意味、`MarkLatest`/`IsLatest` の単一最新ガードを直接テスト。
+3. **`SimpleConverter` 長 reading 性能** — 8 文字以上の reading で prefix fallback 経路の品質を assertion 化。
+
+中期（Phase C / Zenzai 統合と並行）:
+4. **`InferenceEngine` バックエンドフォールバック** — `--backend cuda` 指定だが CUDA 初期化失敗時に `cpu` にフォールバックすることをテスト。
+5. **`InferenceEngine::LoadModel` モック** — gguf 未配置時に false を返し、配置時に true を返すモックバックエンド。
+6. **`NamedPipeServer` 同時接続耐性** — 単一クライアント前提だが、Host を別 process で起動 → クライアント再接続シナリオ（TIP再ロード時の挙動）。
+7. **`tsf-tip` レジストリ smoke** — `DllRegisterServer` 呼び出し後に HKCU `Software\\Classes\\CLSID\\{...}\\Profiles\\0x00000411\\{...}` が存在し、`DllUnregisterServer` 後に消えることをテスト。COM 初期化が必要なので Windows-only。
+
+長期（Phase D / 配布前に必須）:
+8. **MSIX manifest と `DllRegisterServer` の整合** — MSIX `comServer` 宣言が `kTextServiceClsid` と一致し、アンインストール時に CLSID キーが残らない smoke。
+9. **bench smoke** — `bench/azookey_bench.exe` が CTest から呼べて exit=0 と p50 < 50ms（CPU SimpleConverter）を満たすことを CI で。
+10. **`UpdateUserWord` payload** — enum のみで Payload 未実装。設定 UI で必要になった時点で `BuildUpdateUserWordRequest`/`Parse...` を実装し、`payloads_test.cpp` と `dispatcher_test.cpp` に追加。
+11. **`QueryPredictions`/`QueryCorrections`/`CommitCorrection` payload** — `InferenceEngine` には既に対応関数があるので、IPC 経由で叩けるよう Payload と Dispatcher ハンドラを追加。
 
 ## 不確実性
 
@@ -293,11 +331,9 @@ M0 ─→ M1 ─→ M2 ─→ M3 ─→ M4 ─→ M5 ─→ M6 ─→ M11 ─→
 実装実態に基づき、ロードマップの依存図とは別に v1.0 リリースまでの
 進め方を `plans/development-plan.md` にまとめた。要約のみ以下に示す。
 
-- **Phase A**（2〜3 週）: M1 仕上げ + M2 TIP 登録 + M3 Composition + M4 TIP 配線
-  → 実機で打鍵から候補往復までを成立させる。
-- **Phase B**（2〜3 週）: M5 候補 UI + M6 Commit 配線 + M10 Cancel 配線 ✅ 完了
-  → 候補選択・確定・早打ち耐性を完成。
-- **Phase C**（3〜5 週）: M8 Zenzai 実装 + M9 UI 接続。
-- **Phase D**（4〜6 週）: M11 設定 UI + MSIX + M12 CI/署名。
+- **Phase A**（M1〜M4）✅ 完了 — 実機で打鍵から候補往復までを成立。
+- **Phase B**（M5/M6/M10）✅ 完了 — 候補選択・確定・早打ち耐性を完成。
+- **Phase C**（3〜5 週）🚧 着手対象: M8 Zenzai 実装 + M9 UI 接続。
+- **Phase D**（4〜6 週）: M11 設定 UI + MSIX + M12 署名/Release 自動化。
 
 詳細・直近タスク・検証手順は `plans/development-plan.md` を参照。
