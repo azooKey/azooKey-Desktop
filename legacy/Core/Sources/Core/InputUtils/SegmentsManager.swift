@@ -36,12 +36,6 @@ public final class SegmentsManager {
     private var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
-    private var userDictionary: Config.UserDictionary.Value {
-        Config.UserDictionary().value
-    }
-    private var systemUserDictionary: Config.SystemUserDictionary.Value {
-        Config.SystemUserDictionary().value
-    }
     private var zenzaiPersonalizationLevel: Config.ZenzaiPersonalizationLevel.Value {
         Config.ZenzaiPersonalizationLevel().value
     }
@@ -154,8 +148,9 @@ public final class SegmentsManager {
             versionDependentMode: .v3(
                 .init(
                     profile: Config.ZenzaiProfile().value,
-                    leftSideContext: leftSideContext
-                )
+                    leftSideContext: leftSideContext,
+                    enableAlignmentSeparator: true,
+                    )
             )
         )
     }
@@ -185,7 +180,7 @@ public final class SegmentsManager {
             fullWidthRomanCandidate: true,
             learningType: Config.Learning().value.learningType,
             memoryDirectoryURL: self.azooKeyMemoryDir,
-            sharedContainerURL: self.azooKeyMemoryDir,
+            sharedContainerURL: CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
             textReplacer: .withDefaultEmojiDictionary(),
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(leftSideContext: leftSideContext, requestRichCandidates: requestRichCandidates),
@@ -480,17 +475,6 @@ public final class SegmentsManager {
             self.kanaKanjiConverter.stopComposition()
             return
         }
-        // ユーザ辞書情報の更新
-        var userDictionary: [DicdataElement] = userDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("userDictionaryCount: \(userDictionary.count)")
-        let systemUserDictionary: [DicdataElement] = systemUserDictionary.items.map {
-            .init(word: $0.word, ruby: $0.reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -5)
-        }
-        self.appendDebugMessage("systemUserDictionaryCount: \(systemUserDictionary.count)")
-        userDictionary.append(contentsOf: consume systemUserDictionary)
-
         /// 日付・時刻変換を事前に入れておく
         let dynamicShortcuts: [DicdataElement] =
             [
@@ -521,12 +505,11 @@ public final class SegmentsManager {
                 .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
             ]
 
-        self.kanaKanjiConverter.importDynamicUserDictionary(consume userDictionary, shortcuts: dynamicShortcuts)
+        self.kanaKanjiConverter.importDynamicUserDictionary([], shortcuts: dynamicShortcuts)
 
-        let prefixComposingText = self.composingText.prefixToCursorPosition()
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
         let result = self.kanaKanjiConverter.requestCandidates(
-            prefixComposingText,
+            self.composingText,
             options: options(
                 leftSideContext: leftSideContext,
                 requestRichCandidates: requestRichCandidates,
