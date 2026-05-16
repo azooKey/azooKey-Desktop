@@ -31,6 +31,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var promptInputWindow: PromptInputWindow
     var isPromptWindowVisible: Bool = false
 
+    // Shift+英字 で開始する一時英字入力モードの状態
+    // segmentsManager（azooKey の日本語変換エンジン）を介さずに MarkedText を自前管理する。
+    // これにより、'.'などの句読点で自動確定や roman2kana に巻き込まれることを完全に防ぐ。
+    // また突入時に既存の日本語 MarkedText を確定挿入せず prefix として保持し、
+    // ユーザが Enter / Shift単押し で明示的に確定するまで MarkedText を解除しない。
+    private var temporaryEnglishMode: Bool = false
+    private var temporaryEnglishPrefix: String = ""
+    private var temporaryEnglishBuffer: String = ""
+    private var shiftKeyDownPending: Bool = false
+    private var lastModifierFlags: NSEvent.ModifierFlags = []
+
     // ダブルタップ検出用
     private var lastKey: (time: TimeInterval, code: UInt16) = (0, 0)
     private static let doubleTapInterval: TimeInterval = 0.5
@@ -175,6 +186,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesWindow.orderOut(nil)
         self.candidatesViewController.hide()
         self.hidePredictionWindow()
+        self.temporaryEnglishMode = false
+        self.temporaryEnglishPrefix = ""
+        self.temporaryEnglishBuffer = ""
+        self.shiftKeyDownPending = false
+        self.lastModifierFlags = []
     }
 
     @MainActor
@@ -184,11 +200,26 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
         self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
+        self.temporaryEnglishMode = false
+        self.temporaryEnglishPrefix = ""
+        self.temporaryEnglishBuffer = ""
+        self.shiftKeyDownPending = false
+        self.lastModifierFlags = []
         super.deactivateServer(sender)
     }
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
+        // 一時英字モード中なら buffer を確定して日本語復帰
+        if self.temporaryEnglishMode {
+            if let client = sender as? IMKTextInput {
+                self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+            } else {
+                self.temporaryEnglishMode = false
+                self.temporaryEnglishBuffer = ""
+            }
+            return
+        }
         // Unicode入力モードの場合は状態だけリセットして終了
         // マウスクリック等でOSがMarkedTextを確定した場合、IME側からは消せないため
         if case .unicodeInput = self.inputState {
@@ -225,6 +256,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
                 if self.inputLanguage == .japanese {
                     self.inputLanguage = .english
+                    self.temporaryEnglishMode = false
                     self.segmentsManager.stopJapaneseInput()
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()
@@ -233,6 +265,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 // 日本語モードへの切り替え
                 if self.inputLanguage == .english {
                     self.inputLanguage = .japanese
+                    self.temporaryEnglishMode = false
                     let (clientAction, clientActionCallback) = self.inputState.event(
                         eventCore: .init(modifierFlags: [], characters: nil, charactersIgnoringModifiers: nil, keyCode: 0x00),
                         userAction: .かな,
@@ -255,13 +288,35 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu
     }
 
+    /// IMK が `handle(_:client:)` に流すイベント種類を申告する。
+    /// デフォルトは keyDown のみで `flagsChanged`（Shift 単押し検知に必要）は届かないため明示的に追加する。
+    override func recognizedEvents(_ sender: Any!) -> Int {
+        return Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else {
             return false
         }
+        if event.type == .flagsChanged {
+            self.handleFlagsChanged(event, client: client)
+            return false
+        }
         guard event.type == .keyDown else {
             return false
+        }
+        // Shift 単押し検知の取り消し（Shift+他キー の組み合わせは単押し扱いしない）
+        self.shiftKeyDownPending = false
+        self.lastModifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // 一時英字モード中は専用経路で処理（segmentsManager を通さない）
+        if self.temporaryEnglishMode {
+            let consumed = self.handleTemporaryEnglishKeyDown(event, client: client)
+            if consumed {
+                return true
+            }
+            // 一時英字モードを抜けた後は通常処理を続行
         }
 
         // カスタムプロンプトショートカットのチェック
@@ -353,6 +408,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             } else {
                 self.segmentsManager.appendDebugMessage("No selected text, using normal suggest behavior")
             }
+        }
+
+        // Shift+英字 で一時英字入力モードに入れるなら入る（Config が有効かつ条件が揃ったときだけ）
+        // 入れた場合は専用バッファに最初の文字を入れた上で消費済みとして return する。
+        if self.tryEnterTemporaryEnglishMode(event: event, client: client) {
+            return true
         }
 
         let (clientAction, clientActionCallback) = inputState.event(
@@ -569,7 +630,209 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
     }
 
+    // MARK: - 一時英字入力モード
+
+    /// Shift+英字 で一時英字モードに入れるかを判定し、入れる場合は突入させる。
+    /// 突入できる場合は最初の英字を buffer に追加し true を返す。
+    @MainActor private func tryEnterTemporaryEnglishMode(event: NSEvent, client: IMKTextInput) -> Bool {
+        let configValue = Config.ShiftBehavior().value
+        let masked = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let chars = event.charactersIgnoringModifiers ?? ""
+        guard configValue == .startEnglishInput else { return false }
+        guard self.inputLanguage == .japanese else { return false }
+        // 補完・Unicode入力・ダイアクリティック合成中は対象外
+        switch self.inputState {
+        case .none, .composing, .selecting, .previewing:
+            break
+        case .replaceSuggestion, .unicodeInput, .attachDiacritic:
+            return false
+        }
+        guard masked == [.shift] else { return false }
+        // Shift+任意の ASCII 印字可能文字（letter / 数字 / 記号、スペース除く）を突入トリガーにする。
+        // 例: Shift+H → "H"、Shift+2 → "@"、Shift+/ → "?" など。
+        guard chars.unicodeScalars.count == 1,
+              let scalar = chars.unicodeScalars.first,
+              scalar.isASCII,
+              scalar.value > 0x20, scalar.value < 0x7F else { return false }
+        // 既存の MarkedText（segments）があれば prefix として保持（client.insertText は呼ばない）。
+        // segmentsManager 内部は commit して空にしておく。表示は自前 MarkedText で継続。
+        var prefix = ""
+        if !self.segmentsManager.isEmpty {
+            prefix = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+            self.inputState = .none
+        }
+        // 一時英字モード突入。
+        // event.characters は Shift 適用後の文字（大文字）なので、それを採用する。
+        let upperChar = event.characters ?? chars
+        self.temporaryEnglishMode = true
+        self.temporaryEnglishPrefix = prefix
+        self.temporaryEnglishBuffer = upperChar
+        self.segmentsManager.stopJapaneseInput()
+        self.inputLanguage = .english
+        self.renderTemporaryEnglishMarkedText()
+        return true
+    }
+
+    /// 一時英字モード中のキーイベント処理。`true` を返したら handle 側で消費済みとして扱う。
+    @MainActor private func handleTemporaryEnglishKeyDown(_ event: NSEvent, client: IMKTextInput) -> Bool {
+        let masked = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Cmd 修飾子は即座に通常処理へ譲る（confirm せずに fallthrough）
+        if masked.contains(.command) {
+            return false
+        }
+        switch event.keyCode {
+        case 0x24, 0x4C: // Enter / Numpad Enter → 確定して日本語復帰
+            self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+            return true
+        case 53: // Escape → 破棄して日本語復帰
+            self.cancelTemporaryEnglishAndReturnToJapanese(client: client)
+            return true
+        case 51: // Backspace
+            if self.temporaryEnglishBuffer.isEmpty {
+                // 空ならモードを抜けて日本語側に処理を譲る
+                self.cancelTemporaryEnglishAndReturnToJapanese(client: client)
+                return false
+            }
+            self.temporaryEnglishBuffer.removeLast()
+            if self.temporaryEnglishBuffer.isEmpty {
+                self.cancelTemporaryEnglishAndReturnToJapanese(client: client)
+            } else {
+                self.renderTemporaryEnglishMarkedText()
+            }
+            return true
+        case 49: // Space
+            self.temporaryEnglishBuffer.append(" ")
+            self.renderTemporaryEnglishMarkedText()
+            return true
+        case 97, 98, 100, 101, 109: // F6-F10 → 確定して日本語復帰
+            self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+            return true
+        case 123, 124, 125, 126: // 矢印 → 確定して日本語復帰
+            self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+            return false
+        default:
+            break
+        }
+        // 印字可能な文字なら buffer に追加
+        if let text = event.characters, !text.isEmpty, Self.isPrintableASCIIOrLetter(text) {
+            self.temporaryEnglishBuffer.append(text)
+            self.renderTemporaryEnglishMarkedText()
+            return true
+        }
+        // それ以外（Tab、特殊キー等）は確定して譲る
+        self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+        return false
+    }
+
+    private static func isPrintableASCIIOrLetter(_ text: String) -> Bool {
+        let allowed: CharacterSet = {
+            var s = CharacterSet.alphanumerics
+            s.formUnion(.symbols)
+            s.formUnion(.punctuationCharacters)
+            s.insert(charactersIn: " ")
+            return s
+        }()
+        return CharacterSet(text.unicodeScalars).isSubset(of: allowed)
+    }
+
+    @MainActor private func renderTemporaryEnglishMarkedText() {
+        let underline = self.mark(
+            forStyle: kTSMHiliteConvertedText,
+            at: NSRange(location: NSNotFound, length: 0)
+        ) as? [NSAttributedString.Key: Any]
+        let combined = self.temporaryEnglishPrefix + self.temporaryEnglishBuffer
+        let attributed = NSAttributedString(string: combined, attributes: underline)
+        self.client()?.setMarkedText(
+            attributed,
+            selectionRange: NSRange(location: (combined as NSString).length, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+    }
+
+    @MainActor private func cancelTemporaryEnglishAndReturnToJapanese(client: IMKTextInput) {
+        // Esc / バッファ空 backspace で呼ばれる。prefix（既存日本語 MarkedText）は確定挿入し、
+        // 英字 buffer は破棄して MarkedText をクリアする。
+        let prefix = self.temporaryEnglishPrefix
+        self.temporaryEnglishMode = false
+        self.temporaryEnglishPrefix = ""
+        self.temporaryEnglishBuffer = ""
+        // MarkedText をクリア
+        client.setMarkedText(
+            NSAttributedString(string: ""),
+            selectionRange: NSRange(location: 0, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        if !prefix.isEmpty {
+            client.insertText(prefix, replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        self.switchInputLanguage(.japanese, client: client)
+    }
+
+    @MainActor private func handleFlagsChanged(_ event: NSEvent, client: IMKTextInput) {
+        let masked = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let prev = self.lastModifierFlags
+        defer { self.lastModifierFlags = masked }
+
+        // 他の修飾子（Ctrl/Option/Cmd/CapsLock/Function）が立っている間は単押し判定を取り消す
+        let nonShift: NSEvent.ModifierFlags = [.control, .option, .command, .capsLock, .function]
+        if !masked.intersection(nonShift).isEmpty {
+            self.shiftKeyDownPending = false
+            return
+        }
+
+        let wasShift = prev.contains(.shift)
+        let isShift = masked.contains(.shift)
+
+        if !wasShift && isShift && masked == [.shift] {
+            // Shift 押し下げ開始
+            self.shiftKeyDownPending = true
+            return
+        }
+        if wasShift && !isShift {
+            // Shift を離した
+            let wasPending = self.shiftKeyDownPending
+            self.shiftKeyDownPending = false
+            if wasPending && self.temporaryEnglishMode {
+                self.commitTemporaryEnglishAndReturnToJapanese(client: client)
+            }
+        }
+    }
+
+    /// 一時英字モードを解除し、prefix+buffer を segmentsManager に .direct で流し込んで
+    /// 日本語 composing 状態へ移行する。これにより MarkedText は保持されたまま、続きの日本語入力を
+    /// 同じ MarkedText に積み上げて Enter まで確定しない動作が可能になる。
+    /// （Enter / マウスクリック / Esc 等の経路は別途 commitMarkedText が走るのでそのままで OK）
+    @MainActor private func commitTemporaryEnglishAndReturnToJapanese(client: IMKTextInput) {
+        let text = self.temporaryEnglishPrefix + self.temporaryEnglishBuffer
+        self.temporaryEnglishMode = false
+        self.temporaryEnglishPrefix = ""
+        self.temporaryEnglishBuffer = ""
+        // 一旦 IMK の MarkedText をクリア（segments 側で再描画する）
+        client.setMarkedText(
+            NSAttributedString(string: ""),
+            selectionRange: NSRange(location: 0, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        // 日本語入力モードへ
+        self.switchInputLanguage(.japanese, client: client)
+        if !text.isEmpty {
+            // segments に .direct で挿入。これで composingText に prefix+buffer が積まれ、
+            // 続く日本語入力（roman2kana）も同じ composing に追加されていく。
+            self.segmentsManager.insertAtCursorPosition(text, inputStyle: .direct)
+            self.inputState = .composing
+            self.refreshMarkedText()
+            self.refreshCandidateWindow()
+            self.refreshPredictionWindow()
+        }
+    }
+
     func refreshCandidateWindow() {
+        if self.temporaryEnglishMode {
+            self.candidatesWindow.setIsVisible(false)
+            self.candidatesWindow.orderOut(nil)
+            self.candidatesViewController.hide()
+            return
+        }
         switch self.segmentsManager.getCurrentCandidateWindow(inputState: self.inputState) {
         case .selecting(let candidates, let selectionIndex):
             var rect: NSRect = .zero
@@ -601,6 +864,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     func refreshPredictionWindow() {
+        if self.temporaryEnglishMode {
+            self.hidePredictionWindow()
+            return
+        }
         guard self.inputState == .composing else {
             self.hidePredictionWindow()
             return

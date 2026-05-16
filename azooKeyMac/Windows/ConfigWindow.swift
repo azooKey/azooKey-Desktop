@@ -23,6 +23,7 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var shiftBehavior = Config.ShiftBehavior()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -480,6 +481,10 @@ struct ConfigWindow: View {
                     Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
                     Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
                     Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
+                }
+                Picker("Shiftキーの挙動", selection: $shiftBehavior) {
+                    Text("デフォルト").tag(Config.ShiftBehavior.Value.`default`)
+                    Text("英語入力を開始").tag(Config.ShiftBehavior.Value.startEnglishInput)
                 }
             } header: {
                 Label("入力オプション", systemImage: "character.cursor.ibeam")

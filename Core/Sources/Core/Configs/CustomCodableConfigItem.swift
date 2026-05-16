@@ -157,6 +157,20 @@ extension Config {
 }
 
 extension Config {
+    /// Shiftキー押下時の挙動
+    public struct ShiftBehavior: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
+            case `default`
+            case startEnglishInput
+        }
+
+        public init() {}
+        public static let `default`: Value = .`default`
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.shift_behavior"
+    }
+}
+
+extension Config {
     public struct InputStyle: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case `default`
