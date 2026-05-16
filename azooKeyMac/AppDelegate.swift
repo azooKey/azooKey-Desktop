@@ -45,7 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 for: .applicationSupportDirectory,
                 in: .userDomainMask
             ).first!
-                .appendingPathComponent("azooKey", isDirectory: true)
+            .appendingPathComponent("azooKey", isDirectory: true)
         }
         return applicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
     }

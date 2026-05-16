@@ -148,8 +148,9 @@ public final class SegmentsManager {
             versionDependentMode: .v3(
                 .init(
                     profile: Config.ZenzaiProfile().value,
-                    leftSideContext: leftSideContext
-                )
+                    leftSideContext: leftSideContext,
+                    enableAlignmentSeparator: true,
+                    )
             )
         )
     }
@@ -506,10 +507,9 @@ public final class SegmentsManager {
 
         self.kanaKanjiConverter.importDynamicUserDictionary([], shortcuts: dynamicShortcuts)
 
-        let prefixComposingText = self.composingText.prefixToCursorPosition()
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: 30)
         let result = self.kanaKanjiConverter.requestCandidates(
-            prefixComposingText,
+            self.composingText,
             options: options(
                 leftSideContext: leftSideContext,
                 requestRichCandidates: requestRichCandidates,
