@@ -51,6 +51,9 @@ GitHub Sponsorsをご利用ください。
 * LLMによる「いい感じ変換」機能
 * ライブ変換
 * AZIKのネイティブサポート
+* Slack風ショートネーム絵文字入力（日本語入力中に `：` を打ち、`：smile` のように英字でインクリメンタル検索して絵文字を確定）
+  * ON/OFFと起動トリガー文字は「設定 > カスタマイズ > 絵文字入力」で変更可能
+  * 変換途中でトリガーを打っても、composingテキストを保持したまま絵文字を挿入できる
 
 
 ## 開発ガイド
@@ -148,6 +151,10 @@ Thanks to authors!!
 * https://www.logcg.com/en/archives/2078.html
 * https://stackoverflow.com/questions/27813151/how-to-develop-a-simple-input-method-for-mac-os-x-in-swift
 * https://mzp.booth.pm/items/809262
+
+## Third-Party Data
+
+* 絵文字入力機能のショートネーム/絵文字対応表として、[iamcal/emoji-data](https://github.com/iamcal/emoji-data)（MIT License）の `emoji.json` をバンドルしています。
 
 ## Acknowledgement
 本プロジェクトは情報処理推進機構(IPA)による[2024年度未踏IT人材発掘・育成事業](https://www.ipa.go.jp/jinzai/mitou/it/2024/koubokekka.html)の支援を受けて開発を行いました。

@@ -95,11 +95,12 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
-        let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
+        // maxContentWidth には candidate.text + annotation実幅 + 8 が含まれている
+        // (BaseCandidateViewController.resizeWindowToFitContent 参照)
         if self.showCandidateIndex {
-            return maxContentWidth + 48 + (hasAnnotation ? 56 : 0)
+            return maxContentWidth + 48
         } else {
-            return maxContentWidth + 20 + (hasAnnotation ? 56 : 0)
+            return maxContentWidth + 20
         }
     }
 }

@@ -42,6 +42,9 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ],
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: [.interoperabilityMode(.Cxx)],
             plugins: [
                 .plugin(name: "GitInfoPlugin")
