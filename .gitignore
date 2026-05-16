@@ -7,9 +7,10 @@ xcuserdata/
 *.xccheckout
 *.xcscmblueprint
 build/
-.vs/
+build_local/
 Package.resolved
 DerivedData/
+.vs/
 *.moved-aside
 *.pbxuser
 *.mode1v3

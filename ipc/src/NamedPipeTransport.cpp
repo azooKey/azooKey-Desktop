@@ -1,21 +1,22 @@
 #include "azookey/ipc/NamedPipeTransport.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <future>
-#include <limits>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
+
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <sddl.h>
+
 #endif
 
 namespace azookey::ipc {
@@ -25,188 +26,199 @@ namespace azookey::ipc {
 namespace {
 
 constexpr DWORD kPipeBufferSize = 64 * 1024;
-constexpr size_t kMaxFrameBytes = 4 * 1024 * 1024;
+constexpr uint32_t kMaxFrameSize = 16 * 1024 * 1024;
 
-std::wstring Utf8ToWide(const std::string& input) {
-  if (input.empty()) return std::wstring();
-  const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-                                       input.data(), static_cast<int>(input.size()),
-                                       nullptr, 0);
-  if (size <= 0) return std::wstring();
-  std::wstring output(static_cast<size_t>(size), L'\0');
-  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, input.data(),
-                      static_cast<int>(input.size()), output.data(), size);
-  return output;
+std::wstring Utf8ToWide(const std::string& value) {
+  if (value.empty()) return {};
+  const int size = MultiByteToWideChar(CP_UTF8, 0, value.data(),
+                                       static_cast<int>(value.size()), nullptr, 0);
+  if (size <= 0) return {};
+  std::wstring wide(static_cast<size_t>(size), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                      wide.data(), size);
+  return wide;
 }
 
-std::string WideToUtf8(const std::wstring& input) {
-  if (input.empty()) return std::string();
-  const int size = WideCharToMultiByte(CP_UTF8, 0, input.data(),
-                                       static_cast<int>(input.size()), nullptr, 0,
+std::string WideToUtf8(const std::wstring& value) {
+  if (value.empty()) return {};
+  const int size = WideCharToMultiByte(CP_UTF8, 0, value.data(),
+                                       static_cast<int>(value.size()), nullptr, 0,
                                        nullptr, nullptr);
-  if (size <= 0) return std::string();
-  std::string output(static_cast<size_t>(size), '\0');
-  WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()),
-                      output.data(), size, nullptr, nullptr);
-  return output;
+  if (size <= 0) return {};
+  std::string utf8(static_cast<size_t>(size), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                      utf8.data(), size, nullptr, nullptr);
+  return utf8;
 }
 
-struct HandleGuard {
-  HANDLE handle{INVALID_HANDLE_VALUE};
-
-  ~HandleGuard() {
-    if (handle != INVALID_HANDLE_VALUE && handle != nullptr) {
-      CloseHandle(handle);
-    }
-  }
-
-  HANDLE Release() {
-    HANDLE result = handle;
-    handle = INVALID_HANDLE_VALUE;
-    return result;
-  }
-};
-
-std::optional<std::wstring> CurrentUserSidString() {
-  HandleGuard token;
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token.handle)) {
-    return std::nullopt;
+std::wstring CurrentUserSidString() {
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+    return {};
   }
 
   DWORD size = 0;
-  GetTokenInformation(token.handle, TokenUser, nullptr, 0, &size);
-  if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size == 0) {
-    return std::nullopt;
+  GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+  if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+    CloseHandle(token);
+    return {};
   }
 
-  std::vector<BYTE> buffer(size);
-  if (!GetTokenInformation(token.handle, TokenUser, buffer.data(), size, &size)) {
-    return std::nullopt;
+  std::vector<uint8_t> buffer(size);
+  if (!GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+    CloseHandle(token);
+    return {};
   }
+  CloseHandle(token);
 
-  auto* token_user = reinterpret_cast<TOKEN_USER*>(buffer.data());
+  auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
   LPWSTR sid_text = nullptr;
-  if (!ConvertSidToStringSidW(token_user->User.Sid, &sid_text)) {
-    return std::nullopt;
+  if (!ConvertSidToStringSidW(user->User.Sid, &sid_text)) {
+    return {};
   }
-
   std::wstring result(sid_text);
   LocalFree(sid_text);
   return result;
 }
 
-struct PipeSecurity {
-  SECURITY_ATTRIBUTES attrs{};
+struct SecurityDescriptor {
   PSECURITY_DESCRIPTOR descriptor{nullptr};
 
-  explicit PipeSecurity(PSECURITY_DESCRIPTOR sd) : descriptor(sd) {
-    attrs.nLength = sizeof(attrs);
-    attrs.lpSecurityDescriptor = descriptor;
-    attrs.bInheritHandle = FALSE;
+  SecurityDescriptor() = default;
+  SecurityDescriptor(const SecurityDescriptor&) = delete;
+  SecurityDescriptor& operator=(const SecurityDescriptor&) = delete;
+  SecurityDescriptor(SecurityDescriptor&& other) noexcept : descriptor(other.descriptor) {
+    other.descriptor = nullptr;
+  }
+  SecurityDescriptor& operator=(SecurityDescriptor&& other) noexcept {
+    if (this != &other) {
+      if (descriptor) {
+        LocalFree(descriptor);
+      }
+      descriptor = other.descriptor;
+      other.descriptor = nullptr;
+    }
+    return *this;
   }
 
-  ~PipeSecurity() {
+  ~SecurityDescriptor() {
     if (descriptor) {
       LocalFree(descriptor);
     }
   }
 };
 
-std::unique_ptr<PipeSecurity> BuildPipeSecurity() {
-  auto sid = CurrentUserSidString();
-  if (!sid) return nullptr;
+SecurityDescriptor BuildCurrentUserSecurityDescriptor() {
+  SecurityDescriptor result;
+  const auto sid = CurrentUserSidString();
+  if (sid.empty()) return result;
 
-  const std::wstring sddl = L"D:P(A;;GA;;;" + *sid + L")";
-  PSECURITY_DESCRIPTOR descriptor = nullptr;
-  if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-          sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr)) {
-    return nullptr;
-  }
-  return std::make_unique<PipeSecurity>(descriptor);
+  // Protected DACL: only the current user can connect to the per-user pipe.
+  const std::wstring sddl = L"D:P(A;;GA;;;" + sid + L")";
+  ConvertStringSecurityDescriptorToSecurityDescriptorW(
+      sddl.c_str(), SDDL_REVISION_1, &result.descriptor, nullptr);
+  return result;
 }
 
-HANDLE CreateServerPipe(const std::wstring& pipe_name) {
-  auto security = BuildPipeSecurity();
-  DWORD open_mode = PIPE_ACCESS_DUPLEX;
-  DWORD pipe_mode = PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT;
-#ifdef PIPE_REJECT_REMOTE_CLIENTS
-  pipe_mode |= PIPE_REJECT_REMOTE_CLIENTS;
-#endif
-  return CreateNamedPipeW(pipe_name.c_str(), open_mode, pipe_mode,
-                          PIPE_UNLIMITED_INSTANCES, kPipeBufferSize,
-                          kPipeBufferSize, 0,
-                          security ? &security->attrs : nullptr);
+HANDLE CreatePipeInstance(const std::string& pipe_name) {
+  const auto wide_name = Utf8ToWide(pipe_name);
+  if (wide_name.empty()) return INVALID_HANDLE_VALUE;
+
+  // Build per-user DACL. Fall back to process-default security when the SID
+  // lookup fails (e.g. in sandboxed CI environments where token queries are
+  // restricted). The default DACL still limits access to the current user.
+  auto security = BuildCurrentUserSecurityDescriptor();
+
+  SECURITY_ATTRIBUTES attrs;
+  attrs.nLength = sizeof(attrs);
+  attrs.lpSecurityDescriptor = security.descriptor;  // nullptr = default security
+  attrs.bInheritHandle = FALSE;
+
+  return CreateNamedPipeW(
+      wide_name.c_str(), PIPE_ACCESS_DUPLEX,
+      PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT,
+      PIPE_UNLIMITED_INSTANCES, kPipeBufferSize, kPipeBufferSize, 0, &attrs);
 }
 
-std::optional<Envelope> ReadEnvelopeFromPipe(HANDLE pipe) {
-  std::vector<uint8_t> frame;
-  std::vector<uint8_t> chunk(4096);
-
-  for (;;) {
-    DWORD bytes_read = 0;
-    const BOOL ok = ReadFile(pipe, chunk.data(), static_cast<DWORD>(chunk.size()),
-                             &bytes_read, nullptr);
+bool ReadBytes(HANDLE pipe, uint8_t* data, size_t size) {
+  size_t offset = 0;
+  while (offset < size) {
+    DWORD read = 0;
+    const DWORD chunk = static_cast<DWORD>(
+        std::min<size_t>(size - offset, static_cast<size_t>(kPipeBufferSize)));
+    const BOOL ok = ReadFile(pipe, data + offset, chunk, &read, nullptr);
     if (!ok) {
-      const DWORD error = GetLastError();
-      if (error == ERROR_MORE_DATA) {
-        frame.insert(frame.end(), chunk.begin(), chunk.begin() + bytes_read);
-        if (frame.size() > kMaxFrameBytes) return std::nullopt;
-        continue;
+      const auto err = GetLastError();
+      if (err != ERROR_MORE_DATA || read == 0) {
+        return false;
       }
-      return std::nullopt;
     }
-
-    if (bytes_read == 0) return std::nullopt;
-    frame.insert(frame.end(), chunk.begin(), chunk.begin() + bytes_read);
-    if (frame.size() > kMaxFrameBytes) return std::nullopt;
-    break;
+    if (read == 0) {
+      return false;
+    }
+    offset += read;
   }
-
-  auto json = DecodeLengthPrefixed(frame);
-  if (!json) return std::nullopt;
-  return Deserialize(*json);
+  return true;
 }
 
-bool WriteEnvelopeToPipe(HANDLE pipe, const Envelope& envelope) {
-  const auto frame = EncodeLengthPrefixed(Serialize(envelope));
-  if (frame.empty() || frame.size() > kMaxFrameBytes ||
-      frame.size() > static_cast<size_t>(std::numeric_limits<DWORD>::max())) {
-    return false;
+bool WriteBytes(HANDLE pipe, const uint8_t* data, size_t size) {
+  size_t offset = 0;
+  while (offset < size) {
+    DWORD written = 0;
+    const DWORD chunk = static_cast<DWORD>(
+        std::min<size_t>(size - offset, static_cast<size_t>(kPipeBufferSize)));
+    if (!WriteFile(pipe, data + offset, chunk, &written, nullptr) || written == 0) {
+      return false;
+    }
+    offset += written;
   }
-
-  DWORD bytes_written = 0;
-  const BOOL ok = WriteFile(pipe, frame.data(), static_cast<DWORD>(frame.size()),
-                            &bytes_written, nullptr);
-  return ok && bytes_written == frame.size();
+  FlushFileBuffers(pipe);
+  return true;
 }
 
-struct ServerConnection {
-  std::atomic<HANDLE> pipe{INVALID_HANDLE_VALUE};
-  std::thread thread;
+std::optional<Envelope> ReadEnvelope(HANDLE pipe) {
+  uint8_t header[4]{};
+  if (!ReadBytes(pipe, header, sizeof(header))) {
+    return std::nullopt;
+  }
+
+  const uint32_t size = static_cast<uint32_t>(header[0]) |
+                        (static_cast<uint32_t>(header[1]) << 8) |
+                        (static_cast<uint32_t>(header[2]) << 16) |
+                        (static_cast<uint32_t>(header[3]) << 24);
+  if (size == 0 || size > kMaxFrameSize) {
+    return std::nullopt;
+  }
+
+  std::vector<uint8_t> payload(size);
+  if (!ReadBytes(pipe, payload.data(), payload.size())) {
+    return std::nullopt;
+  }
+
+  const std::string json(payload.begin(), payload.end());
+  return Deserialize(json);
+}
+
+bool WriteEnvelope(HANDLE pipe, const Envelope& envelope) {
+  const auto json = Serialize(envelope);
+  const auto frame = EncodeLengthPrefixed(json);
+  return WriteBytes(pipe, frame.data(), frame.size());
+}
+
+struct ClientState {
+  explicit ClientState(HANDLE handle) : pipe(handle) {}
+
+  std::mutex mutex;
+  HANDLE pipe{INVALID_HANDLE_VALUE};
+  bool closed{false};
 };
 
-void CloseServerConnection(const std::shared_ptr<ServerConnection>& connection) {
-  const HANDLE pipe = connection->pipe.exchange(INVALID_HANDLE_VALUE);
-  if (pipe != INVALID_HANDLE_VALUE && pipe != nullptr) {
-    CancelIoEx(pipe, nullptr);
-    DisconnectNamedPipe(pipe);
-    CloseHandle(pipe);
-  }
-}
-
-void SignalAcceptLoop(const std::wstring& pipe_name) {
-  for (int i = 0; i < 3; ++i) {
-    if (!WaitNamedPipeW(pipe_name.c_str(), 10)) {
-      Sleep(10);
-      continue;
-    }
-    HANDLE pipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
-                              nullptr, OPEN_EXISTING, 0, nullptr);
-    if (pipe != INVALID_HANDLE_VALUE) {
-      CloseHandle(pipe);
-      return;
-    }
-    Sleep(10);
+void CloseClientPipe(const std::shared_ptr<ClientState>& client) {
+  std::lock_guard<std::mutex> lock(client->mutex);
+  if (!client->closed && client->pipe != INVALID_HANDLE_VALUE) {
+    CloseHandle(client->pipe);
+    client->closed = true;
+    client->pipe = INVALID_HANDLE_VALUE;
   }
 }
 
@@ -214,141 +226,177 @@ void SignalAcceptLoop(const std::wstring& pipe_name) {
 
 struct NamedPipeServer::Impl {
   std::atomic<bool> running{false};
-  std::wstring pipe_name;
+  std::string pipe_name;
   MessageHandler handler;
   std::thread accept_thread;
-  std::mutex clients_mutex;
-  std::vector<std::shared_ptr<ServerConnection>> clients;
 
-  void RunAcceptLoop(std::promise<bool> ready) {
-    bool reported = false;
-    auto report = [&](bool ok) {
-      if (!reported) {
-        ready.set_value(ok);
-        reported = true;
-      }
-    };
+  mutable std::mutex mutex;
+  HANDLE listen_pipe{INVALID_HANDLE_VALUE};
+  std::vector<std::shared_ptr<ClientState>> clients;
+  std::vector<std::thread> client_threads;
 
+  void AcceptLoop(HANDLE first_pipe) {
+    HANDLE current = first_pipe;
     while (running.load()) {
-      HANDLE pipe = CreateServerPipe(pipe_name);
-      if (pipe == INVALID_HANDLE_VALUE) {
-        report(false);
+      const BOOL ok = ConnectNamedPipe(current, nullptr);
+      const DWORD err = ok ? ERROR_SUCCESS : GetLastError();
+      const bool connected = ok || err == ERROR_PIPE_CONNECTED;
+
+      if (!connected && (err == ERROR_PIPE_LISTENING || err == ERROR_NO_DATA)) {
+        Sleep(25);
+        continue;
+      }
+
+      {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (listen_pipe == current) {
+          listen_pipe = INVALID_HANDLE_VALUE;
+        }
+      }
+
+      if (!running.load()) {
+        CloseHandle(current);
+        break;
+      }
+
+      if (connected) {
+        DWORD mode = PIPE_READMODE_MESSAGE | PIPE_WAIT;
+        SetNamedPipeHandleState(current, &mode, nullptr, nullptr);
+
+        auto client = std::make_shared<ClientState>(current);
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          clients.push_back(client);
+          client_threads.emplace_back([this, client]() { ClientLoop(client); });
+        }
+      } else {
+        CloseHandle(current);
+      }
+
+      current = CreatePipeInstance(pipe_name);
+      if (current == INVALID_HANDLE_VALUE) {
         running.store(false);
         break;
       }
-      report(true);
 
-      const BOOL connected =
-          ConnectNamedPipe(pipe, nullptr) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
-      if (!connected) {
-        CloseHandle(pipe);
-        continue;
+      {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!running.load()) {
+          CloseHandle(current);
+          break;
+        }
+        listen_pipe = current;
       }
-      if (!running.load()) {
-        DisconnectNamedPipe(pipe);
-        CloseHandle(pipe);
-        break;
-      }
-
-      auto connection = std::make_shared<ServerConnection>();
-      connection->pipe.store(pipe);
-      connection->thread = std::thread([this, connection]() { RunClient(connection); });
-
-      std::lock_guard<std::mutex> lock(clients_mutex);
-      clients.push_back(std::move(connection));
     }
-
-    report(false);
   }
 
-  void RunClient(const std::shared_ptr<ServerConnection>& connection) {
+  void ClientLoop(std::shared_ptr<ClientState> client) {
     while (running.load()) {
-      const HANDLE pipe = connection->pipe.load();
-      if (pipe == INVALID_HANDLE_VALUE || pipe == nullptr) break;
+      HANDLE pipe = INVALID_HANDLE_VALUE;
+      {
+        std::lock_guard<std::mutex> lock(client->mutex);
+        if (client->closed) break;
+        pipe = client->pipe;
+      }
 
-      auto request = ReadEnvelopeFromPipe(pipe);
+      auto request = ReadEnvelope(pipe);
       if (!request) break;
 
       std::optional<Envelope> response;
       try {
-        response = handler(*request);
+        response = handler ? handler(*request) : std::nullopt;
       } catch (...) {
         break;
       }
 
-      if (response) {
-        const HANDLE current_pipe = connection->pipe.load();
-        if (current_pipe == INVALID_HANDLE_VALUE || current_pipe == nullptr ||
-            !WriteEnvelopeToPipe(current_pipe, *response)) {
-          break;
-        }
+      if (response && !WriteEnvelope(pipe, *response)) {
+        break;
       }
     }
 
-    CloseServerConnection(connection);
+    HANDLE pipe = INVALID_HANDLE_VALUE;
+    {
+      std::lock_guard<std::mutex> lock(client->mutex);
+      pipe = client->pipe;
+    }
+    if (pipe != INVALID_HANDLE_VALUE) {
+      DisconnectNamedPipe(pipe);
+    }
+    CloseClientPipe(client);
   }
 };
 
 struct NamedPipeClient::Impl {
+  std::mutex mutex;
   HANDLE pipe{INVALID_HANDLE_VALUE};
+  bool connected{false};
 };
 
 NamedPipeServer::NamedPipeServer() : impl_(std::make_unique<Impl>()) {}
 NamedPipeServer::~NamedPipeServer() { Stop(); }
 
 bool NamedPipeServer::Start(const std::string& pipe_name, MessageHandler handler) {
-  if (pipe_name.empty() || !handler) return false;
-  if (impl_->running.exchange(true)) return false;
+  if (pipe_name.empty() || !handler) {
+    return false;
+  }
 
-  impl_->pipe_name = Utf8ToWide(pipe_name);
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->running.load()) {
+    return false;
+  }
+
+  HANDLE first_pipe = CreatePipeInstance(pipe_name);
+  if (first_pipe == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+
+  impl_->pipe_name = pipe_name;
   impl_->handler = std::move(handler);
-  if (impl_->pipe_name.empty()) {
-    impl_->running.store(false);
-    return false;
-  }
-
-  std::promise<bool> ready;
-  auto started = ready.get_future();
-  impl_->accept_thread =
-      std::thread([this, ready = std::move(ready)]() mutable {
-        impl_->RunAcceptLoop(std::move(ready));
-      });
-
-  if (!started.get()) {
-    impl_->running.store(false);
-    if (impl_->accept_thread.joinable()) impl_->accept_thread.join();
-    return false;
-  }
+  impl_->listen_pipe = first_pipe;
+  impl_->running.store(true);
+  impl_->accept_thread = std::thread([this, first_pipe]() { impl_->AcceptLoop(first_pipe); });
   return true;
 }
 
 void NamedPipeServer::Stop() {
-  if (!impl_) return;
-
-  const bool was_running = impl_->running.exchange(false);
-  if (was_running) {
-    SignalAcceptLoop(impl_->pipe_name);
+  std::vector<std::shared_ptr<ClientState>> clients;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->running.load() && !impl_->accept_thread.joinable()) {
+      return;
+    }
+    impl_->running.store(false);
+    clients = impl_->clients;
   }
+
+  for (const auto& client : clients) {
+    CloseClientPipe(client);
+  }
+
   if (impl_->accept_thread.joinable()) {
     impl_->accept_thread.join();
   }
 
-  std::vector<std::shared_ptr<ServerConnection>> clients;
+  std::vector<std::thread> threads;
   {
-    std::lock_guard<std::mutex> lock(impl_->clients_mutex);
-    clients.swap(impl_->clients);
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->listen_pipe = INVALID_HANDLE_VALUE;
+    threads.swap(impl_->client_threads);
+    clients = impl_->clients;
+    impl_->clients.clear();
   }
-  for (auto& client : clients) {
-    CloseServerConnection(client);
+
+  for (const auto& client : clients) {
+    CloseClientPipe(client);
   }
-  for (auto& client : clients) {
-    if (client->thread.joinable()) client->thread.join();
+  for (auto& thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
   }
 }
 
-bool NamedPipeServer::IsRunning() const {
-  return impl_ && impl_->running.load();
-}
+bool NamedPipeServer::IsRunning() const { return impl_->running.load(); }
 
 NamedPipeClient::NamedPipeClient() : impl_(std::make_unique<Impl>()) {}
 NamedPipeClient::~NamedPipeClient() { Disconnect(); }
@@ -356,11 +404,12 @@ NamedPipeClient::~NamedPipeClient() { Disconnect(); }
 bool NamedPipeClient::Connect(const std::string& pipe_name, uint32_t timeout_ms) {
   Disconnect();
   const auto wide_name = Utf8ToWide(pipe_name);
-  if (wide_name.empty()) return false;
+  if (wide_name.empty()) {
+    return false;
+  }
 
-  const auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-  for (;;) {
+  const auto start = std::chrono::steady_clock::now();
+  while (true) {
     HANDLE pipe = CreateFileW(wide_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
                               nullptr, OPEN_EXISTING, 0, nullptr);
     if (pipe != INVALID_HANDLE_VALUE) {
@@ -369,22 +418,24 @@ bool NamedPipeClient::Connect(const std::string& pipe_name, uint32_t timeout_ms)
         CloseHandle(pipe);
         return false;
       }
+      std::lock_guard<std::mutex> lock(impl_->mutex);
       impl_->pipe = pipe;
+      impl_->connected = true;
       return true;
     }
 
-    const DWORD error = GetLastError();
-    if (timeout_ms == 0 || std::chrono::steady_clock::now() >= deadline) {
+    const auto err = GetLastError();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+    if (elapsed.count() >= timeout_ms) {
       return false;
     }
 
-    if (error == ERROR_PIPE_BUSY) {
-      const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-          deadline - std::chrono::steady_clock::now());
-      const DWORD wait_ms = static_cast<DWORD>(remaining.count() > 0 ? remaining.count() : 1);
-      WaitNamedPipeW(wide_name.c_str(), wait_ms);
-    } else if (error == ERROR_FILE_NOT_FOUND) {
-      Sleep(25);
+    const auto remaining = static_cast<DWORD>(timeout_ms - elapsed.count());
+    if (err == ERROR_PIPE_BUSY) {
+      WaitNamedPipeW(wide_name.c_str(), remaining);
+    } else if (err == ERROR_FILE_NOT_FOUND) {
+      Sleep(std::min<DWORD>(25, remaining));
     } else {
       return false;
     }
@@ -392,31 +443,78 @@ bool NamedPipeClient::Connect(const std::string& pipe_name, uint32_t timeout_ms)
 }
 
 void NamedPipeClient::Disconnect() {
-  if (!impl_) return;
-  if (impl_->pipe != INVALID_HANDLE_VALUE && impl_->pipe != nullptr) {
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->pipe != INVALID_HANDLE_VALUE) {
     CloseHandle(impl_->pipe);
     impl_->pipe = INVALID_HANDLE_VALUE;
   }
+  impl_->connected = false;
 }
 
 bool NamedPipeClient::IsConnected() const {
-  return impl_ && impl_->pipe != INVALID_HANDLE_VALUE && impl_->pipe != nullptr;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->connected;
 }
 
 bool NamedPipeClient::Send(const Envelope& envelope) {
-  if (!IsConnected()) return false;
-  return WriteEnvelopeToPipe(impl_->pipe, envelope);
+  HANDLE pipe = INVALID_HANDLE_VALUE;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->connected) return false;
+    pipe = impl_->pipe;
+  }
+
+  if (!WriteEnvelope(pipe, envelope)) {
+    Disconnect();
+    return false;
+  }
+  return true;
 }
 
 std::optional<Envelope> NamedPipeClient::Receive() {
-  if (!IsConnected()) return std::nullopt;
-  return ReadEnvelopeFromPipe(impl_->pipe);
+  HANDLE pipe = INVALID_HANDLE_VALUE;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->connected) return std::nullopt;
+    pipe = impl_->pipe;
+  }
+
+  auto envelope = ReadEnvelope(pipe);
+  if (!envelope) {
+    Disconnect();
+  }
+  return envelope;
+}
+
+std::optional<Envelope> NamedPipeClient::ReceiveWithTimeout(uint32_t timeout_ms) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  while (std::chrono::steady_clock::now() < deadline) {
+    HANDLE pipe = INVALID_HANDLE_VALUE;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      if (!impl_->connected) return std::nullopt;
+      pipe = impl_->pipe;
+    }
+    DWORD avail = 0;
+    if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &avail, nullptr)) {
+      Disconnect();
+      return std::nullopt;
+    }
+    if (avail > 0) {
+      return Receive();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  return std::nullopt;
 }
 
 std::string DefaultPipeName() {
-  auto sid = CurrentUserSidString();
-  if (!sid) return "\\\\.\\pipe\\azookey-default";
-  return "\\\\.\\pipe\\azookey-" + WideToUtf8(*sid);
+  const auto sid = CurrentUserSidString();
+  if (sid.empty()) {
+    return "\\\\.\\pipe\\azookey-default";
+  }
+  return "\\\\.\\pipe\\azookey-" + WideToUtf8(sid);
 }
 
 #else  // !_WIN32
@@ -437,6 +535,7 @@ void NamedPipeClient::Disconnect() {}
 bool NamedPipeClient::IsConnected() const { return false; }
 bool NamedPipeClient::Send(const Envelope&) { return false; }
 std::optional<Envelope> NamedPipeClient::Receive() { return std::nullopt; }
+std::optional<Envelope> NamedPipeClient::ReceiveWithTimeout(uint32_t) { return std::nullopt; }
 
 std::string DefaultPipeName() {
   return "/tmp/azookey-namedpipe-unsupported";

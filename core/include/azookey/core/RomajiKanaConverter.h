@@ -9,6 +9,8 @@ class RomajiKanaConverter {
   std::string Feed(char ascii);
   std::string Flush();
   void Reset();
+  bool HasPending() const { return !pending_.empty(); }
+  void PopPending() { if (!pending_.empty()) pending_.pop_back(); }
 
   static std::string Preview(const std::string& ascii);
   static std::string ConvertForCommit(const std::string& ascii);

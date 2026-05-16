@@ -4,7 +4,6 @@
 #include <Windows.h>
 
 #include <stdexcept>
-#include <string>
 
 #include "azookey/tsf/TextServiceFactory.h"
 
@@ -41,6 +40,5 @@ int main() {
   Expect(SUCCEEDED(hr) && service != nullptr, "CreateInstance(IID_IUnknown) failed");
 
   service->Release();
-  FreeLibrary(module);
   return 0;
 }

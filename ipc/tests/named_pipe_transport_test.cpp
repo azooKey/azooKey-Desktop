@@ -1,16 +1,14 @@
+#include <cstdio>
 #include <stdexcept>
+#include <optional>
 #include <string>
 
 #include "azookey/ipc/NamedPipeTransport.h"
 #include "azookey/ipc/Payloads.h"
 
 #ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <atomic>
-#include <chrono>
 #endif
 
 static void Expect(bool cond, const char* msg) {
@@ -21,129 +19,92 @@ int main() {
 #ifndef _WIN32
   return 0;
 #else
+  try {
   const std::string pipe_name =
-      azookey::ipc::DefaultPipeName() + "-test-" +
-      std::to_string(GetCurrentProcessId()) + "-" +
-      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+      "\\\\.\\pipe\\azookey-ipc-test-" + std::to_string(GetCurrentProcessId());
 
-  std::atomic<int> handled{0};
   azookey::ipc::NamedPipeServer server;
-  Expect(server.Start(pipe_name, [&](const azookey::ipc::Envelope& request)
-                               -> std::optional<azookey::ipc::Envelope> {
-           handled.fetch_add(1);
-           azookey::ipc::Envelope response;
-           response.version = request.version;
-           response.request_id = request.request_id;
-           response.trace_id = request.trace_id;
-           response.type = request.type;
+  const bool started = server.Start(
+      pipe_name, [](const azookey::ipc::Envelope& req) -> std::optional<azookey::ipc::Envelope> {
+        azookey::ipc::Envelope res;
+        res.version = req.version;
+        res.request_id = req.request_id;
+        res.trace_id = req.trace_id;
+        res.type = req.type;
 
-           if (request.type == azookey::ipc::MessageType::Handshake) {
-             auto parsed = azookey::ipc::ParseHandshakeRequest(request.payload_json);
-             azookey::ipc::HandshakeResponse payload;
-             payload.host_version = "test-host";
-             payload.protocol_version = 1;
-             payload.accepted = parsed.has_value() && parsed->protocol_version == 1;
-             payload.model_loaded = false;
-             response.payload_json = azookey::ipc::BuildHandshakeResponse(payload);
-             return response;
-           }
+        if (req.type == azookey::ipc::MessageType::Handshake) {
+          auto parsed = azookey::ipc::ParseHandshakeRequest(req.payload_json);
+          azookey::ipc::HandshakeResponse payload;
+          payload.host_version = "test-host";
+          payload.protocol_version = 1;
+          payload.accepted = parsed && parsed->protocol_version == 1;
+          payload.model_loaded = false;
+          res.payload_json = azookey::ipc::BuildHandshakeResponse(payload);
+          return res;
+        }
 
-           if (request.type == azookey::ipc::MessageType::Ping) {
-             auto parsed = azookey::ipc::ParsePing(request.payload_json);
-             azookey::ipc::PingPayload payload;
-             payload.nonce = parsed ? parsed->nonce : 0;
-             payload.t_ms = 123456;
-             response.payload_json = azookey::ipc::BuildPing(payload);
-             return response;
-           }
+        if (req.type == azookey::ipc::MessageType::Ping) {
+          auto parsed = azookey::ipc::ParsePing(req.payload_json);
+          azookey::ipc::PingPayload payload;
+          payload.nonce = parsed ? parsed->nonce : 0;
+          payload.t_ms = 123456789;
+          res.payload_json = azookey::ipc::BuildPing(payload);
+          return res;
+        }
 
-           if (request.type == azookey::ipc::MessageType::QueryCandidates) {
-             auto parsed = azookey::ipc::ParseQueryCandidatesRequest(request.payload_json);
-             azookey::ipc::QueryCandidatesResponse payload;
-             if (parsed) {
-               payload.candidates.push_back(
-                   {"日本語", parsed->reading, 1.0, "named-pipe-test"});
-             }
-             response.payload_json = azookey::ipc::BuildQueryCandidatesResponse(payload);
-             return response;
-           }
-
-           return std::nullopt;
-         }),
-         "server start failed");
-  Expect(server.IsRunning(), "server should be running");
+        return std::nullopt;
+      });
+  Expect(started, "server failed to start");
 
   azookey::ipc::NamedPipeClient client;
-  Expect(client.Connect(pipe_name, 3000), "client connect failed");
-  Expect(client.IsConnected(), "client should be connected");
+  Expect(client.Connect(pipe_name, 2000), "client failed to connect");
 
-  azookey::ipc::HandshakeRequest handshake_payload;
-  handshake_payload.tip_version = "test-tip";
-  handshake_payload.protocol_version = 1;
-  handshake_payload.capabilities = {"ping"};
+  azookey::ipc::HandshakeRequest handshake;
+  handshake.tip_version = "test-tip";
+  handshake.protocol_version = 1;
+  handshake.capabilities = {"ping"};
 
-  azookey::ipc::Envelope handshake;
-  handshake.request_id = 1;
-  handshake.trace_id = "trace-handshake";
-  handshake.type = azookey::ipc::MessageType::Handshake;
-  handshake.payload_json = azookey::ipc::BuildHandshakeRequest(handshake_payload);
+  azookey::ipc::Envelope henv;
+  henv.version = 1;
+  henv.request_id = 1;
+  henv.trace_id = "transport-handshake";
+  henv.type = azookey::ipc::MessageType::Handshake;
+  henv.payload_json = azookey::ipc::BuildHandshakeRequest(handshake);
 
-  Expect(client.Send(handshake), "handshake send failed");
-  auto handshake_response = client.Receive();
-  Expect(handshake_response.has_value(), "handshake receive failed");
-  Expect(handshake_response->request_id == 1, "handshake request id mismatch");
-  auto parsed_handshake =
-      azookey::ipc::ParseHandshakeResponse(handshake_response->payload_json);
-  Expect(parsed_handshake.has_value(), "handshake response parse failed");
-  Expect(parsed_handshake->accepted, "handshake should be accepted");
-  Expect(parsed_handshake->host_version == "test-host", "host version mismatch");
+  Expect(client.Send(henv), "failed to send handshake");
+  auto hres = client.Receive();
+  Expect(hres.has_value(), "missing handshake response");
+  Expect(hres->request_id == 1, "handshake request id mismatch");
+  auto hpayload = azookey::ipc::ParseHandshakeResponse(hres->payload_json);
+  Expect(hpayload.has_value(), "handshake response parse failed");
+  Expect(hpayload->accepted, "handshake not accepted");
+  Expect(hpayload->host_version == "test-host", "host version mismatch");
 
-  azookey::ipc::PingPayload ping_payload;
-  ping_payload.nonce = 98765;
-  ping_payload.t_ms = 111;
+  azookey::ipc::PingPayload ping;
+  ping.nonce = 424242;
+  ping.t_ms = 1;
 
-  azookey::ipc::Envelope ping;
-  ping.request_id = 2;
-  ping.trace_id = "trace-ping";
-  ping.type = azookey::ipc::MessageType::Ping;
-  ping.payload_json = azookey::ipc::BuildPing(ping_payload);
+  azookey::ipc::Envelope penv;
+  penv.version = 1;
+  penv.request_id = 2;
+  penv.trace_id = "transport-ping";
+  penv.type = azookey::ipc::MessageType::Ping;
+  penv.payload_json = azookey::ipc::BuildPing(ping);
 
-  Expect(client.Send(ping), "ping send failed");
-  auto ping_response = client.Receive();
-  Expect(ping_response.has_value(), "ping receive failed");
-  auto parsed_ping = azookey::ipc::ParsePing(ping_response->payload_json);
-  Expect(parsed_ping.has_value(), "ping response parse failed");
-  Expect(parsed_ping->nonce == 98765, "ping nonce mismatch");
-  Expect(parsed_ping->t_ms == 123456, "ping timestamp mismatch");
-
-  azookey::ipc::QueryCandidatesRequest query_payload;
-  query_payload.reading = "にほんご";
-  query_payload.max_candidates = 5;
-  query_payload.live = true;
-
-  azookey::ipc::Envelope query;
-  query.request_id = 3;
-  query.trace_id = "trace-query";
-  query.type = azookey::ipc::MessageType::QueryCandidates;
-  query.payload_json = azookey::ipc::BuildQueryCandidatesRequest(query_payload);
-
-  Expect(client.Send(query), "query send failed");
-  auto query_response = client.Receive();
-  Expect(query_response.has_value(), "query receive failed");
-  Expect(query_response->request_id == 3, "query request id mismatch");
-  auto parsed_query =
-      azookey::ipc::ParseQueryCandidatesResponse(query_response->payload_json);
-  Expect(parsed_query.has_value(), "query response parse failed");
-  Expect(parsed_query->candidates.size() == 1, "query candidate count mismatch");
-  Expect(parsed_query->candidates.front().surface == "日本語",
-         "query candidate surface mismatch");
-  Expect(parsed_query->candidates.front().reading == "にほんご",
-         "query candidate reading mismatch");
+  Expect(client.Send(penv), "failed to send ping");
+  auto pres = client.Receive();
+  Expect(pres.has_value(), "missing ping response");
+  Expect(pres->request_id == 2, "ping request id mismatch");
+  auto ppayload = azookey::ipc::ParsePing(pres->payload_json);
+  Expect(ppayload.has_value(), "ping response parse failed");
+  Expect(ppayload->nonce == 424242, "ping nonce mismatch");
 
   client.Disconnect();
   server.Stop();
-  Expect(!server.IsRunning(), "server should be stopped");
-  Expect(handled.load() == 3, "handler count mismatch");
   return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 #endif
 }

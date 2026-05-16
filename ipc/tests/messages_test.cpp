@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -8,46 +9,51 @@ static void Expect(bool cond, const char* msg) {
 }
 
 int main() {
-  // Envelope round trip preserves request_id, type, trace_id and the parsed
-  // payload subtree.
-  azookey::ipc::Envelope env;
-  env.request_id = 42;
-  env.trace_id = "t1";
-  env.type = azookey::ipc::MessageType::QueryCandidates;
-  env.payload_json = "{\"reading\":\"にほん\",\"max_candidates\":7}";
+  try {
+    // Envelope round trip preserves request_id, type, trace_id and the parsed
+    // payload subtree.
+    azookey::ipc::Envelope env;
+    env.request_id = 42;
+    env.trace_id = "t1";
+    env.type = azookey::ipc::MessageType::QueryCandidates;
+    env.payload_json = "{\"reading\":\"にほん\",\"max_candidates\":7}";
 
-  const auto json = azookey::ipc::Serialize(env);
-  auto decoded = azookey::ipc::Deserialize(json);
-  Expect(decoded.has_value(), "deserialize failed");
-  Expect(decoded->request_id == 42, "request id mismatch");
-  Expect(decoded->trace_id == "t1", "trace id mismatch");
-  Expect(decoded->type == azookey::ipc::MessageType::QueryCandidates, "type mismatch");
-  Expect(decoded->payload_json.find("にほん") != std::string::npos,
-         "payload reading not preserved");
-  Expect(decoded->payload_json.find("max_candidates") != std::string::npos,
-         "payload max_candidates not preserved");
+    const auto json = azookey::ipc::Serialize(env);
+    auto decoded = azookey::ipc::Deserialize(json);
+    Expect(decoded.has_value(), "deserialize failed");
+    Expect(decoded->request_id == 42, "request id mismatch");
+    Expect(decoded->trace_id == "t1", "trace id mismatch");
+    Expect(decoded->type == azookey::ipc::MessageType::QueryCandidates, "type mismatch");
+    Expect(decoded->payload_json.find("にほん") != std::string::npos,
+           "payload reading not preserved");
+    Expect(decoded->payload_json.find("max_candidates") != std::string::npos,
+           "payload max_candidates not preserved");
 
-  // Re-serializing the decoded envelope must remain decodable.
-  const auto rejson = azookey::ipc::Serialize(*decoded);
-  auto redecoded = azookey::ipc::Deserialize(rejson);
-  Expect(redecoded.has_value(), "second deserialize failed");
-  Expect(redecoded->payload_json == decoded->payload_json,
-         "payload not stable across re-serialize");
+    // Re-serializing the decoded envelope must remain decodable.
+    const auto rejson = azookey::ipc::Serialize(*decoded);
+    auto redecoded = azookey::ipc::Deserialize(rejson);
+    Expect(redecoded.has_value(), "second deserialize failed");
+    Expect(redecoded->payload_json == decoded->payload_json,
+           "payload not stable across re-serialize");
 
-  Expect(azookey::ipc::TypeFromString("QueryPredictions") == azookey::ipc::MessageType::QueryPredictions, "query predictions mapping failed");
-  Expect(azookey::ipc::TypeFromString("QueryCorrections") == azookey::ipc::MessageType::QueryCorrections, "query corrections mapping failed");
-  Expect(azookey::ipc::TypeFromString("CommitCorrection") == azookey::ipc::MessageType::CommitCorrection, "commit correction mapping failed");
-  Expect(azookey::ipc::TypeFromString("UpdateUserWord") == azookey::ipc::MessageType::UpdateUserWord, "update user word mapping failed");
-  Expect(azookey::ipc::TypeToString(azookey::ipc::MessageType::QueryPredictions) == "QueryPredictions", "query predictions reverse mapping failed");
+    Expect(azookey::ipc::TypeFromString("QueryPredictions") == azookey::ipc::MessageType::QueryPredictions, "query predictions mapping failed");
+    Expect(azookey::ipc::TypeFromString("QueryCorrections") == azookey::ipc::MessageType::QueryCorrections, "query corrections mapping failed");
+    Expect(azookey::ipc::TypeFromString("CommitCorrection") == azookey::ipc::MessageType::CommitCorrection, "commit correction mapping failed");
+    Expect(azookey::ipc::TypeFromString("UpdateUserWord") == azookey::ipc::MessageType::UpdateUserWord, "update user word mapping failed");
+    Expect(azookey::ipc::TypeToString(azookey::ipc::MessageType::QueryPredictions) == "QueryPredictions", "query predictions reverse mapping failed");
 
-  // Length-prefixed framing round trip.
-  auto lp = azookey::ipc::EncodeLengthPrefixed(json);
-  auto restored = azookey::ipc::DecodeLengthPrefixed(lp);
-  Expect(restored.has_value(), "length-prefix decode failed");
-  Expect(*restored == json, "length-prefix roundtrip failed");
+    // Length-prefixed framing round trip.
+    auto lp = azookey::ipc::EncodeLengthPrefixed(json);
+    auto restored = azookey::ipc::DecodeLengthPrefixed(lp);
+    Expect(restored.has_value(), "length-prefix decode failed");
+    Expect(*restored == json, "length-prefix roundtrip failed");
 
-  // Malformed JSON must return nullopt instead of crashing.
-  Expect(!azookey::ipc::Deserialize("not json").has_value(),
-         "malformed input should fail to deserialize");
-  return 0;
+    // Malformed JSON must return nullopt instead of crashing.
+    Expect(!azookey::ipc::Deserialize("not json").has_value(),
+           "malformed input should fail to deserialize");
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }

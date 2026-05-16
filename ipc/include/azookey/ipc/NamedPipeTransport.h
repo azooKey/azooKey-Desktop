@@ -71,6 +71,11 @@ class NamedPipeClient {
 
   bool Send(const Envelope& envelope);
   std::optional<Envelope> Receive();
+  // Poll for an inbound envelope for up to `timeout_ms` milliseconds.
+  // Returns std::nullopt on timeout (caller should retry) or on pipe error.
+  // Designed for use inside a loop so callers can drain the send queue between
+  // polls without blocking indefinitely while the host processes a long query.
+  std::optional<Envelope> ReceiveWithTimeout(uint32_t timeout_ms);
 
  private:
   struct Impl;

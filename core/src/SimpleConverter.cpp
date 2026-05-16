@@ -9,6 +9,14 @@ namespace azookey::core {
 
 namespace {
 
+void AppendDebugTag(std::string& debug_info, const std::string& tag) {
+  if (debug_info.empty()) {
+    debug_info = tag;
+    return;
+  }
+  debug_info += ";" + tag;
+}
+
 bool IsRejectedInContext(const ConversionContext& context, const std::string& surface) {
   return std::find(context.rejected_surfaces.begin(), context.rejected_surfaces.end(), surface) !=
          context.rejected_surfaces.end();
@@ -79,7 +87,7 @@ std::vector<Candidate> SimpleConverter::Convert(const std::string& kana, const C
         for (const auto& c : c_list) {
           Candidate copy = c;
           copy.score *= 0.5;
-          copy.debug_info = copy.debug_info.empty() ? "prefix" : copy.debug_info + ";prefix";
+          AppendDebugTag(copy.debug_info, "prefix");
           prefix_hits.push_back(std::move(copy));
         }
       }
@@ -101,11 +109,11 @@ std::vector<Candidate> SimpleConverter::Convert(const std::string& kana, const C
   for (auto& c : candidates) {
     if (IsRejectedInContext(context, c.surface)) {
       c.score -= 1.0;
-      c.debug_info += ";ctx-rejected";
+      AppendDebugTag(c.debug_info, "ctx-rejected");
     }
     if (context.preceding_text == "にっぽん" && c.surface == "日本") {
       c.score += 0.15;
-      c.debug_info += ";ctx-bigram";
+      AppendDebugTag(c.debug_info, "ctx-bigram");
     }
   }
 
@@ -118,7 +126,7 @@ std::vector<Candidate> SimpleConverter::Convert(const std::string& kana, const C
 std::vector<Candidate> SimpleConverter::PredictNext(const std::string& kana, const ConversionContext& context) {
   std::vector<Candidate> candidates = Convert(kana, context);
   for (auto& c : candidates) {
-    c.debug_info += ";predict";
+    AppendDebugTag(c.debug_info, "predict");
     c.score *= 0.8;
   }
   return candidates;

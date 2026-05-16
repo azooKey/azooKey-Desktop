@@ -205,13 +205,18 @@ static void TestHealth() {
 }
 
 int main() {
-  TestHandshake();
-  TestPing();
-  TestQueryCandidates();
-  TestQueryCancelBeforeReply();
-  TestCancelMessageNoReply();
-  TestCommitObservation();
-  TestAddRemoveUserWord();
-  TestHealth();
-  return 0;
+  try {
+    TestHandshake();
+    TestPing();
+    TestQueryCandidates();
+    TestQueryCancelBeforeReply();
+    TestCancelMessageNoReply();
+    TestCommitObservation();
+    TestAddRemoveUserWord();
+    TestHealth();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "FAIL: %s\n", e.what());
+    return 1;
+  }
 }

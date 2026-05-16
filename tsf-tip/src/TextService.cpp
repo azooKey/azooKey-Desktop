@@ -1,45 +1,43 @@
 #include "azookey/tsf/TextService.h"
 
-#include <utility>
+#include <chrono>
+#include <optional>
+#include <thread>
 
+#include "azookey/ipc/NamedPipeTransport.h"
 #include "azookey/ipc/Payloads.h"
-
-namespace azookey::tsf {
+#include "azookey/tsf/DisplayAttribute.h"
 
 namespace {
 
-void DebugLog(const wchar_t* message) {
-  OutputDebugStringW(L"azooKey TIP: ");
-  OutputDebugStringW(message);
-  OutputDebugStringW(L"\n");
+constexpr const char* kTipVersion = "0.1.0";
+
+void DebugLog(const std::string& message) {
+#ifdef _DEBUG
+  OutputDebugStringA(("[azooKey TIP] " + message + "\n").c_str());
+#else
+  UNREFERENCED_PARAMETER(message);
+#endif
 }
 
-void DebugLog(const std::wstring& message) {
-  DebugLog(message.c_str());
-}
-
-std::wstring Utf8ToWideString(const std::string& text) {
-  if (text.empty()) return std::wstring();
-  const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-                                         static_cast<int>(text.size()), nullptr, 0);
-  if (length <= 0) return std::wstring();
-
-  std::wstring result(static_cast<size_t>(length), L'\0');
-  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-                      static_cast<int>(text.size()), result.data(), length);
+std::wstring Utf8ToWide(const std::string& utf8) {
+  if (utf8.empty()) return {};
+  const int len = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()),
+                                      nullptr, 0);
+  if (len <= 0) return {};
+  std::wstring result(len, L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()), result.data(), len);
   return result;
-}
-
-void PopLastAscii(std::string* text) {
-  if (!text || text->empty()) return;
-  text->pop_back();
 }
 
 }  // namespace
 
+namespace azookey::tsf {
+
 TextService::TextService() = default;
+
 TextService::~TextService() {
-  Deactivate();
+  StopIpcWorker();
 }
 
 STDMETHODIMP TextService::QueryInterface(REFIID riid, void** ppvObj) {
@@ -75,66 +73,46 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* ptim, TfClientId tid, DWORD d
   UNREFERENCED_PARAMETER(dwFlags);
   thread_mgr_ = ptim;
   client_id_ = tid;
-  if (thread_mgr_) {
-    thread_mgr_->AddRef();
+  if (thread_mgr_) thread_mgr_->AddRef();
 
-    ITfKeystrokeMgr* keystroke_mgr = nullptr;
-    if (SUCCEEDED(thread_mgr_->QueryInterface(IID_ITfKeystrokeMgr,
-                                              reinterpret_cast<void**>(&keystroke_mgr)))) {
-      if (SUCCEEDED(keystroke_mgr->AdviseKeyEventSink(
-              client_id_, static_cast<ITfKeyEventSink*>(this), TRUE))) {
-        key_event_sink_advised_ = true;
-      }
-      keystroke_mgr->Release();
-    }
+  candidate_window_.Create();
+  candidate_window_.SetOnClick([this](int idx) {
+    selected_candidate_idx_ = idx;
+    if (active_context_) CommitSelected(active_context_);
+  });
 
-    ITfSource* source = nullptr;
-    if (SUCCEEDED(thread_mgr_->QueryInterface(IID_ITfSource,
-                                              reinterpret_cast<void**>(&source)))) {
-      DWORD cookie = TF_INVALID_COOKIE;
-      if (SUCCEEDED(source->AdviseSink(IID_ITfThreadMgrEventSink,
-                                       static_cast<ITfThreadMgrEventSink*>(this),
-                                       &cookie))) {
-        thread_mgr_sink_cookie_ = cookie;
-      }
-      source->Release();
-    }
-  }
-  ConnectHost();
+  StartIpcWorker();
   return S_OK;
 }
 
 STDMETHODIMP TextService::Deactivate() {
-  DisconnectHost();
+  StopIpcWorker();
+
+  candidate_window_.Hide();
+  candidate_window_.Destroy();
+
+  if (composition_ && active_context_) {
+    preedit_kana_.clear();
+    romaji_.Reset();
+    committing_ = false;
+    commit_surface_.clear();
+    ITfEditSession* edit = new EditSession(this, active_context_);
+    HRESULT hr = S_OK;
+    active_context_->RequestEditSession(client_id_, edit, TF_ES_SYNC | TF_ES_READWRITE, &hr);
+    edit->Release();
+  }
   if (composition_) {
     composition_->Release();
     composition_ = nullptr;
   }
+  if (active_context_) {
+    active_context_->Release();
+    active_context_ = nullptr;
+  }
   if (thread_mgr_) {
-    if (key_event_sink_advised_) {
-      ITfKeystrokeMgr* keystroke_mgr = nullptr;
-      if (SUCCEEDED(thread_mgr_->QueryInterface(IID_ITfKeystrokeMgr,
-                                                reinterpret_cast<void**>(&keystroke_mgr)))) {
-        keystroke_mgr->UnadviseKeyEventSink(client_id_);
-        keystroke_mgr->Release();
-      }
-      key_event_sink_advised_ = false;
-    }
-
-    if (thread_mgr_sink_cookie_ != TF_INVALID_COOKIE) {
-      ITfSource* source = nullptr;
-      if (SUCCEEDED(thread_mgr_->QueryInterface(IID_ITfSource,
-                                                reinterpret_cast<void**>(&source)))) {
-        source->UnadviseSink(thread_mgr_sink_cookie_);
-        source->Release();
-      }
-      thread_mgr_sink_cookie_ = TF_INVALID_COOKIE;
-    }
-
     thread_mgr_->Release();
     thread_mgr_ = nullptr;
   }
-  client_id_ = TF_CLIENTID_NULL;
   return S_OK;
 }
 
@@ -142,65 +120,191 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
   UNREFERENCED_PARAMETER(foreground);
   return S_OK;
 }
+
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
-  const bool has_preedit = !preedit_raw_.empty() || !preedit_kana_.empty();
-  *eaten = ((wParam == VK_ESCAPE && has_preedit) || (wParam == VK_RETURN && has_preedit) ||
-            (wParam == VK_BACK && !preedit_raw_.empty()) || (wParam >= 'A' && wParam <= 'Z'));
+  *eaten = FALSE;
+
+  const bool has_preedit = !preedit_kana_.empty() || romaji_.HasPending();
+  const bool cand_visible = candidate_window_.IsVisible();
+
+  if (wParam >= 'A' && wParam <= 'Z') {
+    *eaten = TRUE;
+  } else if (wParam == VK_BACK) {
+    *eaten = has_preedit ? TRUE : FALSE;
+  } else if (wParam == VK_SPACE) {
+    *eaten = (has_preedit || cand_visible) ? TRUE : FALSE;
+  } else if (wParam == VK_UP || wParam == VK_DOWN) {
+    *eaten = cand_visible ? TRUE : FALSE;
+  } else if (wParam == VK_RETURN) {
+    *eaten = (cand_visible || has_preedit) ? TRUE : FALSE;
+  } else if (wParam == VK_ESCAPE) {
+    *eaten = (cand_visible || has_preedit) ? TRUE : FALSE;
+  } else if (wParam >= '1' && wParam <= '9') {
+    *eaten = cand_visible ? TRUE : FALSE;
+  }
   return S_OK;
 }
+
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(wParam); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
   *eaten = FALSE;
   return S_OK;
 }
+
 STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
   *eaten = FALSE;
   try {
-    if (!host_connected_) {
-      ConnectHost();
-    }
+    const bool cand_visible = candidate_window_.IsVisible();
+
     if (wParam >= 'A' && wParam <= 'Z') {
-      const char key = static_cast<char>('a' + (wParam - 'A'));
-      preedit_raw_.push_back(key);
-      RebuildPreedit();
+      // Hide candidate window when the user resumes typing.
+      if (cand_visible) {
+        candidate_window_.Hide();
+        selected_candidate_idx_ = 0;
+      }
+      // Always clear stale candidates when the reading changes, not only when
+      // the window is visible — otherwise a Space press before the fresh
+      // QueryCandidates response arrives snapshots the old cache.
+      {
+        std::lock_guard<std::mutex> lk(candidates_mtx_);
+        candidates_.clear();
+      }
+      preedit_kana_ += romaji_.Feed(static_cast<char>(wParam));
       RequestPreeditUpdate(context);
-      SendHostQueryCandidates();
+      PostQueryCandidates(preedit_kana_);
       *eaten = TRUE;
-    } else if (wParam == VK_RETURN && !preedit_kana_.empty()) {
-      commit_text_ = core::RomajiKanaConverter::ConvertForCommit(preedit_raw_);
-      RequestPreeditCommit(context);
-      preedit_raw_.clear();
-      preedit_kana_.clear();
-      *eaten = TRUE;
-    } else if (wParam == VK_ESCAPE && (!preedit_raw_.empty() || !preedit_kana_.empty())) {
-      preedit_raw_.clear();
-      preedit_kana_.clear();
-      commit_text_.clear();
-      RequestPreeditUpdate(context);
-      *eaten = TRUE;
-    } else if (wParam == VK_BACK && !preedit_raw_.empty()) {
-      PopLastAscii(&preedit_raw_);
-      RebuildPreedit();
-      RequestPreeditUpdate(context);
-      SendHostQueryCandidates();
-      *eaten = TRUE;
+
+    } else if (wParam == VK_BACK) {
+      if (cand_visible) {
+        candidate_window_.Hide();
+        selected_candidate_idx_ = 0;
+      }
+      if (romaji_.HasPending()) {
+        romaji_.PopPending();
+        *eaten = TRUE;
+      } else if (!preedit_kana_.empty()) {
+        {
+          std::lock_guard<std::mutex> lk(candidates_mtx_);
+          candidates_.clear();
+        }
+        auto& s = preedit_kana_;
+        size_t i = s.size();
+        while (i > 0 && (s[i - 1] & 0xC0) == 0x80) --i;
+        if (i > 0) --i;
+        s.erase(i);
+        RequestPreeditUpdate(context);
+        if (!preedit_kana_.empty()) PostQueryCandidates(preedit_kana_);
+        *eaten = TRUE;
+      }
+
+    } else if (wParam == VK_SPACE) {
+      // Flush any pending romaji so the reading is complete.
+      const std::string flushed = romaji_.Flush();
+      if (!flushed.empty()) {
+        preedit_kana_ += flushed;
+        RequestPreeditUpdate(context);
+        // Reading changed due to romaji flush; old candidates are now stale.
+        // Clear them and query for the updated reading so the candidate window
+        // (opened below) reflects the complete input, not the pre-flush state.
+        {
+          std::lock_guard<std::mutex> lk(candidates_mtx_);
+          candidates_.clear();
+        }
+        PostQueryCandidates(preedit_kana_);
+      }
+      if (!preedit_kana_.empty()) {
+        // Always eat Space during preedit — even if candidates haven't arrived
+        // yet — to prevent a literal space leaking into the application.
+        *eaten = TRUE;
+        if (cand_visible) {
+          // Cycle to next candidate using the existing snapshot.
+          candidate_window_.MoveSelection(+1);
+          selected_candidate_idx_ = candidate_window_.GetSelected();
+        } else {
+          // Snapshot the candidate list so commit always reflects what was
+          // displayed, even if a late QueryCandidates response arrives later.
+          {
+            std::lock_guard<std::mutex> lk(candidates_mtx_);
+            shown_candidates_ = candidates_;
+          }
+          std::vector<std::wstring> items;
+          for (auto& c : shown_candidates_) items.push_back(Utf8ToWide(c.surface));
+          if (!items.empty()) {
+            selected_candidate_idx_ = 0;
+            POINT pt = caret_pt_;
+            if (pt.x == 0 && pt.y == 0) GetCursorPos(&pt);
+            candidate_window_.Show(pt, items, 0);
+          }
+        }
+      }
+
+    } else if (wParam == VK_UP) {
+      if (cand_visible) {
+        candidate_window_.MoveSelection(-1);
+        selected_candidate_idx_ = candidate_window_.GetSelected();
+        *eaten = TRUE;
+      }
+
+    } else if (wParam == VK_DOWN) {
+      if (cand_visible) {
+        candidate_window_.MoveSelection(+1);
+        selected_candidate_idx_ = candidate_window_.GetSelected();
+        *eaten = TRUE;
+      }
+
+    } else if (wParam == VK_RETURN) {
+      if (cand_visible) {
+        CommitSelected(context);
+        *eaten = TRUE;
+      } else if (!preedit_kana_.empty() || romaji_.HasPending()) {
+        CommitPreeditAsIs(context);
+        *eaten = TRUE;
+      }
+
+    } else if (wParam >= '1' && wParam <= '9') {
+      if (cand_visible) {
+        *eaten = TRUE;
+        int idx = static_cast<int>(wParam - '1');
+        if (idx < candidate_window_.GetCount()) {
+          selected_candidate_idx_ = idx;
+          CommitSelected(context);
+        }
+      }
+
+    } else if (wParam == VK_ESCAPE) {
+      if (cand_visible) {
+        candidate_window_.Hide();
+        selected_candidate_idx_ = 0;
+        *eaten = TRUE;
+      } else if (!preedit_kana_.empty() || romaji_.HasPending()) {
+        preedit_kana_.clear();
+        romaji_.Reset();
+        {
+          std::lock_guard<std::mutex> lk(candidates_mtx_);
+          candidates_.clear();
+        }
+        RequestPreeditUpdate(context);
+        *eaten = TRUE;
+      }
     }
   } catch (...) {
     return E_FAIL;
   }
   return S_OK;
 }
+
 STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(wParam); UNREFERENCED_PARAMETER(lParam);
   if (!eaten) return E_INVALIDARG;
   *eaten = FALSE;
   return S_OK;
 }
+
 STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID rguid, BOOL* eaten) {
   UNREFERENCED_PARAMETER(context); UNREFERENCED_PARAMETER(rguid);
   if (!eaten) return E_INVALIDARG;
@@ -216,193 +320,470 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* pdimFocus, ITfDocumentMgr* 
 STDMETHODIMP TextService::OnPushContext(ITfContext* pic) { UNREFERENCED_PARAMETER(pic); return S_OK; }
 STDMETHODIMP TextService::OnPopContext(ITfContext* pic) { UNREFERENCED_PARAMETER(pic); return S_OK; }
 
-STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition* pComposition) {
-  UNREFERENCED_PARAMETER(ecWrite);
+STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie /*ecWrite*/, ITfComposition* pComposition) {
   if (composition_ == pComposition) {
     composition_->Release();
     composition_ = nullptr;
   }
-  preedit_raw_.clear();
+  candidate_window_.Hide();
+  selected_candidate_idx_ = 0;
   preedit_kana_.clear();
-  commit_text_.clear();
+  romaji_.Reset();
   return S_OK;
 }
 
 STDMETHODIMP TextService::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) {
   if (!ppEnum) return E_INVALIDARG;
-  *ppEnum = nullptr;
-  return E_NOTIMPL;
+  *ppEnum = new azookey::tsf::EnumDisplayAttributeInfo();
+  return S_OK;
 }
+
 STDMETHODIMP TextService::GetDisplayAttributeInfo(REFGUID guidInfo, ITfDisplayAttributeInfo** ppInfo) {
-  UNREFERENCED_PARAMETER(guidInfo);
   if (!ppInfo) return E_INVALIDARG;
   *ppInfo = nullptr;
-  return E_NOTIMPL;
+  if (IsEqualGUID(guidInfo, kInputAttributeGuid)) {
+    *ppInfo = new InputDisplayAttributeInfo();
+    return S_OK;
+  }
+  return E_INVALIDARG;
 }
 
 HRESULT TextService::RequestPreeditUpdate(ITfContext* context) {
-  return RequestEditSession(context, EditSessionMode::UpdatePreedit);
-}
-
-HRESULT TextService::RequestPreeditCommit(ITfContext* context) {
-  return RequestEditSession(context, EditSessionMode::CommitPreedit);
-}
-
-HRESULT TextService::RequestEditSession(ITfContext* context, EditSessionMode mode) {
   if (!context) return E_INVALIDARG;
-  ITfEditSession* edit = new EditSession(this, context, mode);
-  HRESULT session_hr = S_OK;
-  const HRESULT request_hr =
-      context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE,
-                                  &session_hr);
+  if (active_context_ != context) {
+    if (active_context_) active_context_->Release();
+    active_context_ = context;
+    active_context_->AddRef();
+  }
+  ITfEditSession* edit = new EditSession(this, context);
+  HRESULT hr_session = S_OK;
+  HRESULT hr = context->RequestEditSession(client_id_, edit, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &hr_session);
   edit->Release();
-  return FAILED(request_hr) ? request_hr : session_hr;
+  // For synchronous sessions TSF writes DoEditSession's result into hr_session
+  // while returning S_OK from RequestEditSession itself.  Return hr_session so
+  // callers see real failures.  For async sessions hr_session stays S_OK
+  // (initialized value), so this is always safe to return.
+  return SUCCEEDED(hr) ? hr_session : hr;
 }
 
-void TextService::RebuildPreedit() {
-  preedit_kana_ = core::RomajiKanaConverter::Preview(preedit_raw_);
-}
+// --- Commit helpers (M5) ---
 
-void TextService::ConnectHost() {
-  if (host_connected_) return;
+void TextService::CommitSelected(ITfContext* context) {
+  if (!context) return;
 
-  const auto now_ms = static_cast<uint64_t>(GetTickCount64());
-  if (now_ms < next_host_connect_attempt_ms_) {
-    return;
+  // Use the snapshot taken when Space opened the window so that a late
+  // QueryCandidates response cannot silently alter what gets committed.
+  ipc::CandidateField chosen;
+  std::vector<ipc::CandidateField> shown = shown_candidates_;
+  if (!shown_candidates_.empty() &&
+      selected_candidate_idx_ >= 0 &&
+      selected_candidate_idx_ < static_cast<int>(shown_candidates_.size())) {
+    chosen = shown_candidates_[selected_candidate_idx_];
   }
-  next_host_connect_attempt_ms_ = now_ms + 2000;
+  shown_candidates_.clear();
+  {
+    std::lock_guard<std::mutex> lk(candidates_mtx_);
+    candidates_.clear();
+  }
+  const std::string reading = preedit_kana_;
 
-  DisconnectHost();
+  candidate_window_.Hide();
+  selected_candidate_idx_ = 0;
 
-  auto client = std::make_unique<ipc::NamedPipeClient>();
-  if (!client->Connect(ipc::DefaultPipeName(), 100)) {
-    DebugLog(L"Host pipe connection failed");
-    return;
+  // M10: cancel queued AND in-flight QC so the host can abort early.
+  // Also bump ipc_pending_id_ so any response already en-route fails the
+  // staleness check (req_id == ipc_pending_id_) even if no new request is
+  // queued after this commit.
+  {
+    std::lock_guard<std::mutex> lk(ipc_mtx_);
+    bool need_notify = false;
+    if (ipc_has_request_) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false,
+           ipc_pending_id_});
+      ipc_has_request_ = false;
+      need_notify = true;
+    }
+    if (ipc_inflight_id_ != 0) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false,
+           ipc_inflight_id_});
+      need_notify = true;
+    }
+    ++ipc_pending_id_;
+    if (need_notify) ipc_cv_.notify_one();
   }
 
-  host_client_ = std::move(client);
-  host_connected_ = true;
-
-  if (!SendHostHandshake() || !SendHostPing()) {
-    DebugLog(L"Host handshake or ping failed");
-    DisconnectHost();
+  commit_surface_ = chosen.surface.empty() ? preedit_kana_ : chosen.surface;
+  committing_ = true;
+  // Defer clearing preedit until the session is accepted so that if TSF
+  // rejects the request (lock denial, context teardown) the composition text
+  // is not lost and the user can still see/retry their input.
+  const bool session_ok = SUCCEEDED(RequestPreeditUpdate(context));
+  if (session_ok) {
+    preedit_kana_.clear();
+    romaji_.Reset();
   } else {
-    DebugLog(L"Host handshake and ping succeeded");
+    committing_ = false;
+    commit_surface_.clear();
+  }
+
+  // Only record the learning event when the edit session was accepted; an
+  // observation for a commit that never happened would skew ranking data.
+  if (session_ok && !chosen.surface.empty() && !reading.empty()) {
+    PostCommitObservation(reading, chosen, shown);
   }
 }
 
-void TextService::DisconnectHost() {
-  if (host_client_) {
-    host_client_->Disconnect();
-    host_client_.reset();
+void TextService::CommitPreeditAsIs(ITfContext* context) {
+  if (!context) return;
+
+  // Flush any pending romaji first.
+  const std::string flushed = romaji_.Flush();
+  preedit_kana_ += flushed;
+
+  if (preedit_kana_.empty()) return;
+
+  candidate_window_.Hide();
+  selected_candidate_idx_ = 0;
+  {
+    std::lock_guard<std::mutex> lk(candidates_mtx_);
+    candidates_.clear();
   }
-  host_connected_ = false;
+
+  // M10: cancel queued AND in-flight QC; bump pending_id to invalidate
+  // any response already en-route (mirrors CommitSelected logic).
+  {
+    std::lock_guard<std::mutex> lk(ipc_mtx_);
+    bool need_notify = false;
+    if (ipc_has_request_) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_pending_id_}), false,
+           ipc_pending_id_});
+      ipc_has_request_ = false;
+      need_notify = true;
+    }
+    if (ipc_inflight_id_ != 0) {
+      ipc_send_queue_.push_back(
+          {ipc::MessageType::Cancel, ipc::BuildCancel({ipc_inflight_id_}), false,
+           ipc_inflight_id_});
+      need_notify = true;
+    }
+    ++ipc_pending_id_;
+    if (need_notify) ipc_cv_.notify_one();
+  }
+
+  commit_surface_ = preedit_kana_;
+  committing_ = true;
+  // Same deferred-clear pattern as CommitSelected: preserve preedit until the
+  // session is accepted so rejection does not silently discard the reading.
+  if (SUCCEEDED(RequestPreeditUpdate(context))) {
+    preedit_kana_.clear();
+    romaji_.Reset();
+  } else {
+    committing_ = false;
+    commit_surface_.clear();
+  }
 }
 
-ipc::Envelope TextService::MakeHostEnvelope(ipc::MessageType type, std::string payload_json) {
-  ipc::Envelope env;
-  env.version = 1;
-  env.request_id = next_host_request_id_++;
-  env.trace_id = "tsf-tip-" + std::to_string(env.request_id);
-  env.type = type;
-  env.payload_json = std::move(payload_json);
-  return env;
+// --- IPC worker (M4 + M6 + M10) ---
+
+void TextService::StartIpcWorker() {
+  ipc_stop_.store(false);
+  ipc_thread_ = std::thread(&TextService::IpcWorkerThread, this);
 }
 
-bool TextService::SendHostHandshake() {
-  if (!host_client_ || !host_connected_) return false;
-
-  ipc::HandshakeRequest request;
-  request.tip_version = "0.1.0";
-  request.protocol_version = 1;
-  request.capabilities = {"ping", "query_candidates"};
-
-  auto envelope =
-      MakeHostEnvelope(ipc::MessageType::Handshake, ipc::BuildHandshakeRequest(request));
-  if (!host_client_->Send(envelope)) return false;
-
-  auto response = host_client_->Receive();
-  if (!response || response->request_id != envelope.request_id ||
-      response->type != ipc::MessageType::Handshake) {
-    return false;
+void TextService::StopIpcWorker() {
+  if (!ipc_thread_.joinable()) return;
+  {
+    std::lock_guard<std::mutex> lock(ipc_mtx_);
+    ipc_stop_.store(true);
   }
-
-  auto payload = ipc::ParseHandshakeResponse(response->payload_json);
-  return payload.has_value() && payload->accepted;
+  ipc_cv_.notify_one();
+  ipc_client_.Disconnect();
+  ipc_thread_.join();
 }
 
-bool TextService::SendHostPing() {
-  if (!host_client_ || !host_connected_) return false;
+void TextService::IpcWorkerThread() {
+  using namespace azookey::ipc;
 
-  ipc::PingPayload request;
-  request.nonce = next_host_request_id_;
-  request.t_ms = 0;
-
-  auto envelope = MakeHostEnvelope(ipc::MessageType::Ping, ipc::BuildPing(request));
-  if (!host_client_->Send(envelope)) return false;
-
-  auto response = host_client_->Receive();
-  if (!response || response->request_id != envelope.request_id ||
-      response->type != ipc::MessageType::Ping) {
-    return false;
+  const auto pipe_name = DefaultPipeName();
+  constexpr uint32_t kSliceMs = 250;
+  constexpr uint32_t kTotalMs = 5000;
+  bool connected = false;
+  for (uint32_t elapsed = 0; elapsed < kTotalMs && !ipc_stop_.load(); elapsed += kSliceMs) {
+    if (ipc_client_.Connect(pipe_name, kSliceMs)) { connected = true; break; }
+  }
+  if (!connected) {
+    if (!ipc_stop_.load()) DebugLog("IPC: host pipe unavailable: " + pipe_name);
+    return;
   }
 
-  auto payload = ipc::ParsePing(response->payload_json);
-  return payload.has_value() && payload->nonce == request.nonce;
+  HandshakeRequest hs;
+  hs.tip_version = kTipVersion;
+  hs.protocol_version = 1;
+  hs.capabilities = {"ping", "query_candidates", "commit_observation", "cancel"};
+
+  Envelope henv;
+  henv.version = 1;
+  henv.request_id = 1;
+  henv.trace_id = "tip-activate-handshake";
+  henv.type = MessageType::Handshake;
+  henv.payload_json = BuildHandshakeRequest(hs);
+
+  if (!ipc_client_.Send(henv)) { DebugLog("IPC: handshake send failed"); return; }
+  auto hres = ipc_client_.Receive();
+  auto hpayload = hres ? ParseHandshakeResponse(hres->payload_json) : std::nullopt;
+  if (!hpayload || !hpayload->accepted) { DebugLog("IPC: handshake rejected"); return; }
+  DebugLog("IPC: connected to host " + hpayload->host_version);
+
+  uint64_t next_id = 2;
+
+  while (true) {
+    std::string reading;
+    uint64_t req_id = 0;
+    bool has_qc = false;
+    std::vector<IpcSendItem> to_send;
+
+    {
+      std::unique_lock<std::mutex> lock(ipc_mtx_);
+      ipc_cv_.wait(lock, [this] {
+        return ipc_stop_.load() || ipc_has_request_ || !ipc_send_queue_.empty();
+      });
+      if (ipc_stop_.load()) break;
+
+      to_send = std::move(ipc_send_queue_);
+      ipc_send_queue_.clear();
+
+      if (ipc_has_request_) {
+        reading = ipc_pending_reading_;
+        req_id = ipc_pending_id_;
+        ipc_has_request_ = false;
+        has_qc = true;
+      }
+    }
+
+    // Drain fire-and-forget queue (CommitObservation, Cancel) first.
+    for (auto& item : to_send) {
+      Envelope env;
+      env.version = 1;
+      env.request_id = next_id++;
+      env.trace_id = "tip-faf";
+      env.type = item.type;
+      env.payload_json = item.payload_json;
+      if (!ipc_client_.Send(env)) {
+        DebugLog("IPC: faf send failed for type=" + TypeToString(item.type));
+        continue;
+      }
+      if (item.expects_response) {
+        auto res = ipc_client_.Receive();
+        if (!res && !ipc_stop_.load()) {
+          DebugLog("IPC: faf receive failed for type=" + TypeToString(item.type));
+        }
+      }
+    }
+
+    if (!has_qc || reading.empty()) continue;
+
+    QueryCandidatesRequest qreq;
+    qreq.reading = reading;
+    qreq.left_context = "";
+    qreq.max_candidates = 9;
+    qreq.live = true;
+
+    Envelope qenv;
+    qenv.version = 1;
+    qenv.request_id = req_id;
+    qenv.trace_id = "tip-key-query";
+    qenv.type = MessageType::QueryCandidates;
+    qenv.payload_json = BuildQueryCandidatesRequest(qreq);
+
+    // Mark the request as in-flight so CommitSelected can cancel it even
+    // after ipc_has_request_ has been cleared by this thread.
+    {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = req_id;
+    }
+
+    if (!ipc_client_.Send(qenv)) {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = 0;
+      DebugLog("IPC: QueryCandidates send failed");
+      break;
+    }
+
+    // If a Cancel targeting our just-sent QC arrives, the host returns no
+    // response (Dispatcher::HandleQueryCandidates returns std::nullopt for
+    // canceled requests).  Track that so we abandon the receive instead of
+    // spinning until the pipe disconnects.
+    bool cancel_inflight = false;
+
+    // Drain fire-and-forget items (Cancel) that were enqueued while we were
+    // preparing/sending this query.  Only items that do NOT expect a response
+    // are sent here — response-awaiting items (CommitObservation) stay in the
+    // queue for the next loop iteration so their response isn't confused with
+    // the pending QueryCandidates response.  Sending cancels here rather than
+    // after Receive() means they reach the host pipeline as soon as possible.
+    {
+      std::vector<IpcSendItem> faf_now;
+      {
+        std::lock_guard<std::mutex> lock(ipc_mtx_);
+        std::vector<IpcSendItem> deferred;
+        for (auto& item : ipc_send_queue_) {
+          if (!item.expects_response)
+            faf_now.push_back(std::move(item));
+          else
+            deferred.push_back(std::move(item));
+        }
+        ipc_send_queue_ = std::move(deferred);
+      }
+      for (auto& item : faf_now) {
+        Envelope env;
+        env.version = 1;
+        env.request_id = next_id++;
+        env.trace_id = "tip-faf";
+        env.type = item.type;
+        env.payload_json = item.payload_json;
+        if (!ipc_client_.Send(env))
+          DebugLog("IPC: post-qc cancel send failed for type=" + TypeToString(item.type));
+        if (item.type == MessageType::Cancel && item.cancel_target_id == req_id)
+          cancel_inflight = true;
+      }
+    }
+
+    // Poll in 50ms slices so cancels enqueued while the host processes the
+    // query can be forwarded without waiting for the full response.
+    std::optional<ipc::Envelope> qres;
+    while (!ipc_stop_.load() && ipc_client_.IsConnected()) {
+      qres = ipc_client_.ReceiveWithTimeout(50);
+      if (qres) break;
+      // Drain fire-and-forget items (Cancel) that arrived while we waited.
+      std::vector<IpcSendItem> mid_faf;
+      {
+        std::lock_guard<std::mutex> lk(ipc_mtx_);
+        std::vector<IpcSendItem> deferred;
+        for (auto& item : ipc_send_queue_) {
+          if (!item.expects_response)
+            mid_faf.push_back(std::move(item));
+          else
+            deferred.push_back(std::move(item));
+        }
+        ipc_send_queue_ = std::move(deferred);
+      }
+      for (auto& item : mid_faf) {
+        ipc::Envelope env;
+        env.version = 1;
+        env.request_id = next_id++;
+        env.trace_id = "tip-faf-mid";
+        env.type = item.type;
+        env.payload_json = item.payload_json;
+        if (!ipc_client_.Send(env))
+          DebugLog("IPC: mid-receive cancel send failed for type=" +
+                   ipc::TypeToString(item.type));
+        if (item.type == ipc::MessageType::Cancel && item.cancel_target_id == req_id)
+          cancel_inflight = true;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      ipc_inflight_id_ = 0;
+    }
+    if (!qres) {
+      if (!ipc_stop_.load()) DebugLog("IPC: QueryCandidates receive failed");
+      break;
+    }
+
+    if (cancel_inflight) {
+      // Even when cancel is sent, host processes one request at a time and
+      // still returns this query response before seeing Cancel. Consume and
+      // discard here to keep stream framing aligned for subsequent receives.
+      DebugLog("IPC: in-flight req_id=" + std::to_string(req_id) +
+               " canceled, consumed pending query reply");
+      ++next_id;
+      continue;
+    }
+
+    auto qpayload = ParseQueryCandidatesResponse(qres->payload_json);
+    if (!qpayload) {
+      ++next_id;
+      continue;
+    }
+
+    // M10: discard stale responses.
+    // Conditions for freshness:
+    //   1. No newer QC is already queued (ipc_has_request_ false).
+    //   2. ipc_pending_id_ still equals req_id — no commit/clear bumped it
+    //      while this response was in-transit.
+    bool is_fresh = false;
+    {
+      std::lock_guard<std::mutex> lock(ipc_mtx_);
+      is_fresh = !ipc_has_request_ && (req_id == ipc_pending_id_);
+    }
+
+    if (is_fresh) {
+      if (!qpayload->candidates.empty()) {
+        DebugLog("IPC: " + std::to_string(qpayload->candidates.size()) +
+                 " candidates for [" + reading + "] top=" + qpayload->candidates[0].surface);
+      }
+      std::lock_guard<std::mutex> lock(candidates_mtx_);
+      candidates_ = qpayload->candidates;
+    } else {
+      DebugLog("IPC: stale response for req_id=" + std::to_string(req_id) + ", discarding");
+    }
+
+    ++next_id;
+  }
+
+  DebugLog("IPC: worker exiting");
 }
 
-bool TextService::SendHostQueryCandidates() {
-  host_candidates_.clear();
-  if (preedit_kana_.empty()) return true;
-
-  if (!host_connected_) {
-    ConnectHost();
-  }
-  if (!host_client_ || !host_connected_) return false;
-
-  ipc::QueryCandidatesRequest request;
-  request.reading = preedit_kana_;
-  request.left_context = "";
-  request.max_candidates = 10;
-  request.live = true;
-
-  auto envelope = MakeHostEnvelope(ipc::MessageType::QueryCandidates,
-                                   ipc::BuildQueryCandidatesRequest(request));
-  if (!host_client_->Send(envelope)) {
-    DebugLog(L"Host QueryCandidates send failed");
-    DisconnectHost();
-    return false;
-  }
-
-  auto response = host_client_->Receive();
-  if (!response || response->request_id != envelope.request_id ||
-      response->type != ipc::MessageType::QueryCandidates) {
-    DebugLog(L"Host QueryCandidates response mismatch");
-    DisconnectHost();
-    return false;
-  }
-
-  auto payload = ipc::ParseQueryCandidatesResponse(response->payload_json);
-  if (!payload) {
-    DebugLog(L"Host QueryCandidates response parse failed");
-    return false;
-  }
-
-  host_candidates_ = std::move(payload->candidates);
-  std::wstring message = L"Host candidates received: " +
-                         std::to_wstring(host_candidates_.size());
-  if (!host_candidates_.empty()) {
-    message += L", top=" + Utf8ToWideString(host_candidates_.front().surface);
-  }
-  DebugLog(message);
-  return true;
+void TextService::PostQueryCandidates(const std::string& reading) {
+  std::lock_guard<std::mutex> lock(ipc_mtx_);
+  ipc_pending_reading_ = reading;
+  ++ipc_pending_id_;
+  ipc_has_request_ = true;
+  ipc_cv_.notify_one();
 }
 
-EditSession::EditSession(TextService* service, ITfContext* context, EditSessionMode mode)
-    : service_(service), context_(context), mode_(mode) {
-  if (service_) service_->AddRef();
+void TextService::PostCommitObservation(const std::string& reading,
+                                        const ipc::CandidateField& chosen,
+                                        const std::vector<ipc::CandidateField>& shown) {
+  using namespace std::chrono;
+  const uint64_t now_ms = static_cast<uint64_t>(
+      duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
+
+  ipc::CommitObservationRequest req;
+  req.reading = reading;
+  req.chosen = chosen;
+  req.shown = shown;
+  req.left_context = "";
+  req.timestamp_ms = now_ms;
+
+  PostIpcSend(ipc::MessageType::CommitObservation,
+              ipc::BuildCommitObservationRequest(req), true);
+}
+
+void TextService::PostCancel(uint64_t target_request_id) {
+  std::lock_guard<std::mutex> lock(ipc_mtx_);
+  ipc_send_queue_.push_back(
+      {ipc::MessageType::Cancel, ipc::BuildCancel({target_request_id}), false,
+       target_request_id});
+  ipc_cv_.notify_one();
+}
+
+void TextService::PostIpcSend(ipc::MessageType type, std::string payload, bool expects_response) {
+  std::lock_guard<std::mutex> lock(ipc_mtx_);
+  ipc_send_queue_.push_back({type, std::move(payload), expects_response, 0});
+  ipc_cv_.notify_one();
+}
+
+// --- EditSession ---
+
+EditSession::EditSession(TextService* service, ITfContext* context)
+    : service_(service), context_(context) {
   if (context_) context_->AddRef();
 }
+
 STDMETHODIMP EditSession::QueryInterface(REFIID riid, void** ppvObj) {
   if (!ppvObj) return E_INVALIDARG;
   *ppvObj = nullptr;
@@ -418,98 +799,125 @@ STDMETHODIMP_(ULONG) EditSession::Release() {
   const auto c = static_cast<ULONG>(InterlockedDecrement(&ref_count_));
   if (c == 0) {
     if (context_) context_->Release();
-    if (service_) service_->Release();
     delete this;
   }
   return c;
 }
+
 STDMETHODIMP EditSession::DoEditSession(TfEditCookie ec) {
-  if (!service_) return E_FAIL;
+  // M5/M6: commit path — set final surface text and end composition.
+  if (service_->committing_) {
+    service_->committing_ = false;
+    const std::wstring surface = Utf8ToWide(service_->commit_surface_);
+    service_->commit_surface_.clear();
 
-  if (mode_ == EditSessionMode::CommitPreedit) {
-    ITfComposition* composition = service_->composition_;
-    if (composition) {
-      const std::wstring text = Utf8ToWideString(service_->commit_text_);
-      ITfRange* range = nullptr;
-      HRESULT hr = composition->GetRange(&range);
-      if (SUCCEEDED(hr)) {
-        hr = range->SetText(ec, 0, text.c_str(), static_cast<LONG>(text.size()));
-        range->Release();
+    if (service_->composition_) {
+      if (!surface.empty()) {
+        ITfRange* pRange = nullptr;
+        if (SUCCEEDED(service_->composition_->GetRange(&pRange)) && pRange) {
+          pRange->SetText(ec, 0, surface.c_str(), static_cast<LONG>(surface.size()));
+          pRange->Release();
+        }
       }
-      if (FAILED(hr)) return hr;
-
+      // EndComposition finalizes the text in the document.
+      ITfComposition* comp = service_->composition_;
       service_->composition_ = nullptr;
-      hr = composition->EndComposition(ec);
-      composition->Release();
-      service_->commit_text_.clear();
-      return hr;
-    }
-    service_->commit_text_.clear();
-    return S_OK;
-  }
-
-  const std::wstring text = Utf8ToWideString(service_->preedit_kana_);
-  if (text.empty()) {
-    ITfComposition* composition = service_->composition_;
-    service_->composition_ = nullptr;
-    if (composition) {
-      HRESULT hr = S_OK;
-      ITfRange* range = nullptr;
-      if (SUCCEEDED(composition->GetRange(&range))) {
-        hr = range->SetText(ec, 0, L"", 0);
-        range->Release();
+      comp->EndComposition(ec);
+      comp->Release();
+    } else if (!surface.empty()) {
+      // No active composition (e.g. commit triggered before the async preedit
+      // session ran); insert the surface text directly at the cursor.
+      TF_SELECTION sel{};
+      ULONG fetched = 0;
+      if (SUCCEEDED(context_->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched)) &&
+          fetched > 0) {
+        sel.range->SetText(ec, 0, surface.c_str(), static_cast<LONG>(surface.size()));
+        sel.range->Collapse(ec, TF_ANCHOR_END);
+        context_->SetSelection(ec, 1, &sel);
+        sel.range->Release();
       }
-      if (SUCCEEDED(hr)) {
-        hr = composition->EndComposition(ec);
-      }
-      composition->Release();
-      return hr;
     }
     return S_OK;
   }
 
+  // Normal preedit update.
+  const std::wstring kana = Utf8ToWide(service_->preedit_kana_);
+
+  if (kana.empty()) {
+    if (service_->composition_) {
+      ITfComposition* comp = service_->composition_;
+      service_->composition_ = nullptr;
+      comp->EndComposition(ec);
+      comp->Release();
+    }
+    return S_OK;
+  }
+
+  // Create composition if not active.
   if (!service_->composition_) {
-    ITfInsertAtSelection* insert_at_selection = nullptr;
-    HRESULT hr = context_->QueryInterface(IID_ITfInsertAtSelection,
-                                          reinterpret_cast<void**>(&insert_at_selection));
-    if (FAILED(hr)) return hr;
+    ITfContextComposition* pCtxComp = nullptr;
+    if (FAILED(context_->QueryInterface(IID_ITfContextComposition,
+                                        reinterpret_cast<void**>(&pCtxComp))) ||
+        !pCtxComp)
+      return E_FAIL;
 
-    ITfRange* insertion_range = nullptr;
-    hr = insert_at_selection->InsertTextAtSelection(ec, TF_IAS_QUERYONLY, nullptr, 0,
-                                                    &insertion_range);
-    insert_at_selection->Release();
-    if (FAILED(hr)) return hr;
-
-    ITfContextComposition* context_composition = nullptr;
-    hr = context_->QueryInterface(IID_ITfContextComposition,
-                                  reinterpret_cast<void**>(&context_composition));
-    if (FAILED(hr)) {
-      insertion_range->Release();
-      return hr;
+    TF_SELECTION sel{};
+    ULONG fetched = 0;
+    context_->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched);
+    if (fetched == 0) {
+      pCtxComp->Release();
+      return E_FAIL;
     }
 
-    hr = context_composition->StartComposition(
-        ec, insertion_range, static_cast<ITfCompositionSink*>(service_),
-        &service_->composition_);
-    context_composition->Release();
-    insertion_range->Release();
-    if (FAILED(hr)) return hr;
+    sel.range->Collapse(ec, TF_ANCHOR_END);
+    HRESULT hr = pCtxComp->StartComposition(ec, sel.range, service_,
+                                             &service_->composition_);
+    sel.range->Release();
+    pCtxComp->Release();
+    if (FAILED(hr) || !service_->composition_) return hr;
   }
 
-  ITfRange* composition_range = nullptr;
-  HRESULT hr = service_->composition_->GetRange(&composition_range);
-  if (FAILED(hr)) return hr;
+  // Update composition text.
+  ITfRange* pRange = nullptr;
+  if (FAILED(service_->composition_->GetRange(&pRange)) || !pRange) return E_FAIL;
 
-  hr = composition_range->SetText(ec, 0, text.c_str(), static_cast<LONG>(text.size()));
-  if (SUCCEEDED(hr)) {
-    TF_SELECTION selection{};
-    selection.range = composition_range;
-    selection.style.ase = TF_AE_END;
-    selection.style.fInterimChar = FALSE;
-    context_->SetSelection(ec, 1, &selection);
+  pRange->SetText(ec, 0, kana.c_str(), static_cast<LONG>(kana.size()));
+
+  // Cache the caret screen position for the candidate window anchor (M5).
+  {
+    ITfContextView* pView = nullptr;
+    if (SUCCEEDED(context_->GetActiveView(&pView)) && pView) {
+      RECT rc{};
+      BOOL clipped = FALSE;
+      if (SUCCEEDED(pView->GetTextExt(ec, pRange, &rc, &clipped))) {
+        service_->caret_pt_ = {rc.left, rc.bottom};
+      }
+      pView->Release();
+    }
   }
-  composition_range->Release();
-  return hr;
+
+  // Apply underline display attribute via GUID_PROP_ATTRIBUTE.
+  ITfProperty* pProp = nullptr;
+  if (SUCCEEDED(context_->GetProperty(GUID_PROP_ATTRIBUTE, &pProp)) && pProp) {
+    ITfCategoryMgr* pCatMgr = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_ITfCategoryMgr, reinterpret_cast<void**>(&pCatMgr))) &&
+        pCatMgr) {
+      TfGuidAtom atom = TF_INVALID_GUIDATOM;
+      pCatMgr->RegisterGUID(kInputAttributeGuid, &atom);
+      if (atom != TF_INVALID_GUIDATOM) {
+        VARIANT var;
+        var.vt = VT_I4;
+        var.lVal = static_cast<LONG>(atom);
+        pProp->SetValue(ec, pRange, &var);
+      }
+      pCatMgr->Release();
+    }
+    pProp->Release();
+  }
+
+  pRange->Release();
+  return S_OK;
 }
 
 }  // namespace azookey::tsf
