@@ -1,18 +1,28 @@
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "azookey/core/SimpleConverter.h"
 #include "azookey/host/Dispatcher.h"
 #include "azookey/host/InferenceEngine.h"
 #include "azookey/host/RequestScheduler.h"
 #include "azookey/ipc/Messages.h"
+#include "azookey/ipc/NamedPipeTransport.h"
 #include "azookey/learning/LearningStore.h"
 #include "azookey/learning/UserDictionary.h"
 
 namespace {
 
 constexpr const char* kHostVersion = "0.1.0";
+std::atomic<bool> g_stop_requested{false};
+
+void RequestStop(int) {
+  g_stop_requested.store(true);
+}
 
 }  // namespace
 
@@ -21,6 +31,7 @@ int main(int argc, char** argv) {
   std::string learning_path = "azookey_learning.tsv";
   std::string user_dict_path = "azookey_user_dict.json";
   std::string mock_dict_path;
+  std::string pipe_name;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -41,6 +52,12 @@ int main(int argc, char** argv) {
       user_dict_path = argv[++i];
     } else if (arg == "--mock-dict" && i + 1 < argc) {
       mock_dict_path = argv[++i];
+    } else if (arg == "--pipe") {
+      if (i + 1 < argc && argv[i + 1][0] != '-') {
+        pipe_name = argv[++i];
+      } else {
+        pipe_name = azookey::ipc::DefaultPipeName();
+      }
     }
   }
 
@@ -69,6 +86,31 @@ int main(int argc, char** argv) {
             << (engine.backend() == azookey::host::BackendKind::Cuda ? "cuda" : "cpu")
             << " learning=" << learning_path << " user_dict=" << user_dict_path
             << std::endl;
+
+  if (!pipe_name.empty()) {
+    if (pipe_name == "default") {
+      pipe_name = azookey::ipc::DefaultPipeName();
+    }
+
+    azookey::ipc::NamedPipeServer server;
+    if (!server.Start(pipe_name, [&](const azookey::ipc::Envelope& request) {
+          return dispatcher.Dispatch(request);
+        })) {
+      std::cerr << "error: failed to listen on pipe " << pipe_name << std::endl;
+      return 2;
+    }
+
+    std::signal(SIGINT, RequestStop);
+#ifdef SIGTERM
+    std::signal(SIGTERM, RequestStop);
+#endif
+    std::cerr << "listening on " << pipe_name << " (Ctrl+C to stop)" << std::endl;
+    while (!g_stop_requested.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    server.Stop();
+    return 0;
+  }
 
   std::string line;
   while (std::getline(std::cin, line)) {

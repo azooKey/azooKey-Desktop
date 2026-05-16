@@ -7,7 +7,11 @@ $ErrorActionPreference = "Stop"
 
 if (!(Test-Path $TipDllPath)) { throw "TIP DLL not found: $TipDllPath" }
 
-& regsvr32.exe /s $TipDllPath
+$regsvr = Start-Process -FilePath "$env:WINDIR\System32\regsvr32.exe" `
+  -ArgumentList @("/s", $TipDllPath) -Wait -PassThru
+if ($regsvr.ExitCode -ne 0) {
+  throw "regsvr32 failed with exit code $($regsvr.ExitCode): $TipDllPath"
+}
 
 $clsid = "{71EE04FA-B35D-4EB8-87A1-582D44A9A58C}"
 $profileGuid = "{A8F74D91-8DF3-4DA1-B80B-01F7C73D4A90}"
@@ -19,7 +23,7 @@ New-ItemProperty -Path $profileKey -Name "DisplayName" -Value "azooKey" -Propert
 
 if (Test-Path $HostExePath) {
   $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-  New-ItemProperty -Path $runKey -Name "azooKeyInferenceHost" -Value "`"$HostExePath`"" -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $runKey -Name "azooKeyInferenceHost" -Value "`"$HostExePath`" --pipe default" -PropertyType String -Force | Out-Null
 }
 
 Write-Host "TSF TIP registration complete."

@@ -97,10 +97,15 @@ static void TestContextAware() {
 }
 
 int main() {
-  RunRomajiTests();
-  TestBuiltinDictionary();
-  TestTsvLoad();
-  TestPrefixFallback();
-  TestContextAware();
-  return 0;
+  try {
+    RunRomajiTests();
+    TestBuiltinDictionary();
+    TestTsvLoad();
+    TestPrefixFallback();
+    TestContextAware();
+    return 0;
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "core_tests failed: %s\n", e.what());
+    return 1;
+  }
 }

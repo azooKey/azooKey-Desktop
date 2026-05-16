@@ -5,8 +5,16 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 option(AZOOKEY_BUILD_TESTS "Build unit tests" ON)
 option(AZOOKEY_BUILD_BENCH "Build bench tools" ON)
+
+if(AZOOKEY_BUILD_TESTS)
+  enable_testing()
+endif()
 
 add_subdirectory(core)
 add_subdirectory(ipc)
@@ -22,7 +30,6 @@ if(AZOOKEY_BUILD_BENCH)
 endif()
 
 if(AZOOKEY_BUILD_TESTS)
-  enable_testing()
   add_subdirectory(core/tests)
   add_subdirectory(ipc/tests)
   add_subdirectory(learning/tests)

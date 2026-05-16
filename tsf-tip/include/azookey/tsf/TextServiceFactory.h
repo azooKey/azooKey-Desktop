@@ -8,6 +8,10 @@ inline constexpr CLSID kTextServiceClsid = {0x71ee04fa,
                                             0xb35d,
                                             0x4eb8,
                                             {0x87, 0xa1, 0x58, 0x2d, 0x44, 0xa9, 0xa5, 0x8c}};
+inline constexpr GUID kTextServiceProfileGuid = {0xa8f74d91,
+                                                 0x8df3,
+                                                 0x4da1,
+                                                 {0xb8, 0x0b, 0x01, 0xf7, 0xc7, 0x3d, 0x4a, 0x90}};
 
 class TextServiceFactory final : public IClassFactory {
  public:

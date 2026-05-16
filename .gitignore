@@ -7,6 +7,7 @@ xcuserdata/
 *.xccheckout
 *.xcscmblueprint
 build/
+.vs/
 Package.resolved
 DerivedData/
 *.moved-aside

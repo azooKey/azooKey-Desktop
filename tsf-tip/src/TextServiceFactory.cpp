@@ -21,6 +21,8 @@ STDMETHODIMP_(ULONG) TextServiceFactory::Release() {
   return c;
 }
 STDMETHODIMP TextServiceFactory::CreateInstance(IUnknown* outer, REFIID riid, void** ppvObject) {
+  if (!ppvObject) return E_INVALIDARG;
+  *ppvObject = nullptr;
   if (outer) return CLASS_E_NOAGGREGATION;
   auto* service = new TextService();
   const auto hr = service->QueryInterface(riid, ppvObject);
