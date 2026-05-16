@@ -148,6 +148,12 @@ struct ConfigWindow: View {
         }
     }
 
+    private func exportUserDictionary() {
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            appDelegate.exportUserDictionaryAndReloadConverter()
+        }
+    }
+
     private func getErrorMessage(for error: OpenAIError) -> String {
         switch error {
         case .invalidURL:
@@ -429,6 +435,7 @@ struct ConfigWindow: View {
                                 }
                                 self.systemUserDictionary.value.lastUpdate = .now
                                 self.systemUserDictionaryUpdateMessage = .successfulUpdate
+                                self.exportUserDictionary()
                             } catch {
                                 self.systemUserDictionaryUpdateMessage = .error(error)
                             }
@@ -437,6 +444,7 @@ struct ConfigWindow: View {
                             self.systemUserDictionary.value.lastUpdate = nil
                             self.systemUserDictionary.value.items = []
                             self.systemUserDictionaryUpdateMessage = nil
+                            self.exportUserDictionary()
                         }
                     }
                 } label: {

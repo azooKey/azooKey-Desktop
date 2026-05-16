@@ -29,8 +29,31 @@ struct UserDictionaryEditorWindow: View {
         }
     }
 
+    /// Read the current user dictionary value through the `@ConfigState` binding (i.e. the
+    /// in-memory store) instead of `userDictionary.value` (which decodes from UserDefaults
+    /// on every access). Writes still go through `updateUserDictionary` below.
+    private var userDictionaryValue: Config.UserDictionary.Value {
+        self.$userDictionary.wrappedValue
+    }
+
     private var isAdditionDisabled: Bool {
-        self.userDictionary.value.items.count >= 50
+        self.userDictionaryValue.items.count >= 50
+    }
+
+    /// Mutate the user dictionary through the `@ConfigState` binding so the backing store and
+    /// any other window observing the same item are kept in sync. Direct `userDictionary.value`
+    /// mutation only writes to UserDefaults and bypasses the store, which left "x件のアイテム"
+    /// counts stale in other views (see fix/user-dictionary-count-update).
+    private func updateUserDictionary(_ transform: (inout Config.UserDictionary.Value) -> Void) {
+        var value = self.$userDictionary.wrappedValue
+        transform(&value)
+        self.$userDictionary.wrappedValue = value
+    }
+
+    private func exportUserDictionary() {
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            appDelegate.exportUserDictionaryAndReloadConverter()
+        }
     }
 
     var body: some View {
@@ -44,15 +67,15 @@ struct UserDictionaryEditorWindow: View {
             if let editTargetID {
                 let itemBinding = Binding(
                     get: {
-                        self.userDictionary.value.items.first {
+                        self.userDictionaryValue.items.first {
                             $0.id == editTargetID
                         } ?? .init(word: "", reading: "")
                     },
-                    set: {
-                        if let index = self.userDictionary.value.items.firstIndex(where: {
-                            $0.id == editTargetID
-                        }) {
-                            self.userDictionary.value.items[index] = $0
+                    set: { newItem in
+                        self.updateUserDictionary { value in
+                            if let index = value.items.firstIndex(where: { $0.id == editTargetID }) {
+                                value.items[index] = newItem
+                            }
                         }
                     }
                 )
@@ -64,6 +87,7 @@ struct UserDictionaryEditorWindow: View {
                         Spacer()
                         Button("完了", systemImage: "checkmark") {
                             self.editTargetID = nil
+                            self.exportUserDictionary()
                         }
                         Spacer()
                     }
@@ -73,7 +97,9 @@ struct UserDictionaryEditorWindow: View {
                     Spacer()
                     Button("追加", systemImage: "plus") {
                         let newItem = Config.UserDictionaryEntry(word: "", reading: "", hint: nil)
-                        self.userDictionary.value.items.append(newItem)
+                        self.updateUserDictionary { value in
+                            value.items.append(newItem)
+                        }
                         self.editTargetID = newItem.id
                         self.undoItem = nil
                     }
@@ -84,8 +110,11 @@ struct UserDictionaryEditorWindow: View {
                     }
                     if let undoItem {
                         Button("元に戻す", systemImage: "arrow.uturn.backward") {
-                            self.userDictionary.value.items.append(undoItem)
+                            self.updateUserDictionary { value in
+                                value.items.append(undoItem)
+                            }
                             self.undoItem = nil
+                            self.exportUserDictionary()
                         }
                     }
                     Spacer()
@@ -93,7 +122,7 @@ struct UserDictionaryEditorWindow: View {
             }
             HStack {
                 Spacer()
-                Table(self.userDictionary.value.items) {
+                Table(self.userDictionaryValue.items) {
                     TableColumn("") { item in
                         HStack {
                             Button("編集する", systemImage: "pencil") {
@@ -103,12 +132,13 @@ struct UserDictionaryEditorWindow: View {
                             .buttonStyle(.bordered)
                             .labelStyle(.iconOnly)
                             Button("削除する", systemImage: "trash", role: .destructive) {
-                                if let itemIndex = self.userDictionary.value.items.firstIndex(where: {
-                                    $0.id == item.id
-                                }) {
-                                    self.undoItem = self.userDictionary.value.items[itemIndex]
-                                    self.userDictionary.value.items.remove(at: itemIndex)
+                                self.updateUserDictionary { value in
+                                    if let itemIndex = value.items.firstIndex(where: { $0.id == item.id }) {
+                                        self.undoItem = value.items[itemIndex]
+                                        value.items.remove(at: itemIndex)
+                                    }
                                 }
+                                self.exportUserDictionary()
                             }
                             .buttonStyle(.bordered)
                             .labelStyle(.iconOnly)

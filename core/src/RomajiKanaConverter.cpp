@@ -64,7 +64,7 @@ std::string RomajiKanaConverter::Feed(char ascii) {
     return "ん" + ConvertPending(false);
   }
 
-  if (pending_.size() == 1 && pending_[0] == 'n' && lower != 'y' && lower != 'n') {
+  if (pending_.size() == 1 && pending_[0] == 'n' && !IsVowelOrY(lower) && lower != 'n') {
     std::string out = "ん";
     pending_.clear();
     pending_.push_back(lower);
@@ -84,6 +84,31 @@ std::string RomajiKanaConverter::Flush() { return ConvertPending(true); }
 
 void RomajiKanaConverter::Reset() { pending_.clear(); }
 
+std::string RomajiKanaConverter::Preview(const std::string& ascii) {
+  RomajiKanaConverter converter;
+  std::string output;
+  for (char raw : ascii) {
+    output += converter.Feed(raw);
+  }
+
+  if (converter.pending_ == "nn") {
+    output += "ん";
+  } else {
+    output += converter.pending_;
+  }
+  return output;
+}
+
+std::string RomajiKanaConverter::ConvertForCommit(const std::string& ascii) {
+  RomajiKanaConverter converter;
+  std::string output;
+  for (char raw : ascii) {
+    output += converter.Feed(raw);
+  }
+  output += converter.Flush();
+  return output;
+}
+
 std::string RomajiKanaConverter::ConvertPending(bool force_flush) {
   std::string output;
   while (!pending_.empty()) {
@@ -100,6 +125,11 @@ std::string RomajiKanaConverter::ConvertPending(bool force_flush) {
       }
     }
     if (!matched) {
+      if (force_flush && pending_ == "nn") {
+        output += "ん";
+        pending_.clear();
+        continue;
+      }
       if (force_flush && pending_ == "n") {
         output += "ん";
         pending_.clear();
