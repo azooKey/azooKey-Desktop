@@ -50,6 +50,12 @@ struct UserDictionaryEditorWindow: View {
         self.$userDictionary.wrappedValue = value
     }
 
+    private func exportUserDictionary() {
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            appDelegate.exportUserDictionaryAndReloadConverter()
+        }
+    }
+
     var body: some View {
         VStack {
             Text("ユーザ辞書の設定")
@@ -81,6 +87,7 @@ struct UserDictionaryEditorWindow: View {
                         Spacer()
                         Button("完了", systemImage: "checkmark") {
                             self.editTargetID = nil
+                            self.exportUserDictionary()
                         }
                         Spacer()
                     }
@@ -107,6 +114,7 @@ struct UserDictionaryEditorWindow: View {
                                 value.items.append(undoItem)
                             }
                             self.undoItem = nil
+                            self.exportUserDictionary()
                         }
                     }
                     Spacer()
@@ -130,6 +138,7 @@ struct UserDictionaryEditorWindow: View {
                                         value.items.remove(at: itemIndex)
                                     }
                                 }
+                                self.exportUserDictionary()
                             }
                             .buttonStyle(.bordered)
                             .labelStyle(.iconOnly)

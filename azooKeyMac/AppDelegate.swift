@@ -35,6 +35,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var userDictionaryEditorWindowController: NSWindowController?
     var kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
 
+    private var userDictionaryMemoryDirectoryURL: URL {
+        let applicationSupportDirectoryURL: URL
+        if #available(macOS 13, *) {
+            applicationSupportDirectoryURL = URL.applicationSupportDirectory
+                .appending(path: "azooKey", directoryHint: .isDirectory)
+        } else {
+            applicationSupportDirectoryURL = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first!
+                .appendingPathComponent("azooKey", isDirectory: true)
+        }
+        return applicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
+    }
+
+    private func exportInitialUserDictionaryIfNeeded() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            guard !CompiledUserDictionaryStore.hasExportedDictionary(memoryDirectoryURL: memoryDirectoryURL) else {
+                return
+            }
+            do {
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
+        }
+    }
+
+    func exportUserDictionaryAndReloadConverter() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
+        }
+    }
+
+    private func reloadUserDictionary(memoryDirectoryURL: URL) {
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: memoryDirectoryURL),
+            forceReload: true
+        )
+    }
+
     private static func buildSwiftUIWindow(
         _ view: some View,
         contentRect: NSRect = NSRect(x: 0, y: 0, width: 400, height: 300),
@@ -89,6 +142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await Config.OpenAiApiKey.loadFromKeychain()
         }
+        self.exportInitialUserDictionaryIfNeeded()
 
         // Check if mainMenu exists, or create it
         if NSApp.mainMenu == nil {
