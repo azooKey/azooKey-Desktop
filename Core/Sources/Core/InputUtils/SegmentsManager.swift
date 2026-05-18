@@ -17,11 +17,13 @@ public final class SegmentsManager {
     /// テストなどの設定注入のための型。外部には設定を露出させない。
     public struct Context {
         public init() {}
-        init(useZenzai: Bool) {
+        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil) {
             self.useZenzai = useZenzai
+            self.resourcesDirectoryURL = resourcesDirectoryURL
         }
 
         var useZenzai: Bool = true
+        var resourcesDirectoryURL: URL?
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
@@ -97,7 +99,7 @@ public final class SegmentsManager {
             return nil
         }
 
-        let base = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/", isDirectory: false).path + "/lm"
+        let base = self.resourcesDirectoryURL.appendingPathComponent("lm", isDirectory: false).path
         let personal = containerURL.appendingPathComponent("Library/Application Support/p13n_v1").path + "/lm"
         // check personal lm existence
         guard [
@@ -141,7 +143,7 @@ public final class SegmentsManager {
             return .off
         }
         return .on(
-            weight: Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/ggml-model-Q5_K_M.gguf", isDirectory: false),
+            weight: self.resourcesDirectoryURL.appendingPathComponent("ggml-model-Q5_K_M.gguf", isDirectory: false),
             inferenceLimit: Config.ZenzaiInferenceLimit().value,
             requestRichCandidates: requestRichCandidates,
             personalizationMode: self.zenzaiPersonalizationMode,
@@ -153,6 +155,16 @@ public final class SegmentsManager {
                     )
             )
         )
+    }
+
+    private var resourcesDirectoryURL: URL {
+        if let resourcesDirectoryURL = self.context.resourcesDirectoryURL {
+            return resourcesDirectoryURL
+        }
+        if let resourceURL = Bundle.main.resourceURL {
+            return resourceURL
+        }
+        return Bundle.main.bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)
     }
 
     private var metadata: ConvertRequestOptions.Metadata {
@@ -656,6 +668,11 @@ public final class SegmentsManager {
         var text: [Element]
 
         public var selectionRange: NSRange
+
+        public init(text: [Element], selectionRange: NSRange) {
+            self.text = text
+            self.selectionRange = selectionRange
+        }
 
         public func makeIterator() -> Array<Element>.Iterator {
             text.makeIterator()

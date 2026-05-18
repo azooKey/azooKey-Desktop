@@ -159,6 +159,7 @@
 				1A41E61026E745D9009B65D7 /* Sources */,
 				1A41E61126E745D9009B65D7 /* Frameworks */,
 				1A41E61226E745D9009B65D7 /* Resources */,
+				55C0DEC02EFD000000000001 /* Build ConverterServer */,
 			);
 			buildRules = (
 			);
@@ -301,6 +302,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		55C0DEC02EFD000000000001 /* Build ConverterServer */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build ConverterServer";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/MacOS/ConverterServer",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\nswift_configuration=debug\nif [ \"${CONFIGURATION}\" = \"Release\" ]; then\n    swift_configuration=release\nfi\n\nswift build --package-path \"${SRCROOT}/Core\" --product ConverterServer -c \"${swift_configuration}\"\n\nserver_source=\"${SRCROOT}/Core/.build/${swift_configuration}/ConverterServer\"\nserver_destination=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/MacOS/ConverterServer\"\nmkdir -p \"$(dirname \"${server_destination}\")\"\ncp \"${server_source}\" \"${server_destination}\"\n\nif ! otool -l \"${server_destination}\" | grep -q \"@executable_path/../Frameworks\"; then\n    install_name_tool -add_rpath \"@executable_path/../Frameworks\" \"${server_destination}\"\nfi\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ] && [ \"${EXPANDED_CODE_SIGN_IDENTITY}\" != \"-\" ]; then\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --options runtime --timestamp=none \"${server_destination}\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1A41E61026E745D9009B65D7 /* Sources */ = {
@@ -492,6 +516,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = azooKeyMac/Info.plist;
@@ -526,6 +551,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GCC_OPTIMIZATION_LEVEL = fast;
 				GENERATE_INFOPLIST_FILE = YES;

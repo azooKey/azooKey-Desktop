@@ -3,12 +3,16 @@ set -xe -o pipefail
 
 IGNORE_LINT=false
 DRY_RUN=false
+NO_PKILL=false
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_APP_PATH="/Library/Input Methods/azooKeyMac.app"
 
 # Parse command-line options
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --ignore-lint) IGNORE_LINT=true ;;
         --dry-run) DRY_RUN=true ;;
+        --no-pkill) NO_PKILL=true ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -45,10 +49,16 @@ if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: Would execute the following commands:"
     echo "  sudo rm -rf /Library/Input\ Methods/azooKeyMac.app"
     echo "  sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/"
-    echo "  pkill azooKeyMac"
+    echo "  ${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh \"${INSTALL_APP_PATH}\""
+    if [ "$NO_PKILL" = false ]; then
+        echo "  pkill azooKeyMac || true"
+    fi
     echo "Build completed successfully. Use without --dry-run to actually install."
 else
     sudo rm -rf /Library/Input\ Methods/azooKeyMac.app
     sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/
-    pkill azooKeyMac
+    "${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh" "${INSTALL_APP_PATH}"
+    if [ "$NO_PKILL" = false ]; then
+        pkill azooKeyMac || true
+    fi
 fi

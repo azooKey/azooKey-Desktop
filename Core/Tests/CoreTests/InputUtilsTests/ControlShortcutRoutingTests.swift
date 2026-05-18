@@ -286,3 +286,56 @@ private func makeControlEvent(
         return
     }
 }
+
+@Test func testShiftArrowRoutesToEditSegmentInCompositionStates() {
+    let shiftLeftEvent = makeControlEvent(
+        logicalKey: nil,
+        characters: nil,
+        modifiers: [.shift],
+        keyCode: 123
+    )
+    let shiftRightEvent = makeControlEvent(
+        logicalKey: nil,
+        characters: nil,
+        modifiers: [.shift],
+        keyCode: 124
+    )
+
+    guard case .navigation(.left) = UserAction.getUserAction(eventCore: shiftLeftEvent, inputLanguage: .japanese) else {
+        Issue.record("Expected Shift+Left to be navigation(.left)")
+        return
+    }
+    guard case .navigation(.right) = UserAction.getUserAction(eventCore: shiftRightEvent, inputLanguage: .japanese) else {
+        Issue.record("Expected Shift+Right to be navigation(.right)")
+        return
+    }
+
+    let states: [InputState] = [.composing, .previewing, .selecting]
+    for state in states {
+        let (leftAction, _) = state.event(
+            eventCore: shiftLeftEvent,
+            userAction: .navigation(.left),
+            inputLanguage: .japanese,
+            liveConversionEnabled: false,
+            enableDebugWindow: false,
+            enableSuggestion: false
+        )
+        guard case .editSegment(-1) = leftAction else {
+            Issue.record("Expected Shift+Left in \(state) to edit segment left, got \(leftAction)")
+            return
+        }
+
+        let (rightAction, _) = state.event(
+            eventCore: shiftRightEvent,
+            userAction: .navigation(.right),
+            inputLanguage: .japanese,
+            liveConversionEnabled: false,
+            enableDebugWindow: false,
+            enableSuggestion: false
+        )
+        guard case .editSegment(1) = rightAction else {
+            Issue.record("Expected Shift+Right in \(state) to edit segment right, got \(rightAction)")
+            return
+        }
+    }
+}

@@ -49,11 +49,13 @@ public enum CustomInputTableStore {
 
     /// Load and register the custom input table if it exists.
     /// Safe to call multiple times; later calls override previous registration.
-    public static func registerIfExists() {
+    @discardableResult
+    public static func registerIfExists() -> Bool {
         guard exists(), let table = try? InputStyleManager.loadTable(from: fileURL) else {
-            return
+            return false
         }
         InputStyleManager.registerInputStyle(table: table, for: tableName)
+        return true
     }
 
     public static func exists() -> Bool {
