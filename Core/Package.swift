@@ -18,6 +18,10 @@ let package = Package(
         .library(
             name: "Core",
             targets: ["Core"]
+        ),
+        .executable(
+            name: "ConverterServer",
+            targets: ["ConverterServer"]
         )
     ],
     dependencies: [
@@ -28,6 +32,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "git-info-generator"
+        ),
+        .executableTarget(
+            name: "ConverterServer",
+            dependencies: ["Core"],
+            swiftSettings: [.interoperabilityMode(.Cxx)]
         ),
         .plugin(
             name: "GitInfoPlugin",

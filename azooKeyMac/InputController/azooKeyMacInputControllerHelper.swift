@@ -14,6 +14,7 @@ extension azooKeyMacInputController {
         self.transformSelectedTextMenuItem.target = self
         self.appMenu.addItem(self.transformSelectedTextMenuItem)
         self.appMenu.addItem(NSMenuItem.separator())
+        self.appMenu.addItem(NSMenuItem(title: "Converter Processと通信", action: #selector(self.callConverterProcess(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub…", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
         self.updateTransformSelectedTextMenuItemEnabledState()
@@ -102,6 +103,12 @@ extension azooKeyMacInputController {
 
     @objc func openConfigWindow(_ sender: Any) {
         (NSApplication.shared.delegate as? AppDelegate)!.openConfigWindow()
+    }
+
+    @objc func callConverterProcess(_ sender: Any) {
+        self.converterServerClient.ping("azooKeyMac") { [weak self] response in
+            self?.segmentsManager.appendDebugMessage("ConverterServer ping: \(response ?? "failed")")
+        }
     }
 
     // MARK: - Application Support Directory
