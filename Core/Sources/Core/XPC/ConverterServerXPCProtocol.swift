@@ -1,18 +1,6 @@
 import Foundation
 import KanaKanjiConverterModule
 
-public enum ConverterServerXPC {
-    public static let machServiceName = "dev.ensan.inputmethod.azooKeyMac.ConverterServer"
-}
-
-@objc public protocol ConverterServerXPCProtocol {
-    func serverInfo(with reply: @escaping @Sendable (Data?, NSString?) -> Void)
-    func openSession(with reply: @escaping @Sendable (String) -> Void)
-    func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void)
-    func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void)
-    func ping(_ message: String, with reply: @escaping @Sendable (String) -> Void)
-}
-
 public enum ConverterServerProtocol {
     public static let currentVersion = 1
     public static let minimumSupportedClientVersion = 1
