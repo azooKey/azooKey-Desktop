@@ -1,4 +1,4 @@
-public struct KeyEventCore: Sendable, Equatable {
+public struct KeyEventCore: Codable, Sendable, Equatable {
     public struct ModifierFlag: OptionSet, Codable, Sendable, Hashable {
         public let rawValue: Int
 
@@ -18,8 +18,8 @@ public struct KeyEventCore: Sendable, Equatable {
         self.charactersIgnoringModifiers = charactersIgnoringModifiers
         self.keyCode = keyCode
     }
-    var modifierFlags: ModifierFlag
-    var characters: String?
-    var charactersIgnoringModifiers: String?
-    var keyCode: UInt16
+    public var modifierFlags: ModifierFlag
+    public var characters: String?
+    public var charactersIgnoringModifiers: String?
+    public var keyCode: UInt16
 }

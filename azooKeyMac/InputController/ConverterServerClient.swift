@@ -6,7 +6,6 @@ private enum ConverterServerXPC {
 }
 
 @objc private protocol ConverterServerXPCProtocol {
-    func serverInfo(with reply: @escaping @Sendable (Data?, NSString?) -> Void)
     func openSession(with reply: @escaping @Sendable (String) -> Void)
     func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void)
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void)
@@ -16,7 +15,6 @@ private enum ConverterServerXPC {
 final class ConverterServerClient {
     private var connection: NSXPCConnection?
     private var sessionID: String?
-    private var serverInfo: ConverterServerInfo?
     private let syncTimeout: TimeInterval = 0.8
     private var hasOpenedSession = false
     private var shouldAttemptReconnect = false
@@ -27,7 +25,7 @@ final class ConverterServerClient {
         sessionID != nil
     }
     var canSendOrReconnect: Bool {
-        sessionID != nil || (shouldAttemptReconnect && Date() >= nextReconnectAttemptDate)
+        sessionID != nil || !hasOpenedSession || (shouldAttemptReconnect && Date() >= nextReconnectAttemptDate)
     }
 
     func openSession(completion: ((String?) -> Void)? = nil) {
@@ -35,58 +33,20 @@ final class ConverterServerClient {
             completion?(sessionID)
             return
         }
-        refreshServerInfo { [weak self] info in
-            guard let self, let info, self.isCompatible(info) else {
-                completion?(nil)
-                return
-            }
-            self.openCompatibleSession(completion: completion)
-        }
+        openSessionOnServer(completion: completion)
     }
 
     func openSessionSync() -> String? {
         if let sessionID {
             return sessionID
         }
-        guard let info = serverInfoSync(), isCompatible(info) else {
-            recordReconnectFailure()
-            return nil
-        }
         let sessionID = waitForResult(timeout: syncTimeout) { [weak self] complete in
-            self?.openCompatibleSession(completion: complete)
+            self?.openSessionOnServer(completion: complete)
         }
         if sessionID == nil {
             recordReconnectFailure()
         }
         return sessionID
-    }
-
-    func refreshServerInfo(completion: @escaping (ConverterServerInfo?) -> Void) {
-        if let serverInfo {
-            completion(serverInfo)
-            return
-        }
-        remoteObjectProxy { [weak self] proxy in
-            guard let self, let proxy else {
-                completion(nil)
-                return
-            }
-            proxy.serverInfo { data, errorMessage in
-                if let errorMessage {
-                    self.onLog?("ConverterServer info failed: \(errorMessage)")
-                    completion(nil)
-                    return
-                }
-                guard let data, let info = try? ConverterServerCodec.decodeServerInfo(from: data) else {
-                    self.onLog?("ConverterServer info decode failed")
-                    completion(nil)
-                    return
-                }
-                self.serverInfo = info
-                self.onLog?("ConverterServer protocol v\(info.protocolVersion), kind=\(info.serverKind)")
-                completion(info)
-            }
-        }
     }
 
     func closeSession() {
@@ -129,24 +89,14 @@ final class ConverterServerClient {
         guard let sessionID = openSessionSync() else {
             return nil
         }
-        let command = commandBuilder(sessionID)
-        guard supports(command) else {
-            onLog?("ConverterServer command unsupported: \(command.commandName.rawValue)")
-            return nil
-        }
-        return sendResolvedSync(command)
+        return sendResolvedSync(commandBuilder(sessionID))
     }
 
     func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterServerCommand) -> ConverterServerResponse? {
         guard let sessionID else {
             return nil
         }
-        let command = commandBuilder(sessionID)
-        guard supports(command) else {
-            onLog?("ConverterServer command unsupported: \(command.commandName.rawValue)")
-            return nil
-        }
-        return sendResolvedSync(command)
+        return sendResolvedSync(commandBuilder(sessionID))
     }
 
     func sendIfSessionOpen(
@@ -177,11 +127,6 @@ final class ConverterServerClient {
         _ command: ConverterServerCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
-        guard supports(command) else {
-            onLog?("ConverterServer command unsupported: \(command.commandName.rawValue)")
-            completion(nil)
-            return
-        }
         do {
             let data = try ConverterServerCodec.encode(command)
             self.remoteObjectProxy { proxy in
@@ -208,7 +153,7 @@ final class ConverterServerClient {
         }
     }
 
-    private func openCompatibleSession(completion: ((String?) -> Void)? = nil) {
+    private func openSessionOnServer(completion: ((String?) -> Void)? = nil) {
         remoteObjectProxy { [weak self] proxy in
             guard let self, let proxy else {
                 completion?(nil)
@@ -222,15 +167,6 @@ final class ConverterServerClient {
                 self.onLog?("ConverterServer session opened: \(sessionID)")
                 completion?(sessionID)
             }
-        }
-    }
-
-    private func serverInfoSync() -> ConverterServerInfo? {
-        if let serverInfo {
-            return serverInfo
-        }
-        return waitForResult(timeout: syncTimeout) { [weak self] complete in
-            self?.refreshServerInfo(completion: complete)
         }
     }
 
@@ -263,23 +199,6 @@ final class ConverterServerClient {
         }
     }
 
-    private func isCompatible(_ info: ConverterServerInfo) -> Bool {
-        guard info.isCompatibleWithClient(protocolVersion: ConverterServerProtocol.currentVersion) else {
-            onLog?(
-                "ConverterServer protocol incompatible: server min client v\(info.minimumClientProtocolVersion), client v\(ConverterServerProtocol.currentVersion)"
-            )
-            return false
-        }
-        return true
-    }
-
-    private func supports(_ command: ConverterServerCommand) -> Bool {
-        guard let serverInfo else {
-            return false
-        }
-        return serverInfo.supports(command.commandName)
-    }
-
     private func ensureConnection() -> NSXPCConnection {
         if let connection {
             return connection
@@ -305,7 +224,6 @@ final class ConverterServerClient {
             shouldAttemptReconnect = true
         }
         self.sessionID = nil
-        self.serverInfo = nil
     }
 
     private func invalidateConnection() {
@@ -314,9 +232,7 @@ final class ConverterServerClient {
     }
 
     private func recordReconnectFailure() {
-        guard shouldAttemptReconnect else {
-            return
-        }
+        shouldAttemptReconnect = true
         nextReconnectAttemptDate = Date().addingTimeInterval(2)
     }
 }

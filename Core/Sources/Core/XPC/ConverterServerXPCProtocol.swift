@@ -1,22 +1,9 @@
 import Foundation
 import KanaKanjiConverterModule
 
-public enum ConverterServerProtocol {
-    public static let currentVersion = 1
-    public static let minimumSupportedClientVersion = 1
-}
-
 public enum ConverterServerCodec {
     private static let encoder = JSONEncoder()
     private static let decoder = JSONDecoder()
-
-    public static func encode(_ info: ConverterServerInfo) throws -> Data {
-        try encoder.encode(info)
-    }
-
-    public static func decodeServerInfo(from data: Data) throws -> ConverterServerInfo {
-        try decoder.decode(ConverterServerInfo.self, from: data)
-    }
 
     public static func encode(_ command: ConverterServerCommand) throws -> Data {
         try encoder.encode(command)
@@ -35,135 +22,90 @@ public enum ConverterServerCodec {
     }
 }
 
-public struct ConverterServerInfo: Codable, Sendable, Equatable {
-    public var protocolVersion: Int
-    public var minimumClientProtocolVersion: Int
-    public var supportedCommands: [String]
-    public var serverKind: String
-    public var buildIdentifier: String?
-
-    public init(
-        protocolVersion: Int,
-        minimumClientProtocolVersion: Int,
-        supportedCommands: [String],
-        serverKind: String,
-        buildIdentifier: String? = nil
-    ) {
-        self.protocolVersion = protocolVersion
-        self.minimumClientProtocolVersion = minimumClientProtocolVersion
-        self.supportedCommands = supportedCommands
-        self.serverKind = serverKind
-        self.buildIdentifier = buildIdentifier
-    }
-
-    public func isCompatibleWithClient(protocolVersion clientProtocolVersion: Int) -> Bool {
-        minimumClientProtocolVersion <= clientProtocolVersion
-    }
-
-    public func supports(_ commandName: ConverterServerCommandName) -> Bool {
-        supportedCommands.contains(commandName.rawValue)
-    }
-}
-
-public enum ConverterServerCommandName: String, Codable, Sendable, CaseIterable {
-    case activate
-    case deactivate
-    case snapshot
-    case stopComposition
-    case insertText
-    case insertCompositionSeparator
-    case updateCandidates
-    case deleteBackward
-    case editSegment
-    case setCandidateWindowVisible
-    case selectNextCandidate
-    case selectPreviousCandidate
-    case selectCandidate
-    case resetSelection
-    case submitSelectedCandidate
-    case submitTransformedCandidate
-    case commitMarkedText
-    case forgetMemory
-}
-
 public enum ConverterServerCommand: Codable, Sendable {
     case activate(sessionID: String)
     case deactivate(sessionID: String)
     case snapshot(sessionID: String, inputState: ConverterInputState)
     case stopComposition(sessionID: String)
-    case insertText(sessionID: String, text: String, inputStyle: ConverterInputStyle, leftSideContext: String?)
-    case insertCompositionSeparator(sessionID: String, inputStyle: ConverterInputStyle, skipUpdate: Bool)
-    case updateCandidates(sessionID: String, requestRichCandidates: Bool)
-    case deleteBackward(sessionID: String, count: Int, leftSideContext: String?)
-    case editSegment(sessionID: String, count: Int)
-    case setCandidateWindowVisible(sessionID: String, visible: Bool, inputState: ConverterInputState)
-    case selectNextCandidate(sessionID: String)
-    case selectPreviousCandidate(sessionID: String)
-    case selectCandidate(sessionID: String, index: Int)
-    case resetSelection(sessionID: String)
-    case submitSelectedCandidate(sessionID: String, leftSideContext: String?)
-    case submitTransformedCandidate(sessionID: String, transform: ConverterCandidateTransform, inputState: ConverterInputState, leftSideContext: String?)
-    case commitMarkedText(sessionID: String, inputState: ConverterInputState)
     case forgetMemory(sessionID: String)
+    case handleKeyEvent(sessionID: String, request: ConverterKeyEventRequest)
+    case selectCandidate(sessionID: String, index: Int)
+    case submitSelectedCandidate(sessionID: String, leftSideContext: String?)
+    case commitComposition(sessionID: String, inputState: ConverterInputState)
+}
 
-    public var commandName: ConverterServerCommandName {
-        switch self {
-        case .activate:
-            .activate
-        case .deactivate:
-            .deactivate
-        case .snapshot:
-            .snapshot
-        case .stopComposition:
-            .stopComposition
-        case .insertText:
-            .insertText
-        case .insertCompositionSeparator:
-            .insertCompositionSeparator
-        case .updateCandidates:
-            .updateCandidates
-        case .deleteBackward:
-            .deleteBackward
-        case .editSegment:
-            .editSegment
-        case .setCandidateWindowVisible:
-            .setCandidateWindowVisible
-        case .selectNextCandidate:
-            .selectNextCandidate
-        case .selectPreviousCandidate:
-            .selectPreviousCandidate
-        case .selectCandidate:
-            .selectCandidate
-        case .resetSelection:
-            .resetSelection
-        case .submitSelectedCandidate:
-            .submitSelectedCandidate
-        case .submitTransformedCandidate:
-            .submitTransformedCandidate
-        case .commitMarkedText:
-            .commitMarkedText
-        case .forgetMemory:
-            .forgetMemory
-        }
+public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
+    public var event: KeyEventCore
+    public var inputState: ConverterInputState
+    public var inputLanguage: InputLanguage
+    public var inputStyle: ConverterInputStyle
+    public var liveConversionEnabled: Bool
+    public var enableDebugWindow: Bool
+    public var enableSuggestion: Bool
+    public var enablePredictiveTyping: Bool
+    public var enableTypoCorrection: Bool
+    public var leftSideContext: String?
+    public var visibleCandidateStartIndex: Int
+
+    public init(
+        event: KeyEventCore,
+        inputState: ConverterInputState,
+        inputLanguage: InputLanguage,
+        inputStyle: ConverterInputStyle,
+        liveConversionEnabled: Bool,
+        enableDebugWindow: Bool,
+        enableSuggestion: Bool,
+        enablePredictiveTyping: Bool = false,
+        enableTypoCorrection: Bool = false,
+        leftSideContext: String?,
+        visibleCandidateStartIndex: Int = 0
+    ) {
+        self.event = event
+        self.inputState = inputState
+        self.inputLanguage = inputLanguage
+        self.inputStyle = inputStyle
+        self.liveConversionEnabled = liveConversionEnabled
+        self.enableDebugWindow = enableDebugWindow
+        self.enableSuggestion = enableSuggestion
+        self.enablePredictiveTyping = enablePredictiveTyping
+        self.enableTypoCorrection = enableTypoCorrection
+        self.leftSideContext = leftSideContext
+        self.visibleCandidateStartIndex = visibleCandidateStartIndex
     }
 }
 
-public enum ConverterCandidateTransform: Codable, Sendable {
-    case hiragana
-    case katakana
-    case halfWidthKatakana
-    case fullWidthRoman
-    case halfWidthRoman
+public enum ConverterClientEffect: Codable, Sendable, Equatable {
+    case insertText(String)
+    case switchInputLanguage(InputLanguage)
+    case requestPredictiveSuggestion
+    case requestReplaceSuggestion
+    case selectNextReplaceSuggestionCandidate
+    case selectPreviousReplaceSuggestionCandidate
+    case submitReplaceSuggestionCandidate
+    case hideReplaceSuggestionWindow
+    case showPromptInputWindow
+    case transformSelectedText(String, String)
+    case fallthroughToApplication
 }
 
 public struct ConverterServerResponse: Codable, Sendable {
-    public var sessionID: String
-    public var committedText: String?
+    public var handled: Bool
+    public var effects: [ConverterClientEffect]
+    public var inputState: ConverterInputState
+    public var inputLanguage: InputLanguage?
     public var snapshot: ConverterSessionSnapshot
 
-    public init(sessionID: String, committedText: String? = nil, snapshot: ConverterSessionSnapshot) {
-        self.sessionID = sessionID
-        self.committedText = committedText
+    public init(
+        handled: Bool = true,
+        effects: [ConverterClientEffect] = [],
+        inputState: ConverterInputState = .none,
+        inputLanguage: InputLanguage? = nil,
+        snapshot: ConverterSessionSnapshot
+    ) {
+        self.handled = handled
+        self.effects = effects
+        self.inputState = inputState
+        self.inputLanguage = inputLanguage
         self.snapshot = snapshot
     }
 }
@@ -203,17 +145,6 @@ public extension ConverterSessionSnapshot {
             isEmpty: true,
             convertTarget: ""
         )
-    }
-
-    var inputStateFromCandidateWindow: InputState? {
-        switch candidateWindow {
-        case .selecting:
-            .selecting
-        case .composing:
-            .composing
-        case .hidden:
-            nil
-        }
     }
 }
 
@@ -325,6 +256,11 @@ public struct ConverterMarkedText: Codable, Sendable, Equatable {
     public var elements: [Element]
     public var selectionRange: ConverterRange
 
+    public init(elements: [Element], selectionRange: ConverterRange) {
+        self.elements = elements
+        self.selectionRange = selectionRange
+    }
+
     public init(_ markedText: SegmentsManager.MarkedText) {
         self.elements = markedText.map(Element.init)
         self.selectionRange = ConverterRange(markedText.selectionRange)
@@ -337,6 +273,11 @@ public struct ConverterMarkedText: Codable, Sendable, Equatable {
         public init(_ element: SegmentsManager.MarkedText.Element) {
             self.content = element.content
             self.focus = FocusState(element.focus)
+        }
+
+        public init(content: String, focus: FocusState) {
+            self.content = content
+            self.focus = focus
         }
     }
 
@@ -361,6 +302,11 @@ public struct ConverterMarkedText: Codable, Sendable, Equatable {
 public struct ConverterRange: Codable, Sendable, Equatable {
     public var location: Int
     public var length: Int
+
+    public init(location: Int, length: Int) {
+        self.location = location
+        self.length = length
+    }
 
     public init(_ range: NSRange) {
         self.location = range.location

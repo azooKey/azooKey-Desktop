@@ -6,8 +6,15 @@ private enum ConverterServerXPC {
     static let machServiceName = "dev.ensan.inputmethod.azooKeyMac.ConverterServer"
 }
 
+private enum ConverterCandidateTransform {
+    case hiragana
+    case katakana
+    case halfWidthKatakana
+    case fullWidthRoman
+    case halfWidthRoman
+}
+
 @objc private protocol ConverterServerXPCProtocol {
-    func serverInfo(with reply: @escaping @Sendable (Data?, NSString?) -> Void)
     func openSession(with reply: @escaping @Sendable (String) -> Void)
     func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void)
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void)
@@ -37,21 +44,6 @@ private final class ConverterSession: SegmentManagerDelegate {
 
 private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Sendable {
     private var sessions: [String: ConverterSession] = [:]
-
-    func serverInfo(with reply: @escaping @Sendable (Data?, NSString?) -> Void) {
-        do {
-            let info = ConverterServerInfo(
-                protocolVersion: ConverterServerProtocol.currentVersion,
-                minimumClientProtocolVersion: ConverterServerProtocol.minimumSupportedClientVersion,
-                supportedCommands: ConverterServerCommandName.allCases.map(\.rawValue),
-                serverKind: "launchd-mach-service",
-                buildIdentifier: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            )
-            reply(try ConverterServerCodec.encode(info), nil)
-        } catch {
-            reply(nil, error.localizedDescription as NSString)
-        }
-    }
 
     func openSession(with reply: @escaping @Sendable (String) -> Void) {
         DispatchQueue.main.async {
@@ -91,137 +83,334 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
     }
 
     @MainActor
-    // swiftlint:disable:next cyclomatic_complexity
     private func handle(_ command: ConverterServerCommand) throws -> ConverterServerResponse {
         switch command {
         case .activate(let sessionID):
-            return try withSession(sessionID, inputState: .none) { session in
-                session.manager.activate()
-                return nil
-            }
+            let session = try getSession(sessionID)
+            session.manager.activate()
+            return makeResponse(for: session, inputState: .none)
         case .deactivate(let sessionID):
-            return try withSession(sessionID, inputState: .none) { session in
-                session.manager.deactivate()
-                return nil
-            }
+            let session = try getSession(sessionID)
+            session.manager.deactivate()
+            return makeResponse(for: session, inputState: .none)
         case .snapshot(let sessionID, let inputState):
-            return makeResponse(sessionID: sessionID, inputState: inputState.inputState)
+            return makeResponse(for: try getSession(sessionID), inputState: inputState.inputState)
         case .stopComposition(let sessionID):
-            return try withSession(sessionID, inputState: .none) { session in
-                session.manager.stopComposition()
-                return nil
-            }
-        case .insertText(let sessionID, let text, let inputStyle, let leftSideContext):
-            return try withSession(sessionID, inputState: .composing) { session in
-                session.setLeftSideContext(leftSideContext)
-                session.manager.insertAtCursorPosition(text, inputStyle: Self.resolveInputStyle(inputStyle))
-                return nil
-            }
-        case .insertCompositionSeparator(let sessionID, let inputStyle, let skipUpdate):
-            return try withSession(sessionID, inputState: .previewing) { session in
-                session.manager.insertCompositionSeparator(inputStyle: Self.resolveInputStyle(inputStyle), skipUpdate: skipUpdate)
-                return nil
-            }
-        case .updateCandidates(let sessionID, let requestRichCandidates):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                session.manager.update(requestRichCandidates: requestRichCandidates)
-                return nil
-            }
-        case .deleteBackward(let sessionID, let count, let leftSideContext):
-            return try withSession(sessionID, inputState: .composing) { session in
-                session.setLeftSideContext(leftSideContext)
-                session.manager.deleteBackwardFromCursorPosition(count: count)
-                return nil
-            }
-        case .editSegment(let sessionID, let count):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                session.manager.editSegment(count: count)
-                return nil
-            }
-        case .setCandidateWindowVisible(let sessionID, let visible, let inputState):
-            return try withSession(sessionID, inputState: inputState.inputState) { session in
-                session.manager.requestSetCandidateWindowState(visible: visible)
-                return nil
-            }
-        case .selectNextCandidate(let sessionID):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                session.manager.requestSelectingNextCandidate()
-                return nil
-            }
-        case .selectPreviousCandidate(let sessionID):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                session.manager.requestSelectingPrevCandidate()
-                return nil
-            }
-        case .selectCandidate(let sessionID, let index):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                session.manager.requestSelectingRow(index)
-                return nil
-            }
-        case .resetSelection(let sessionID):
-            return try withSession(sessionID, inputState: .composing) { session in
-                session.manager.requestResettingSelection()
-                return nil
-            }
-        case .submitSelectedCandidate(let sessionID, let leftSideContext):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                guard let candidate = session.manager.selectedCandidate else {
-                    return nil
-                }
-                session.manager.prefixCandidateCommited(candidate, leftSideContext: leftSideContext ?? "")
-                return candidate.text
-            }
-        case .submitTransformedCandidate(let sessionID, let transform, let inputState, let leftSideContext):
-            return try withSession(sessionID, inputState: .selecting) { session in
-                let candidate = Self.transformedCandidate(
-                    transform,
-                    manager: session.manager,
-                    inputState: inputState.inputState
-                )
-                session.manager.prefixCandidateCommited(candidate, leftSideContext: leftSideContext ?? "")
-                return candidate.text
-            }
-        case .commitMarkedText(let sessionID, let inputState):
-            return try withSession(sessionID, inputState: .none) { session in
-                session.manager.commitMarkedText(inputState: inputState.inputState)
-            }
+            let session = try getSession(sessionID)
+            session.manager.stopComposition()
+            return makeResponse(for: session, inputState: .none)
         case .forgetMemory(let sessionID):
-            return try withSession(sessionID, inputState: .none) { session in
-                session.manager.forgetMemory()
-                return nil
-            }
+            let session = try getSession(sessionID)
+            session.manager.forgetMemory()
+            return makeResponse(for: session, inputState: .none)
+        case .handleKeyEvent(let sessionID, let request):
+            return try handleKeyEvent(sessionID: sessionID, request: request)
+        case .selectCandidate(let sessionID, let index):
+            let session = try getSession(sessionID)
+            session.manager.requestSelectingRow(index)
+            return makeResponse(for: session, inputState: .selecting)
+        case .submitSelectedCandidate(let sessionID, let leftSideContext):
+            let session = try getSession(sessionID)
+            var effects: [ConverterClientEffect] = []
+            submitSelectedCandidate(manager: session.manager, leftSideContext: leftSideContext, effects: &effects)
+            let nextInputState: InputState = session.manager.isEmpty ? .none : .previewing
+            return makeResponse(
+                for: session,
+                inputState: nextInputState,
+                effects: effects,
+                responseInputState: ConverterInputState(nextInputState)
+            )
+        case .commitComposition(let sessionID, let inputState):
+            let session = try getSession(sessionID)
+            let text = session.manager.commitMarkedText(inputState: inputState.inputState)
+            let effects: [ConverterClientEffect] = text.isEmpty ? [] : [.insertText(text)]
+            return makeResponse(for: session, inputState: .none, effects: effects, responseInputState: ConverterInputState.none)
         }
     }
 
     @MainActor
-    private func withSession(
-        _ sessionID: String,
-        inputState: InputState,
-        body: (ConverterSession) throws -> String?
+    private func handleKeyEvent(
+        sessionID: String,
+        request: ConverterKeyEventRequest
     ) throws -> ConverterServerResponse {
         guard let session = sessions[sessionID] else {
             throw ConverterServerError.unknownSession(sessionID)
         }
-        let committedText = try body(session)
-        return makeResponse(sessionID: sessionID, inputState: inputState, committedText: committedText)
+        session.setLeftSideContext(request.leftSideContext)
+        Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
+        Config.DebugTypoCorrection().value = request.enableTypoCorrection
+
+        let userAction = UserAction.getUserAction(
+            eventCore: request.event,
+            inputLanguage: request.inputLanguage
+        )
+        let (clientAction, clientActionCallback) = request.inputState.inputState.event(
+            eventCore: request.event,
+            userAction: userAction,
+            inputLanguage: request.inputLanguage,
+            liveConversionEnabled: request.liveConversionEnabled,
+            enableDebugWindow: request.enableDebugWindow,
+            enableSuggestion: request.enableSuggestion
+        )
+
+        var effects: [ConverterClientEffect] = []
+        var inputLanguage = request.inputLanguage
+        let actionHandled = perform(
+            clientAction,
+            request: request,
+            session: session,
+            inputLanguage: &inputLanguage,
+            effects: &effects
+        )
+        guard actionHandled else {
+            return ConverterServerResponse(
+                handled: false,
+                effects: effects,
+                inputState: request.inputState,
+                inputLanguage: inputLanguage,
+                snapshot: snapshot(for: session.manager, inputState: request.inputState.inputState)
+            )
+        }
+
+        let nextInputState = apply(
+            clientActionCallback,
+            currentInputState: request.inputState.inputState,
+            compositionIsEmpty: session.manager.isEmpty
+        )
+        return ConverterServerResponse(
+            handled: !effects.contains(.fallthroughToApplication),
+            effects: effects,
+            inputState: ConverterInputState(nextInputState),
+            inputLanguage: inputLanguage,
+            snapshot: snapshot(for: session.manager, inputState: nextInputState)
+        )
+    }
+
+    @MainActor
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    private func perform(
+        _ action: ClientAction,
+        request: ConverterKeyEventRequest,
+        session: ConverterSession,
+        inputLanguage: inout InputLanguage,
+        effects: inout [ConverterClientEffect]
+    ) -> Bool {
+        let manager = session.manager
+        let inputState = request.inputState.inputState
+        let inputStyle = Self.resolveInputStyle(request.inputLanguage == .english ? .direct : request.inputStyle)
+        switch action {
+        case .consume:
+            return true
+        case .fallthrough:
+            effects.append(.fallthroughToApplication)
+            return true
+        case .showCandidateWindow:
+            manager.requestSetCandidateWindowState(visible: true)
+        case .hideCandidateWindow:
+            manager.requestSetCandidateWindowState(visible: false)
+        case .appendToMarkedText(let text):
+            manager.insertAtCursorPosition(text, inputStyle: inputStyle)
+        case .appendPieceToMarkedText(let pieces):
+            manager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
+        case .insertWithoutMarkedText(let text):
+            effects.append(.insertText(text))
+        case .removeLastMarkedText:
+            manager.deleteBackwardFromCursorPosition()
+            manager.requestResettingSelection()
+        case .commitMarkedText:
+            let text = manager.commitMarkedText(inputState: inputState)
+            if !text.isEmpty {
+                effects.append(.insertText(text))
+            }
+        case .editSegment(let count):
+            manager.editSegment(count: count)
+        case .enterFirstCandidatePreviewMode:
+            manager.insertCompositionSeparator(inputStyle: inputStyle, skipUpdate: false)
+            manager.requestSetCandidateWindowState(visible: false)
+        case .enterCandidateSelectionMode:
+            manager.insertCompositionSeparator(inputStyle: inputStyle, skipUpdate: true)
+            manager.update(requestRichCandidates: true)
+        case .submitSelectedCandidate:
+            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+        case .selectNextCandidate:
+            manager.requestSelectingNextCandidate()
+        case .selectPrevCandidate:
+            manager.requestSelectingPrevCandidate()
+        case .selectNumberCandidate(let number):
+            manager.requestSelectingRow(request.visibleCandidateStartIndex + number - 1)
+            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+            manager.requestResettingSelection()
+        case .selectInputLanguage(let language):
+            manager.stopComposition()
+            inputLanguage = language
+            effects.append(.switchInputLanguage(language))
+        case .commitMarkedTextAndSelectInputLanguage(let language):
+            let text = manager.commitMarkedText(inputState: inputState)
+            if !text.isEmpty {
+                effects.append(.insertText(text))
+            }
+            inputLanguage = language
+            effects.append(.switchInputLanguage(language))
+        case .commitMarkedTextAndAppendToMarkedText(let text):
+            commitMarkedTextAndContinue(
+                manager: manager,
+                inputState: inputState,
+                effects: &effects
+            )
+            manager.insertAtCursorPosition(text, inputStyle: inputStyle)
+        case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
+            commitMarkedTextAndContinue(
+                manager: manager,
+                inputState: inputState,
+                effects: &effects
+            )
+            manager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
+        case .enableDebugWindow:
+            manager.requestDebugWindowMode(enabled: true)
+        case .disableDebugWindow:
+            manager.requestDebugWindowMode(enabled: false)
+        case .forgetMemory:
+            manager.forgetMemory()
+        case .submitKatakanaCandidate:
+            submitTransformedCandidate(.katakana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+        case .submitHiraganaCandidate:
+            submitTransformedCandidate(.hiragana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+        case .submitHankakuKatakanaCandidate:
+            submitTransformedCandidate(.halfWidthKatakana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+        case .submitFullWidthRomanCandidate:
+            submitTransformedCandidate(.fullWidthRoman, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+        case .submitHalfWidthRomanCandidate:
+            submitTransformedCandidate(.halfWidthRoman, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+        case .requestPredictiveSuggestion:
+            manager.insertAtCursorPosition("つづき", inputStyle: inputStyle)
+            effects.append(.requestReplaceSuggestion)
+        case .acceptPredictionCandidate:
+            acceptPredictionCandidate(manager: manager, leftSideContext: request.leftSideContext)
+        case .requestReplaceSuggestion:
+            effects.append(.requestReplaceSuggestion)
+        case .selectNextReplaceSuggestionCandidate:
+            effects.append(.selectNextReplaceSuggestionCandidate)
+        case .selectPrevReplaceSuggestionCandidate:
+            effects.append(.selectPreviousReplaceSuggestionCandidate)
+        case .submitReplaceSuggestionCandidate:
+            effects.append(.submitReplaceSuggestionCandidate)
+        case .hideReplaceSuggestionWindow:
+            effects.append(.hideReplaceSuggestionWindow)
+        case .showPromptInputWindow:
+            effects.append(.showPromptInputWindow)
+        case .transformSelectedText(let selectedText, let prompt):
+            effects.append(.transformSelectedText(selectedText, prompt))
+        case .enterUnicodeInputMode, .appendToUnicodeInput, .removeLastUnicodeInput, .cancelUnicodeInput:
+            return true
+        case .submitUnicodeInput(let codePoint):
+            if let scalar = UInt32(codePoint, radix: 16), let unicodeScalar = Unicode.Scalar(scalar) {
+                effects.append(.insertText(String(Character(unicodeScalar))))
+            }
+        case .submitSelectedCandidateAndEnterUnicodeInputMode:
+            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+            if !manager.isEmpty {
+                effects.append(.insertText(manager.convertTarget))
+                manager.stopComposition()
+            }
+        case .stopComposition:
+            manager.stopComposition()
+        }
+        return true
+    }
+
+    @MainActor
+    private func apply(
+        _ callback: ClientActionCallback,
+        currentInputState: InputState,
+        compositionIsEmpty: Bool
+    ) -> InputState {
+        switch callback {
+        case .fallthrough:
+            return currentInputState
+        case .transition(let inputState):
+            return inputState
+        case .basedOnBackspace(let ifIsEmpty, let ifIsNotEmpty),
+             .basedOnSubmitCandidate(let ifIsEmpty, let ifIsNotEmpty):
+            return compositionIsEmpty ? ifIsEmpty : ifIsNotEmpty
+        }
+    }
+
+    @MainActor
+    private func commitMarkedTextAndContinue(
+        manager: SegmentsManager,
+        inputState: InputState,
+        effects: inout [ConverterClientEffect]
+    ) {
+        let text = manager.commitMarkedText(inputState: inputState)
+        if !text.isEmpty {
+            effects.append(.insertText(text))
+        }
+    }
+
+    @MainActor
+    private func submitSelectedCandidate(
+        manager: SegmentsManager,
+        leftSideContext: String?,
+        effects: inout [ConverterClientEffect]
+    ) {
+        guard let candidate = manager.selectedCandidate else {
+            return
+        }
+        manager.prefixCandidateCommited(candidate, leftSideContext: leftSideContext ?? "")
+        effects.append(.insertText(candidate.text))
+    }
+
+    @MainActor
+    private func submitTransformedCandidate(
+        _ transform: ConverterCandidateTransform,
+        manager: SegmentsManager,
+        inputState: InputState,
+        leftSideContext: String?,
+        effects: inout [ConverterClientEffect]
+    ) {
+        let candidate = Self.transformedCandidate(transform, manager: manager, inputState: inputState)
+        manager.prefixCandidateCommited(candidate, leftSideContext: leftSideContext ?? "")
+        effects.append(.insertText(candidate.text))
+    }
+
+    @MainActor
+    private func acceptPredictionCandidate(manager: SegmentsManager, leftSideContext _: String?) {
+        let prediction = SegmentsManager.preferredPredictionCandidates(
+            typoCorrectionCandidates: manager.requestTypoCorrectionPredictionCandidates(),
+            predictionCandidates: manager.requestPredictionCandidates()
+        ).first
+        guard let prediction else {
+            return
+        }
+        if prediction.deleteCount > 0 {
+            manager.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
+        }
+        guard !prediction.appendText.isEmpty else {
+            return
+        }
+        manager.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
+    }
+
+    @MainActor
+    private func getSession(_ sessionID: String) throws -> ConverterSession {
+        guard let session = sessions[sessionID] else {
+            throw ConverterServerError.unknownSession(sessionID)
+        }
+        return session
     }
 
     @MainActor
     private func makeResponse(
-        sessionID: String,
+        for session: ConverterSession,
         inputState: InputState,
-        committedText: String? = nil
+        handled: Bool = true,
+        effects: [ConverterClientEffect] = [],
+        responseInputState: ConverterInputState? = nil
     ) -> ConverterServerResponse {
-        guard let session = sessions[sessionID] else {
-            return ConverterServerResponse(
-                sessionID: sessionID,
-                committedText: committedText,
-                snapshot: .empty
-            )
-        }
-        return ConverterServerResponse(
-            sessionID: sessionID,
-            committedText: committedText,
+        ConverterServerResponse(
+            handled: handled,
+            effects: effects,
+            inputState: responseInputState ?? ConverterInputState(inputState),
             snapshot: snapshot(for: session.manager, inputState: inputState)
         )
     }

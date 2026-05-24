@@ -1,6 +1,6 @@
 import Foundation
 
-public enum InputLanguage: Sendable, Equatable, Hashable {
+public enum InputLanguage: Codable, Sendable, Equatable, Hashable {
     case japanese
     case english
 }
