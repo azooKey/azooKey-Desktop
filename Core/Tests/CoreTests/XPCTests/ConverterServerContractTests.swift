@@ -38,6 +38,33 @@ private func makeSnapshot(candidateWindow: ConverterCandidateWindow) -> Converte
     #expect(hidden.inputStateFromCandidateWindow == nil)
 }
 
+@Test func converterServerSnapshotCarriesPredictionCandidates() throws {
+    let snapshot = ConverterSessionSnapshot(
+        markedText: ConverterSessionSnapshot.empty.markedText,
+        candidateWindow: .composing([], selectionIndex: nil),
+        predictionCandidates: [
+            .init(displayText: "ありがとう", appendText: "がとう", deleteCount: 0),
+            .init(displayText: "明日", appendText: "した", deleteCount: 1)
+        ],
+        isEmpty: false,
+        convertTarget: "あり"
+    )
+
+    let decoded = try ConverterServerCodec.decodeResponse(
+        from: ConverterServerCodec.encode(
+            ConverterServerResponse(sessionID: "session-1", snapshot: snapshot)
+        )
+    )
+
+    #expect(decoded.snapshot.predictionCandidates.count == 2)
+    #expect(decoded.snapshot.predictionCandidates[0].displayText == "ありがとう")
+    #expect(decoded.snapshot.predictionCandidates[0].appendText == "がとう")
+    #expect(decoded.snapshot.predictionCandidates[0].deleteCount == 0)
+    #expect(decoded.snapshot.predictionCandidates[1].displayText == "明日")
+    #expect(decoded.snapshot.predictionCandidates[1].appendText == "した")
+    #expect(decoded.snapshot.predictionCandidates[1].deleteCount == 1)
+}
+
 @Test func converterServerEditSegmentCommandCodableShape() throws {
     let expectedJSON = #"{"editSegment":{"sessionID":"session-1","count":-1}}"#
     let command = try ConverterServerCodec.decodeCommand(from: Data(expectedJSON.utf8))

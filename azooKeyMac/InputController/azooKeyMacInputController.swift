@@ -105,17 +105,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
-        let applicationDirectoryURL = if #available(macOS 13, *) {
-            URL.applicationSupportDirectory
-            .appending(path: "azooKey", directoryHint: .isDirectory)
-            .appending(path: "memory", directoryHint: .isDirectory)
-        } else {
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("azooKey", isDirectory: true)
-            .appendingPathComponent("memory", isDirectory: true)
-        }
-
-        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.azooKeyMacIdentifier)
+        let applicationDirectoryURL = AppGroup.memoryDirectoryURL()
+        let containerURL = AppGroup.containerURL()
         self.segmentsManager = SegmentsManager(
             kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
@@ -170,10 +161,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 return
             }
             self.converterServerClient.sendIfSessionOpen({ .activate(sessionID: $0) }, completion: { [weak self] response in
-                guard let response else {
+                guard let self, let response, self.segmentsManager.isEmpty else {
                     return
                 }
-                self?.converterServerSnapshot = response.snapshot
+                self.converterServerSnapshot = response.snapshot
             })
         }
 
@@ -426,8 +417,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor func handleClientAction(_ clientAction: ClientAction, clientActionCallback: ClientActionCallback, client: IMKTextInput) -> Bool {
         if let serverResponse = self.handleClientActionWithConverterServer(clientAction, client: client) {
-            self.applyClientActionCallback(clientActionCallback, client: client, compositionIsEmpty: serverResponse.snapshot.isEmpty)
             self.applyConverterServerSnapshotState(serverResponse.snapshot)
+            self.applyClientActionCallback(clientActionCallback, client: client, compositionIsEmpty: serverResponse.snapshot.isEmpty)
+            self.refreshConverterServerSnapshotIfNeeded(after: clientActionCallback)
             self.refreshMarkedText()
             self.refreshCandidateWindow()
             self.refreshPredictionWindow()
@@ -626,6 +618,27 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
     }
 
+    private func refreshConverterServerSnapshotIfNeeded(after clientActionCallback: ClientActionCallback) {
+        guard self.converterServerSnapshot != nil else {
+            return
+        }
+        switch clientActionCallback {
+        case .fallthrough:
+            return
+        case .transition, .basedOnBackspace, .basedOnSubmitCandidate:
+            self.refreshConverterServerSnapshotForCurrentInputState()
+        }
+    }
+
+    private func refreshConverterServerSnapshotForCurrentInputState() {
+        guard let response = self.converterServerClient.sendIfSessionOpenSync({
+            .snapshot(sessionID: $0, inputState: ConverterInputState(self.inputState))
+        }) else {
+            return
+        }
+        self.converterServerSnapshot = response.snapshot
+    }
+
     @MainActor
     // swiftlint:disable:next cyclomatic_complexity
     private func handleClientActionWithConverterServer(
@@ -633,6 +646,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         client: IMKTextInput
     ) -> ConverterServerResponse? {
         guard self.converterServerClient.canSendOrReconnect else {
+            return nil
+        }
+        guard self.segmentsManager.isEmpty else {
             return nil
         }
 
@@ -803,11 +819,32 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             insertCommittedText(response)
             if let snapshot = response?.snapshot, !snapshot.isEmpty {
                 client.insertText(snapshot.convertTarget, replacementRange: NSRange(location: NSNotFound, length: 0))
-                _ = send {
+                return send {
                     .stopComposition(sessionID: $0)
-                }
+                } ?? response
             }
             return response
+        case .acceptPredictionCandidate:
+            guard let prediction = self.converterServerSnapshot?.predictionCandidates.first else {
+                return self.converterServerSnapshot.map {
+                    ConverterServerResponse(sessionID: "", snapshot: $0)
+                }
+            }
+
+            var response: ConverterServerResponse?
+            if prediction.deleteCount > 0 {
+                response = send {
+                    .deleteBackward(sessionID: $0, count: prediction.deleteCount, leftSideContext: leftSideContext())
+                }
+            }
+            guard !prediction.appendText.isEmpty else {
+                return response ?? self.converterServerSnapshot.map {
+                    ConverterServerResponse(sessionID: "", snapshot: $0)
+                }
+            }
+            return send {
+                .insertText(sessionID: $0, text: prediction.appendText, inputStyle: .direct, leftSideContext: leftSideContext())
+            } ?? response
         default:
             return nil
         }
@@ -919,16 +956,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     func refreshPredictionWindow() {
-        if self.converterServerSnapshot != nil {
-            self.hidePredictionWindow()
-            return
-        }
         guard self.inputState == .composing else {
             self.hidePredictionWindow()
             return
         }
 
-        let predictions = self.requestPreferredPredictionCandidates()
+        let predictions = self.converterServerSnapshot?.predictionCandidates
+            ?? self.requestPreferredPredictionCandidates().map(ConverterPredictionCandidate.init)
         if predictions.isEmpty {
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
@@ -1113,6 +1147,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     private func currentMarkedText() -> ConverterMarkedText {
+        switch self.inputState {
+        case .attachDiacritic, .replaceSuggestion, .unicodeInput:
+            return ConverterMarkedText(self.segmentsManager.getCurrentMarkedText(inputState: self.inputState))
+        case .none, .composing, .previewing, .selecting:
+            break
+        }
         if let converterServerSnapshot {
             return converterServerSnapshot.markedText
         }
@@ -1151,8 +1191,9 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
                     if let text = response.committedText, !text.isEmpty {
                         self.client()?.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
                     }
-                    self.inputState = response.snapshot.isEmpty ? .none : .previewing
                     self.applyConverterServerSnapshotState(response.snapshot)
+                    self.inputState = response.snapshot.isEmpty ? .none : .previewing
+                    self.refreshConverterServerSnapshotForCurrentInputState()
                     self.refreshMarkedText()
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()

@@ -247,9 +247,19 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
                 selectionIndex: selectionIndex
             )
         }
+        let predictionCandidates: [ConverterPredictionCandidate]
+        if inputState == .composing {
+            predictionCandidates = SegmentsManager.preferredPredictionCandidates(
+                typoCorrectionCandidates: manager.requestTypoCorrectionPredictionCandidates(),
+                predictionCandidates: manager.requestPredictionCandidates()
+            ).map(ConverterPredictionCandidate.init)
+        } else {
+            predictionCandidates = []
+        }
         return ConverterSessionSnapshot(
             markedText: markedText,
             candidateWindow: candidateWindow,
+            predictionCandidates: predictionCandidates,
             isEmpty: manager.isEmpty,
             convertTarget: manager.convertTarget
         )
@@ -258,10 +268,11 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
     @MainActor
     private static func makeSegmentsManager() -> SegmentsManager {
         CustomInputTableStore.registerIfExists()
+        let containerURL = AppGroup.containerURL()
         return SegmentsManager(
             kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
-            applicationDirectoryURL: applicationSupportDirectoryURL(),
-            containerURL: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.azooKeyMacIdentifier),
+            applicationDirectoryURL: AppGroup.memoryDirectoryURL(),
+            containerURL: containerURL,
             context: .init(useZenzai: true, resourcesDirectoryURL: appResourcesDirectoryURL())
         )
     }
@@ -286,17 +297,6 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             return .mapped(id: .defaultRomanToKana)
         }
         return inputStyle.inputStyle
-    }
-
-    private static func applicationSupportDirectoryURL() -> URL {
-        if #available(macOS 13, *) {
-            return URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-                .appending(path: "memory", directoryHint: .isDirectory)
-        }
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("azooKey", isDirectory: true)
-            .appendingPathComponent("memory", isDirectory: true)
     }
 
     @MainActor

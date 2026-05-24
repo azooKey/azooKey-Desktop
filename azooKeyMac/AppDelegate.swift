@@ -36,18 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
 
     private var userDictionaryMemoryDirectoryURL: URL {
-        let applicationSupportDirectoryURL: URL
-        if #available(macOS 13, *) {
-            applicationSupportDirectoryURL = URL.applicationSupportDirectory
-                .appending(path: "azooKey", directoryHint: .isDirectory)
-        } else {
-            applicationSupportDirectoryURL = FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first!
-            .appendingPathComponent("azooKey", isDirectory: true)
-        }
-        return applicationSupportDirectoryURL.appendingPathComponent("memory", isDirectory: true)
+        AppGroup.memoryDirectoryURL()
     }
 
     private func exportInitialUserDictionaryIfNeeded() {

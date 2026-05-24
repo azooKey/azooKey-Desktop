@@ -171,17 +171,20 @@ public struct ConverterServerResponse: Codable, Sendable {
 public struct ConverterSessionSnapshot: Codable, Sendable {
     public var markedText: ConverterMarkedText
     public var candidateWindow: ConverterCandidateWindow
+    public var predictionCandidates: [ConverterPredictionCandidate]
     public var isEmpty: Bool
     public var convertTarget: String
 
     public init(
         markedText: ConverterMarkedText,
         candidateWindow: ConverterCandidateWindow,
+        predictionCandidates: [ConverterPredictionCandidate] = [],
         isEmpty: Bool,
         convertTarget: String
     ) {
         self.markedText = markedText
         self.candidateWindow = candidateWindow
+        self.predictionCandidates = predictionCandidates
         self.isEmpty = isEmpty
         self.convertTarget = convertTarget
     }
@@ -373,6 +376,24 @@ public enum ConverterCandidateWindow: Codable, Sendable, Equatable {
     case hidden
     case composing([ConverterCandidatePresentation], selectionIndex: Int?)
     case selecting([ConverterCandidatePresentation], selectionIndex: Int?)
+}
+
+public struct ConverterPredictionCandidate: Codable, Sendable, Equatable {
+    public var displayText: String
+    public var appendText: String
+    public var deleteCount: Int
+
+    public init(_ prediction: SegmentsManager.PredictionCandidate) {
+        self.displayText = prediction.displayText
+        self.appendText = prediction.appendText
+        self.deleteCount = prediction.deleteCount
+    }
+
+    public init(displayText: String, appendText: String, deleteCount: Int = 0) {
+        self.displayText = displayText
+        self.appendText = appendText
+        self.deleteCount = deleteCount
+    }
 }
 
 public struct ConverterCandidatePresentation: Codable, Sendable, Equatable {
