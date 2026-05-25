@@ -160,6 +160,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             guard let self, sessionID != nil else {
                 return
             }
+            self.syncConverterServerSessionConfig()
             self.converterServerClient.sendIfSessionOpen({ .activate(sessionID: $0) }, completion: { [weak self] response in
                 guard let self, let response else {
                     return
@@ -281,20 +282,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return true
         }
 
-        let eventModifiers = KeyEventCore.ModifierFlag(from: event.modifierFlags)
-        let charactersForOptionDirectInput = event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.option))
-        if Config.OptionDirectFullWidthInput().value,
-           let text = OptionDirectInputResolver.resolve(
-            characters: charactersForOptionDirectInput,
-            modifierFlags: eventModifiers,
-            inputLanguage: inputLanguage,
-            inputState: inputState,
-            typeBackSlash: Config.TypeBackSlash().value
-           ) {
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            return true
-        }
-
         let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
 
         // 英数キー（keyCode 102）の処理
@@ -329,12 +316,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         // Handle suggest action with selected text check (prevent recursive calls)
         if case .suggest = userAction {
-            // If AI backend is off, ignore the suggest action
-            if !aiBackendEnabled {
-                self.segmentsManager.appendDebugMessage("Suggest action ignored: AI backend is off")
-                return false
-            }
-
             // Prevent recursive window calls
             if self.isPromptWindowVisible {
                 self.segmentsManager.appendDebugMessage("Suggest action ignored: prompt window already visible")
@@ -344,6 +325,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let selectedRange = client.selectedRange()
             self.segmentsManager.appendDebugMessage("Suggest action detected. Selected range: \(selectedRange)")
             if selectedRange.length > 0 {
+                guard aiBackendEnabled else {
+                    self.segmentsManager.appendDebugMessage("Suggest action ignored: AI backend is off")
+                    return false
+                }
                 self.segmentsManager.appendDebugMessage("Selected text found, showing prompt input window")
                 // There is selected text, show prompt input window
                 self.showPromptInputWindow()
@@ -356,7 +341,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         if let handled = self.handleKeyEventWithConverterServer(
             event: event.keyEventCore,
             client: client,
-            enableSuggestion: aiBackendEnabled
+            enableSuggestion: aiBackendEnabled,
+            optionDirectInputText: event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.option))
         ) {
             return handled
         }
@@ -368,7 +354,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private func handleKeyEventWithConverterServer(
         event: KeyEventCore,
         client: IMKTextInput,
-        enableSuggestion: Bool
+        enableSuggestion: Bool,
+        optionDirectInputText: String? = nil
     ) -> Bool? {
         guard self.converterServerClient.canSendOrReconnect else {
             return nil
@@ -387,6 +374,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             enableSuggestion: enableSuggestion,
             enablePredictiveTyping: Config.DebugPredictiveTyping().value,
             enableTypoCorrection: Config.DebugTypoCorrection().value,
+            enableOptionDirectFullWidthInput: Config.OptionDirectFullWidthInput().value,
+            typeBackSlash: Config.TypeBackSlash().value,
+            optionDirectInputText: optionDirectInputText,
             leftSideContext: self.getLeftSideContext(maxCount: 30)
         )
         guard let response = self.converterServerClient.sendSync({
@@ -410,6 +400,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.refreshMarkedText()
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
+        self.refreshReplaceSuggestionWindow()
         return response.handled
     }
 
@@ -440,9 +431,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .requestReplaceSuggestion:
             self.requestReplaceSuggestion()
         case .selectNextReplaceSuggestionCandidate:
-            self.replaceSuggestionsViewController.selectNextCandidate()
+            self.selectReplaceSuggestionCandidate(offset: 1)
         case .selectPreviousReplaceSuggestionCandidate:
-            self.replaceSuggestionsViewController.selectPrevCandidate()
+            self.selectReplaceSuggestionCandidate(offset: -1)
         case .submitReplaceSuggestionCandidate:
             self.submitSelectedSuggestionCandidate()
         case .hideReplaceSuggestionWindow:
@@ -474,6 +465,32 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 .mapped(id: .defaultRomanToKana)
             }
         }
+    }
+
+    private var converterServerSessionConfig: ConverterSessionConfig {
+        ConverterSessionConfig(
+            aiBackendPreference: Config.AIBackendPreference().value,
+            openAIModelName: Config.OpenAiModelName().value,
+            openAIEndpoint: Config.OpenAiApiEndpoint().value,
+            openAIAPIKey: .init(Config.OpenAiApiKey().value),
+            includeContextInAITransform: Config.IncludeContextInAITransform().value
+        )
+    }
+
+    private func syncConverterServerSessionConfig() {
+        let config = self.converterServerSessionConfig
+        self.converterServerClient.sendIfSessionOpen(
+            { .updateSessionConfig(sessionID: $0, config: config) },
+            completion: { _ in }
+        )
+    }
+
+    @discardableResult
+    private func syncConverterServerSessionConfigSync() -> Bool {
+        let config = self.converterServerSessionConfig
+        return self.converterServerClient.sendIfSessionOpenSync({
+            .updateSessionConfig(sessionID: $0, config: config)
+        }) != nil
     }
 
     private func refreshConverterServerSnapshotForCurrentInputState() {
@@ -543,6 +560,52 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.candidatesWindow.orderOut(nil)
             self.candidatesViewController.hide()
         }
+    }
+
+    @MainActor private func refreshReplaceSuggestionWindow() {
+        guard self.inputState == .replaceSuggestion,
+              let converterServerSnapshot,
+              !converterServerSnapshot.replaceSuggestionCandidates.isEmpty else {
+            self.replaceSuggestionsViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
+            self.replaceSuggestionWindow.setIsVisible(false)
+            self.replaceSuggestionWindow.orderOut(nil)
+            return
+        }
+        self.replaceSuggestionsViewController.updateCandidatePresentations(
+            converterServerSnapshot.replaceSuggestionCandidates.map(\.candidatePresentation),
+            selectionIndex: converterServerSnapshot.replaceSuggestionSelectionIndex,
+            cursorLocation: self.getCursorLocation()
+        )
+        self.replaceSuggestionWindow.setIsVisible(true)
+        self.replaceSuggestionWindow.makeKeyAndOrderFront(nil)
+    }
+
+    @MainActor private func selectReplaceSuggestionCandidate(offset: Int) {
+        guard let snapshot = self.converterServerSnapshot,
+              !snapshot.replaceSuggestionCandidates.isEmpty else {
+            return
+        }
+        let count = snapshot.replaceSuggestionCandidates.count
+        let current = snapshot.replaceSuggestionSelectionIndex ?? (offset > 0 ? -1 : 0)
+        let next = (current + offset + count) % count
+        if let response = self.converterServerClient.sendIfSessionOpenSync({
+            .selectReplaceSuggestionCandidate(sessionID: $0, index: next)
+        }) {
+            self.converterServerSnapshot = response.snapshot
+            self.inputState = response.inputState.inputState
+            self.refreshMarkedText()
+            self.refreshReplaceSuggestionWindow()
+        }
+    }
+
+    @MainActor private func showReplaceSuggestionError(message: String) {
+        self.segmentsManager.appendDebugMessage("APIリクエストエラー: \(message)")
+        let alert = NSAlert()
+        alert.messageText = "変換に失敗しました"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func refreshPredictionWindow() {
@@ -716,14 +779,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         switch self.inputState {
         case .attachDiacritic, .unicodeInput:
             return ConverterMarkedText(self.segmentsManager.getCurrentMarkedText(inputState: self.inputState))
-        case .replaceSuggestion:
-            if let candidate = self.replaceSuggestionsViewController.getSelectedCandidate() {
-                return ConverterMarkedText(
-                    elements: [.init(content: candidate.text, focus: .focused)],
-                    selectionRange: .init(location: candidate.text.count, length: 0)
-                )
-            }
-        case .none, .composing, .previewing, .selecting:
+        case .none, .composing, .previewing, .selecting, .replaceSuggestion:
             break
         }
         if let converterServerSnapshot {
@@ -785,22 +841,23 @@ extension azooKeyMacInputController: SegmentManagerDelegate {
 }
 
 extension azooKeyMacInputController: ReplaceSuggestionsViewControllerDelegate {
-    @MainActor func replaceSuggestionSelectionChanged(_: Int) {
-        self.refreshMarkedText()
+    @MainActor func replaceSuggestionSelectionChanged(_ row: Int) {
+        guard self.converterServerSnapshot?.replaceSuggestionSelectionIndex != row else {
+            return
+        }
+        if let response = self.converterServerClient.sendIfSessionOpenSync({
+            .selectReplaceSuggestionCandidate(sessionID: $0, index: row)
+        }) {
+            self.converterServerSnapshot = response.snapshot
+            self.inputState = response.inputState.inputState
+            self.refreshMarkedText()
+            self.refreshReplaceSuggestionWindow()
+        }
     }
 
     func replaceSuggestionSubmitted() {
         Task { @MainActor in
-            if let candidate = self.replaceSuggestionsViewController.getSelectedCandidate() {
-                if let client = self.client() {
-                    // 選択された候補をテキストとして挿入
-                    client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
-                    // サジェスト候補ウィンドウを非表示にする
-                    self.replaceSuggestionWindow.setIsVisible(false)
-                    self.replaceSuggestionWindow.orderOut(nil)
-                    self.finishReplaceSuggestionComposition()
-                }
-            }
+            self.submitSelectedSuggestionCandidate()
         }
     }
 }
@@ -812,114 +869,41 @@ extension azooKeyMacInputController {
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 開始")
 
         // リクエスト開始時に前回の候補をクリアし、ウィンドウを非表示にする
-        self.segmentsManager.setReplaceSuggestions([])
         self.replaceSuggestionsViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         self.replaceSuggestionWindow.setIsVisible(false)
         self.replaceSuggestionWindow.orderOut(nil)
-
-        // Get selected backend preference
-        let preference = Config.AIBackendPreference().value
-
-        // If backend is off, do nothing
-        if preference == .off {
-            self.segmentsManager.appendDebugMessage("AI backend is off, skipping suggestion")
-            return
-        }
 
         guard let converterServerSnapshot, !converterServerSnapshot.isEmpty else {
             self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: skipped because converter server composition is empty")
             return
         }
-        let composingText = converterServerSnapshot.convertTarget
-
-        // プロンプトを取得
-        let prompt = self.getLeftSideContext(maxCount: 100) ?? ""
-
-        self.segmentsManager.appendDebugMessage("プロンプト取得成功: \(prompt) << \(composingText)")
-
-        let apiKey = Config.OpenAiApiKey().value
-        let modelName = Config.OpenAiModelName().value
-        let request = OpenAIRequest(prompt: prompt, target: composingText, modelName: modelName)
-        self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
-
-        // Get selected backend
-        let backend: AIBackend
-        switch preference {
-        case .off:
-            // Already checked above, but defensive programming
-            self.segmentsManager.appendDebugMessage("Unexpected .off state in backend selection")
+        guard self.syncConverterServerSessionConfigSync() else {
+            self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: skipped because session config sync failed")
             return
-        case .foundationModels:
-            backend = .foundationModels
-        case .openAI:
-            backend = .openAI
         }
-        self.segmentsManager.appendDebugMessage("Using backend: \(backend.rawValue)")
-
-        // 非同期タスクでリクエストを送信
-        Task {
-            do {
-                self.segmentsManager.appendDebugMessage("APIリクエスト送信中...")
-                let predictions = try await AIClient.sendRequest(
-                    request,
-                    backend: backend,
-                    apiKey: apiKey,
-                    apiEndpoint: Config.OpenAiApiEndpoint().value,
-                    logger: { [weak self] message in
-                        self?.segmentsManager.appendDebugMessage(message)
+        let leftSideContext = self.getLeftSideContext(maxCount: 100)
+        self.converterServerClient.sendIfSessionOpen(
+            { .requestReplaceSuggestion(sessionID: $0, leftSideContext: leftSideContext) },
+            completion: { [weak self] response in
+                Task { @MainActor in
+                    guard let self else {
+                        return
                     }
-                )
-                self.segmentsManager.appendDebugMessage("APIレスポンス受信成功: \(predictions)")
-
-                // String配列からCandidate配列に変換
-                let candidates = predictions.map { text in
-                    Candidate(
-                        text: text,
-                        value: PValue(0),
-                        composingCount: .surfaceCount(composingText.count),
-                        lastMid: 0,
-                        data: [],
-                        actions: [],
-                        inputable: true
-                    )
-                }
-
-                self.segmentsManager.appendDebugMessage("候補変換成功: \(candidates.map { $0.text })")
-
-                // 候補をウィンドウに更新
-                await MainActor.run {
-                    guard self.converterServerSnapshot?.convertTarget == composingText else {
+                    guard let response else {
+                        self.showReplaceSuggestionError(message: "ConverterServerから候補を取得できませんでした")
+                        return
+                    }
+                    guard self.converterServerSnapshot?.convertTarget == response.snapshot.convertTarget else {
                         self.segmentsManager.appendDebugMessage("候補ウィンドウ更新をスキップ: composition changed")
                         return
                     }
-                    self.segmentsManager.appendDebugMessage("候補ウィンドウ更新中...")
-                    if !candidates.isEmpty {
-                        self.segmentsManager.setReplaceSuggestions(candidates)
-                        self.replaceSuggestionsViewController.updateCandidatePresentations(
-                            candidates.map { .init(candidate: $0) },
-                            selectionIndex: nil,
-                            cursorLocation: getCursorLocation()
-                        )
-                        self.replaceSuggestionWindow.setIsVisible(true)
-                        self.replaceSuggestionWindow.makeKeyAndOrderFront(nil)
-                        self.segmentsManager.appendDebugMessage("候補ウィンドウ更新完了")
-                    }
-                }
-            } catch {
-                let errorMessage = "APIリクエストエラー: \(error.localizedDescription)"
-                self.segmentsManager.appendDebugMessage(errorMessage)
-
-                // ユーザーに通知
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "変換に失敗しました"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
+                    self.converterServerSnapshot = response.snapshot
+                    self.inputState = response.inputState.inputState
+                    self.refreshMarkedText()
+                    self.refreshReplaceSuggestionWindow()
                 }
             }
-        }
+        )
         self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: 終了")
     }
 
@@ -930,14 +914,22 @@ extension azooKeyMacInputController {
     }
 
     @MainActor func submitSelectedSuggestionCandidate() {
-        if let candidate = self.replaceSuggestionsViewController.getSelectedCandidate() {
-            if let client = self.client() {
-                client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
-                self.replaceSuggestionWindow.setIsVisible(false)
-                self.replaceSuggestionWindow.orderOut(nil)
-                self.finishReplaceSuggestionComposition()
+        guard let response = self.converterServerClient.sendIfSessionOpenSync({
+            .submitSelectedReplaceSuggestion(sessionID: $0)
+        }) else {
+            return
+        }
+        self.converterServerSnapshot = response.snapshot
+        if let client = self.client() {
+            for effect in response.effects {
+                self.apply(effect, client: client)
             }
         }
+        self.inputState = response.inputState.inputState
+        self.refreshMarkedText()
+        self.refreshCandidateWindow()
+        self.refreshPredictionWindow()
+        self.refreshReplaceSuggestionWindow()
     }
 
     @MainActor private func finishReplaceSuggestionComposition() {
@@ -948,6 +940,7 @@ extension azooKeyMacInputController {
         self.refreshMarkedText()
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
+        self.refreshReplaceSuggestionWindow()
     }
 
     // MARK: - Helper Methods

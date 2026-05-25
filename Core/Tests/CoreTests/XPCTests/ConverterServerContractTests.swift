@@ -60,6 +60,9 @@ import Testing
         enableSuggestion: true,
         enablePredictiveTyping: true,
         enableTypoCorrection: true,
+        enableOptionDirectFullWidthInput: true,
+        typeBackSlash: true,
+        optionDirectInputText: "a",
         leftSideContext: "左文脈",
         visibleCandidateStartIndex: 3
     )
@@ -72,6 +75,59 @@ import Testing
     }
     #expect(sessionID == "session-1")
     #expect(roundTripRequest == request)
+}
+
+@Test func converterServerSessionConfigCommandRoundTrips() throws {
+    let config = ConverterSessionConfig(
+        aiBackendPreference: .openAI,
+        openAIModelName: "gpt-test",
+        openAIEndpoint: "https://api.example.test/v1",
+        openAIAPIKey: .init("secret"),
+        includeContextInAITransform: false
+    )
+    let command = ConverterServerCommand.updateSessionConfig(sessionID: "session-1", config: config)
+    let roundTrip = try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(command))
+
+    guard case .updateSessionConfig(let sessionID, let roundTripConfig) = roundTrip else {
+        Issue.record("Expected updateSessionConfig command after round trip, got \(roundTrip)")
+        return
+    }
+    #expect(sessionID == "session-1")
+    #expect(roundTripConfig.aiBackendPreference == .openAI)
+    #expect(roundTripConfig.openAIModelName == "gpt-test")
+    #expect(roundTripConfig.openAIEndpoint == "https://api.example.test/v1")
+    #expect(roundTripConfig.openAIAPIKey.value == "secret")
+    #expect(roundTripConfig.openAIAPIKey.description == "<redacted>")
+    #expect(!roundTripConfig.includeContextInAITransform)
+}
+
+@Test func converterServerReplaceSuggestionCommandsRoundTrip() throws {
+    let request = ConverterServerCommand.requestReplaceSuggestion(sessionID: "session-1", leftSideContext: "左文脈")
+    let select = ConverterServerCommand.selectReplaceSuggestionCandidate(sessionID: "session-1", index: 2)
+    let submit = ConverterServerCommand.submitSelectedReplaceSuggestion(sessionID: "session-1")
+
+    guard case .requestReplaceSuggestion(let requestSessionID, let leftSideContext) =
+        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(request)) else {
+        Issue.record("Expected requestReplaceSuggestion command after round trip")
+        return
+    }
+    #expect(requestSessionID == "session-1")
+    #expect(leftSideContext == "左文脈")
+
+    guard case .selectReplaceSuggestionCandidate(let selectSessionID, let index) =
+        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(select)) else {
+        Issue.record("Expected selectReplaceSuggestionCandidate command after round trip")
+        return
+    }
+    #expect(selectSessionID == "session-1")
+    #expect(index == 2)
+
+    guard case .submitSelectedReplaceSuggestion(let submitSessionID) =
+        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(submit)) else {
+        Issue.record("Expected submitSelectedReplaceSuggestion command after round trip")
+        return
+    }
+    #expect(submitSessionID == "session-1")
 }
 
 @Test func converterServerResponseCarriesClientEffects() throws {

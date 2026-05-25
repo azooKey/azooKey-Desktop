@@ -24,6 +24,15 @@ private enum ConverterCandidateTransform {
 private final class ConverterSession: SegmentManagerDelegate {
     let manager: SegmentsManager
     private var leftSideContext: String?
+    var config = ConverterSessionConfig(
+        aiBackendPreference: .off,
+        openAIModelName: Config.OpenAiModelName.default,
+        openAIEndpoint: Config.OpenAiApiEndpoint.default,
+        openAIAPIKey: .init(""),
+        includeContextInAITransform: true
+    )
+    var replaceSuggestions: [Candidate] = []
+    var replaceSuggestionSelectionIndex: Int?
 
     init(manager: SegmentsManager) {
         self.manager = manager
@@ -39,6 +48,44 @@ private final class ConverterSession: SegmentManagerDelegate {
             return nil
         }
         return String(leftSideContext.suffix(maxCount))
+    }
+
+    func clearReplaceSuggestions() {
+        self.replaceSuggestions = []
+        self.replaceSuggestionSelectionIndex = nil
+    }
+
+    func selectReplaceSuggestion(at index: Int) {
+        guard !replaceSuggestions.isEmpty else {
+            replaceSuggestionSelectionIndex = nil
+            return
+        }
+        replaceSuggestionSelectionIndex = min(max(0, index), replaceSuggestions.count - 1)
+    }
+
+    func selectNextReplaceSuggestion() {
+        guard !replaceSuggestions.isEmpty else {
+            replaceSuggestionSelectionIndex = nil
+            return
+        }
+        replaceSuggestionSelectionIndex = ((replaceSuggestionSelectionIndex ?? -1) + 1) % replaceSuggestions.count
+    }
+
+    func selectPreviousReplaceSuggestion() {
+        guard !replaceSuggestions.isEmpty else {
+            replaceSuggestionSelectionIndex = nil
+            return
+        }
+        let current = replaceSuggestionSelectionIndex ?? 0
+        replaceSuggestionSelectionIndex = (current - 1 + replaceSuggestions.count) % replaceSuggestions.count
+    }
+
+    var selectedReplaceSuggestion: Candidate? {
+        guard let replaceSuggestionSelectionIndex,
+              replaceSuggestions.indices.contains(replaceSuggestionSelectionIndex) else {
+            return nil
+        }
+        return replaceSuggestions[replaceSuggestionSelectionIndex]
     }
 }
 
@@ -69,21 +116,20 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
     }
 
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void) {
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                do {
-                    let command = try ConverterServerCodec.decodeCommand(from: data)
-                    let response = try self.handle(command)
-                    reply(try ConverterServerCodec.encode(response), nil)
-                } catch {
-                    reply(nil, error.localizedDescription as NSString)
-                }
+        Task { @MainActor in
+            do {
+                let command = try ConverterServerCodec.decodeCommand(from: data)
+                let response = try await self.handle(command)
+                reply(try ConverterServerCodec.encode(response), nil)
+            } catch {
+                reply(nil, error.localizedDescription as NSString)
             }
         }
     }
 
     @MainActor
-    private func handle(_ command: ConverterServerCommand) throws -> ConverterServerResponse {
+    // swiftlint:disable:next cyclomatic_complexity
+    private func handle(_ command: ConverterServerCommand) async throws -> ConverterServerResponse {
         switch command {
         case .activate(let sessionID):
             let session = try getSession(sessionID)
@@ -102,6 +148,10 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
         case .forgetMemory(let sessionID):
             let session = try getSession(sessionID)
             session.manager.forgetMemory()
+            return makeResponse(for: session, inputState: .none)
+        case .updateSessionConfig(let sessionID, let config):
+            let session = try getSession(sessionID)
+            session.config = config
             return makeResponse(for: session, inputState: .none)
         case .handleKeyEvent(let sessionID, let request):
             return try handleKeyEvent(sessionID: sessionID, request: request)
@@ -125,6 +175,25 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             let text = session.manager.commitMarkedText(inputState: inputState.inputState)
             let effects: [ConverterClientEffect] = text.isEmpty ? [] : [.insertText(text)]
             return makeResponse(for: session, inputState: .none, effects: effects, responseInputState: ConverterInputState.none)
+        case .requestReplaceSuggestion(let sessionID, let leftSideContext):
+            let session = try getSession(sessionID)
+            try await requestReplaceSuggestion(session: session, leftSideContext: leftSideContext)
+            return makeResponse(for: session, inputState: .replaceSuggestion, responseInputState: .replaceSuggestion)
+        case .selectReplaceSuggestionCandidate(let sessionID, let index):
+            let session = try getSession(sessionID)
+            session.selectReplaceSuggestion(at: index)
+            return makeResponse(for: session, inputState: .replaceSuggestion, responseInputState: .replaceSuggestion)
+        case .submitSelectedReplaceSuggestion(let sessionID):
+            let session = try getSession(sessionID)
+            var effects: [ConverterClientEffect] = []
+            let didSubmit = submitSelectedReplaceSuggestion(session: session, effects: &effects)
+            let nextInputState: InputState = didSubmit ? .none : .replaceSuggestion
+            return makeResponse(
+                for: session,
+                inputState: nextInputState,
+                effects: effects,
+                responseInputState: ConverterInputState(nextInputState)
+            )
         }
     }
 
@@ -139,6 +208,22 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
         session.setLeftSideContext(request.leftSideContext)
         Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
         Config.DebugTypoCorrection().value = request.enableTypoCorrection
+
+        if request.enableOptionDirectFullWidthInput,
+           let text = OptionDirectInputResolver.resolve(
+            characters: request.optionDirectInputText,
+            modifierFlags: request.event.modifierFlags,
+            inputLanguage: request.inputLanguage,
+            inputState: request.inputState.inputState,
+            typeBackSlash: request.typeBackSlash
+           ) {
+            return ConverterServerResponse(
+                effects: [.insertText(text)],
+                inputState: request.inputState,
+                inputLanguage: request.inputLanguage,
+                snapshot: snapshot(for: session, inputState: request.inputState.inputState)
+            )
+        }
 
         let userAction = UserAction.getUserAction(
             eventCore: request.event,
@@ -168,7 +253,7 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
                 effects: effects,
                 inputState: request.inputState,
                 inputLanguage: inputLanguage,
-                snapshot: snapshot(for: session.manager, inputState: request.inputState.inputState)
+                snapshot: snapshot(for: session, inputState: request.inputState.inputState)
             )
         }
 
@@ -182,7 +267,7 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             effects: effects,
             inputState: ConverterInputState(nextInputState),
             inputLanguage: inputLanguage,
-            snapshot: snapshot(for: session.manager, inputState: nextInputState)
+            snapshot: snapshot(for: session, inputState: nextInputState)
         )
     }
 
@@ -287,14 +372,16 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
         case .acceptPredictionCandidate:
             acceptPredictionCandidate(manager: manager, leftSideContext: request.leftSideContext)
         case .requestReplaceSuggestion:
+            session.clearReplaceSuggestions()
             effects.append(.requestReplaceSuggestion)
         case .selectNextReplaceSuggestionCandidate:
-            effects.append(.selectNextReplaceSuggestionCandidate)
+            session.selectNextReplaceSuggestion()
         case .selectPrevReplaceSuggestionCandidate:
-            effects.append(.selectPreviousReplaceSuggestionCandidate)
+            session.selectPreviousReplaceSuggestion()
         case .submitReplaceSuggestionCandidate:
-            effects.append(.submitReplaceSuggestionCandidate)
+            _ = submitSelectedReplaceSuggestion(session: session, effects: &effects)
         case .hideReplaceSuggestionWindow:
+            session.clearReplaceSuggestions()
             effects.append(.hideReplaceSuggestionWindow)
         case .showPromptInputWindow:
             effects.append(.showPromptInputWindow)
@@ -374,6 +461,70 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
     }
 
     @MainActor
+    private func requestReplaceSuggestion(
+        session: ConverterSession,
+        leftSideContext: String?
+    ) async throws {
+        session.clearReplaceSuggestions()
+        guard !session.manager.isEmpty else {
+            return
+        }
+        let backend: AIBackend
+        switch session.config.aiBackendPreference {
+        case .off:
+            return
+        case .foundationModels:
+            backend = .foundationModels
+        case .openAI:
+            backend = .openAI
+        }
+        let composingText = session.manager.convertTarget
+        let prompt = session.config.includeContextInAITransform ? (leftSideContext ?? "") : ""
+        let request = OpenAIRequest(
+            prompt: prompt,
+            target: composingText,
+            modelName: session.config.openAIModelName.isEmpty ? Config.OpenAiModelName.default : session.config.openAIModelName
+        )
+        let predictions = try await AIClient.sendRequest(
+            request,
+            backend: backend,
+            apiKey: session.config.openAIAPIKey.value,
+            apiEndpoint: session.config.openAIEndpoint.isEmpty ? Config.OpenAiApiEndpoint.default : session.config.openAIEndpoint
+        )
+        guard session.manager.convertTarget == composingText else {
+            return
+        }
+        session.replaceSuggestions = predictions.map { text in
+            Candidate(
+                text: text,
+                value: PValue(0),
+                composingCount: .surfaceCount(composingText.count),
+                lastMid: 0,
+                data: [],
+                actions: [],
+                inputable: true
+            )
+        }
+        if !session.replaceSuggestions.isEmpty {
+            session.replaceSuggestionSelectionIndex = 0
+        }
+    }
+
+    @MainActor
+    private func submitSelectedReplaceSuggestion(
+        session: ConverterSession,
+        effects: inout [ConverterClientEffect]
+    ) -> Bool {
+        guard let candidate = session.selectedReplaceSuggestion else {
+            return false
+        }
+        effects.append(.insertText(candidate.text))
+        session.manager.stopComposition()
+        session.clearReplaceSuggestions()
+        return true
+    }
+
+    @MainActor
     private func acceptPredictionCandidate(manager: SegmentsManager, leftSideContext _: String?) {
         let prediction = SegmentsManager.preferredPredictionCandidates(
             typoCorrectionCandidates: manager.requestTypoCorrectionPredictionCandidates(),
@@ -411,16 +562,25 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             handled: handled,
             effects: effects,
             inputState: responseInputState ?? ConverterInputState(inputState),
-            snapshot: snapshot(for: session.manager, inputState: inputState)
+            snapshot: snapshot(for: session, inputState: inputState)
         )
     }
 
     @MainActor
-    private func snapshot(for manager: SegmentsManager, inputState: InputState) -> ConverterSessionSnapshot {
+    private func snapshot(for session: ConverterSession, inputState: InputState) -> ConverterSessionSnapshot {
+        let manager = session.manager
         if manager.isEmpty {
             return .empty
         }
-        let markedText = ConverterMarkedText(manager.getCurrentMarkedText(inputState: inputState))
+        let markedText: ConverterMarkedText
+        if inputState == .replaceSuggestion, let candidate = session.selectedReplaceSuggestion {
+            markedText = ConverterMarkedText(
+                elements: [.init(content: candidate.text, focus: .focused)],
+                selectionRange: .init(location: candidate.text.count, length: 0)
+            )
+        } else {
+            markedText = ConverterMarkedText(manager.getCurrentMarkedText(inputState: inputState))
+        }
         let candidateWindow: ConverterCandidateWindow
         switch manager.getCurrentCandidateWindow(inputState: inputState) {
         case .hidden:
@@ -449,6 +609,10 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             markedText: markedText,
             candidateWindow: candidateWindow,
             predictionCandidates: predictionCandidates,
+            replaceSuggestionCandidates: session.replaceSuggestions.map {
+                ConverterCandidatePresentation(CandidatePresentation(candidate: $0))
+            },
+            replaceSuggestionSelectionIndex: session.replaceSuggestionSelectionIndex,
             isEmpty: manager.isEmpty,
             convertTarget: manager.convertTarget
         )

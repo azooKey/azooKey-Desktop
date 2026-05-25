@@ -28,10 +28,52 @@ public enum ConverterServerCommand: Codable, Sendable {
     case snapshot(sessionID: String, inputState: ConverterInputState)
     case stopComposition(sessionID: String)
     case forgetMemory(sessionID: String)
+    case updateSessionConfig(sessionID: String, config: ConverterSessionConfig)
     case handleKeyEvent(sessionID: String, request: ConverterKeyEventRequest)
     case selectCandidate(sessionID: String, index: Int)
     case submitSelectedCandidate(sessionID: String, leftSideContext: String?)
     case commitComposition(sessionID: String, inputState: ConverterInputState)
+    case requestReplaceSuggestion(sessionID: String, leftSideContext: String?)
+    case selectReplaceSuggestionCandidate(sessionID: String, index: Int)
+    case submitSelectedReplaceSuggestion(sessionID: String)
+}
+
+public struct ConverterSessionConfig: Codable, Sendable {
+    public var aiBackendPreference: Config.AIBackendPreference.Value
+    public var openAIModelName: String
+    public var openAIEndpoint: String
+    public var openAIAPIKey: ConverterSecretString
+    public var includeContextInAITransform: Bool
+
+    public init(
+        aiBackendPreference: Config.AIBackendPreference.Value,
+        openAIModelName: String,
+        openAIEndpoint: String,
+        openAIAPIKey: ConverterSecretString,
+        includeContextInAITransform: Bool
+    ) {
+        self.aiBackendPreference = aiBackendPreference
+        self.openAIModelName = openAIModelName
+        self.openAIEndpoint = openAIEndpoint
+        self.openAIAPIKey = openAIAPIKey
+        self.includeContextInAITransform = includeContextInAITransform
+    }
+}
+
+public struct ConverterSecretString: Codable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
+    public var value: String
+
+    public init(_ value: String) {
+        self.value = value
+    }
+
+    public var description: String {
+        value.isEmpty ? "" : "<redacted>"
+    }
+
+    public var debugDescription: String {
+        description
+    }
 }
 
 public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
@@ -44,6 +86,9 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
     public var enableSuggestion: Bool
     public var enablePredictiveTyping: Bool
     public var enableTypoCorrection: Bool
+    public var enableOptionDirectFullWidthInput: Bool
+    public var typeBackSlash: Bool
+    public var optionDirectInputText: String?
     public var leftSideContext: String?
     public var visibleCandidateStartIndex: Int
 
@@ -57,6 +102,9 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         enableSuggestion: Bool,
         enablePredictiveTyping: Bool = false,
         enableTypoCorrection: Bool = false,
+        enableOptionDirectFullWidthInput: Bool = false,
+        typeBackSlash: Bool = false,
+        optionDirectInputText: String? = nil,
         leftSideContext: String?,
         visibleCandidateStartIndex: Int = 0
     ) {
@@ -69,6 +117,9 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         self.enableSuggestion = enableSuggestion
         self.enablePredictiveTyping = enablePredictiveTyping
         self.enableTypoCorrection = enableTypoCorrection
+        self.enableOptionDirectFullWidthInput = enableOptionDirectFullWidthInput
+        self.typeBackSlash = typeBackSlash
+        self.optionDirectInputText = optionDirectInputText
         self.leftSideContext = leftSideContext
         self.visibleCandidateStartIndex = visibleCandidateStartIndex
     }
@@ -114,6 +165,8 @@ public struct ConverterSessionSnapshot: Codable, Sendable {
     public var markedText: ConverterMarkedText
     public var candidateWindow: ConverterCandidateWindow
     public var predictionCandidates: [ConverterPredictionCandidate]
+    public var replaceSuggestionCandidates: [ConverterCandidatePresentation]
+    public var replaceSuggestionSelectionIndex: Int?
     public var isEmpty: Bool
     public var convertTarget: String
 
@@ -121,12 +174,16 @@ public struct ConverterSessionSnapshot: Codable, Sendable {
         markedText: ConverterMarkedText,
         candidateWindow: ConverterCandidateWindow,
         predictionCandidates: [ConverterPredictionCandidate] = [],
+        replaceSuggestionCandidates: [ConverterCandidatePresentation] = [],
+        replaceSuggestionSelectionIndex: Int? = nil,
         isEmpty: Bool,
         convertTarget: String
     ) {
         self.markedText = markedText
         self.candidateWindow = candidateWindow
         self.predictionCandidates = predictionCandidates
+        self.replaceSuggestionCandidates = replaceSuggestionCandidates
+        self.replaceSuggestionSelectionIndex = replaceSuggestionSelectionIndex
         self.isEmpty = isEmpty
         self.convertTarget = convertTarget
     }
