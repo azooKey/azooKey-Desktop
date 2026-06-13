@@ -6,6 +6,7 @@ CONFIGURATION="Release"
 ARCHIVE_PATH="./build/archive.xcarchive"
 EXPORT_PATH="./build/export"
 EXPORT_OPTIONS_PLIST="./exportOptions.plist"
+PKG_SCRIPTS_PATH="./pkg-scripts"
 
 # 1. Clean Build
 rm -rf ./build
@@ -58,6 +59,7 @@ rm ${EXPORT_PATH}/ExportOptions.plist
 
 # Create a temporary package
 pkgbuild --root ${EXPORT_PATH} \
+         --scripts ${PKG_SCRIPTS_PATH} \
          --component-plist pkg.plist --identifier dev.ensan.inputmethod.azooKeyMac \
          --version 0 \
          --install-location /Library/Input\ Methods \

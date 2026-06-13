@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+
+service_name="dev.ensan.inputmethod.azooKeyMac.ConverterServer"
+app_path="/Library/Input Methods/azooKeyMac.app"
+server_path="${app_path}/Contents/MacOS/ConverterServer"
+agent_dir="/Library/LaunchAgents"
+agent_path="${agent_dir}/${service_name}.plist"
+
+if [ ! -x "${server_path}" ]; then
+    echo "ConverterServer not found: ${server_path}" >&2
+    exit 1
+fi
+
+mkdir -p "${agent_dir}"
+cat > "${agent_path}" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${service_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${server_path}</string>
+    </array>
+    <key>MachServices</key>
+    <dict>
+        <key>${service_name}</key>
+        <true/>
+    </dict>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/${service_name}.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/${service_name}.stderr.log</string>
+</dict>
+</plist>
+PLIST
+
+chmod 644 "${agent_path}"
+chown root:wheel "${agent_path}"
+
+console_user="$(stat -f %Su /dev/console)"
+if [ -z "${console_user}" ] || [ "${console_user}" = "root" ] || [ "${console_user}" = "_mbsetupuser" ]; then
+    echo "No active console user; ${service_name} will start on next login."
+    exit 0
+fi
+
+console_uid="$(id -u "${console_user}")"
+gui_domain="gui/${console_uid}"
+legacy_agent_path="$(eval echo "~${console_user}")/Library/LaunchAgents/${service_name}.plist"
+
+launchctl bootout "${gui_domain}/${service_name}" >/dev/null 2>&1 || true
+if [ -f "${legacy_agent_path}" ]; then
+    launchctl bootout "${gui_domain}" "${legacy_agent_path}" >/dev/null 2>&1 || true
+    rm -f "${legacy_agent_path}"
+fi
+launchctl bootstrap "${gui_domain}" "${agent_path}"
+launchctl kickstart -k "${gui_domain}/${service_name}"
+launchctl print "${gui_domain}/${service_name}" >/dev/null
+
+echo "Installed and started ${service_name}"
