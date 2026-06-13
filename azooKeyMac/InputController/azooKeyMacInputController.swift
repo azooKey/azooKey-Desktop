@@ -7,7 +7,7 @@ import KanaKanjiConverterModuleWithDefaultDictionary
 class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // swiftlint:disable:this type_name
     var segmentsManager: SegmentsManager
     let converterServerClient = ConverterServerClient()
-    private var converterServerSnapshot: ConverterSessionSnapshot?
+    private var currentConverterView: ConverterSessionSnapshot?
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
     var liveConversionEnabled: Bool {
@@ -165,7 +165,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 guard let self, let response else {
                     return
                 }
-                self.converterServerSnapshot = response.snapshot
+                self.currentConverterView = response.snapshot
             })
         }
 
@@ -189,7 +189,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override func deactivateServer(_ sender: Any!) {
         self.segmentsManager.deactivate()
         self.converterServerClient.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { _ in })
-        self.converterServerSnapshot = nil
+        self.currentConverterView = nil
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
@@ -205,11 +205,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.inputState = .none
             return
         }
-        if self.converterServerSnapshot?.isEmpty == false,
+        if self.currentConverterView?.isEmpty == false,
            let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
             .composition(.commit(inputState: ConverterInputState(self.inputState)))
            }) {
-            self.converterServerSnapshot = response.snapshot
+            self.currentConverterView = response.snapshot
             if let client = sender as? IMKTextInput {
                 for effect in response.effects {
                     self.apply(effect, client: client)
@@ -392,7 +392,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.inputLanguage = inputLanguage
         }
         self.inputState = response.inputState.inputState
-        self.converterServerSnapshot = response.snapshot
+        self.currentConverterView = response.snapshot
         for effect in response.effects {
             self.apply(effect, client: client)
         }
@@ -492,13 +492,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }) != nil
     }
 
-    private func refreshConverterServerSnapshotForCurrentInputState() {
+    private func refreshConverterViewForCurrentInputState() {
         guard let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
             .composition(.snapshot(inputState: ConverterInputState(self.inputState)))
         }) else {
             return
         }
-        self.converterServerSnapshot = response.snapshot
+        self.currentConverterView = response.snapshot
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
@@ -514,7 +514,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     private func discardConverterServerComposition() {
-        self.converterServerSnapshot = nil
+        self.currentConverterView = nil
         self.converterServerClient.sendIfSessionOpen(
             { _ in .composition(.stopComposition) },
             completion: { _ in }
@@ -522,8 +522,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     func refreshCandidateWindow() {
-        if let converterServerSnapshot {
-            self.refreshCandidateWindow(converterServerSnapshot.candidateWindow)
+        if let currentConverterView {
+            self.refreshCandidateWindow(currentConverterView.candidateWindow)
             return
         }
         self.candidatesWindow.setIsVisible(false)
@@ -562,16 +562,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor private func refreshReplaceSuggestionWindow() {
         guard self.inputState == .replaceSuggestion,
-              let converterServerSnapshot,
-              !converterServerSnapshot.replaceSuggestionCandidates.isEmpty else {
+              let currentConverterView,
+              !currentConverterView.replaceSuggestionCandidates.isEmpty else {
             self.replaceSuggestionsViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
             self.replaceSuggestionWindow.setIsVisible(false)
             self.replaceSuggestionWindow.orderOut(nil)
             return
         }
         self.replaceSuggestionsViewController.updateCandidatePresentations(
-            converterServerSnapshot.replaceSuggestionCandidates.map(\.candidatePresentation),
-            selectionIndex: converterServerSnapshot.replaceSuggestionSelectionIndex,
+            currentConverterView.replaceSuggestionCandidates.map(\.candidatePresentation),
+            selectionIndex: currentConverterView.replaceSuggestionSelectionIndex,
             cursorLocation: self.getCursorLocation()
         )
         self.replaceSuggestionWindow.setIsVisible(true)
@@ -579,17 +579,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     @MainActor private func selectReplaceSuggestionCandidate(offset: Int) {
-        guard let snapshot = self.converterServerSnapshot,
-              !snapshot.replaceSuggestionCandidates.isEmpty else {
+        guard let view = self.currentConverterView,
+              !view.replaceSuggestionCandidates.isEmpty else {
             return
         }
-        let count = snapshot.replaceSuggestionCandidates.count
-        let current = snapshot.replaceSuggestionSelectionIndex ?? (offset > 0 ? -1 : 0)
+        let count = view.replaceSuggestionCandidates.count
+        let current = view.replaceSuggestionSelectionIndex ?? (offset > 0 ? -1 : 0)
         let next = (current + offset + count) % count
         if let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
             .replaceSuggestion(.selectReplaceSuggestionCandidate(index: next))
         }) {
-            self.converterServerSnapshot = response.snapshot
+            self.currentConverterView = response.snapshot
             self.inputState = response.inputState.inputState
             self.refreshMarkedText()
             self.refreshReplaceSuggestionWindow()
@@ -612,7 +612,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
 
-        guard let predictions = self.converterServerSnapshot?.predictionCandidates else {
+        guard let predictions = self.currentConverterView?.predictionCandidates else {
             self.hidePredictionWindow()
             return
         }
@@ -780,8 +780,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .none, .composing, .previewing, .selecting, .replaceSuggestion:
             break
         }
-        if let converterServerSnapshot {
-            return converterServerSnapshot.markedText
+        if let currentConverterView {
+            return currentConverterView.markedText
         }
         return ConverterSessionSnapshot.empty.markedText
     }
@@ -790,19 +790,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 extension azooKeyMacInputController: CandidatesViewControllerDelegate {
     func candidateSubmitted() {
         Task { @MainActor in
-            if self.converterServerSnapshot != nil {
+            if self.currentConverterView != nil {
                 let leftSideContext = self.getLeftSideContext(maxCount: 30)
                 if let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
                     .candidate(.submitSelectedCandidate(leftSideContext: leftSideContext))
                 }) {
-                    self.converterServerSnapshot = response.snapshot
+                    self.currentConverterView = response.snapshot
                     if let client = self.client() {
                         for effect in response.effects {
                             self.apply(effect, client: client)
                         }
                     }
                     self.inputState = response.inputState.inputState
-                    self.refreshConverterServerSnapshotForCurrentInputState()
+                    self.refreshConverterViewForCurrentInputState()
                     self.refreshMarkedText()
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()
@@ -814,11 +814,11 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
 
     func candidateSelectionChanged(_ row: Int) {
         Task { @MainActor in
-            if self.converterServerSnapshot != nil,
+            if self.currentConverterView != nil,
                let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
                 .candidate(.selectCandidate(index: row))
                }) {
-                self.converterServerSnapshot = response.snapshot
+                self.currentConverterView = response.snapshot
                 self.refreshMarkedText()
                 return
             }
@@ -840,13 +840,13 @@ extension azooKeyMacInputController: SegmentManagerDelegate {
 
 extension azooKeyMacInputController: ReplaceSuggestionsViewControllerDelegate {
     @MainActor func replaceSuggestionSelectionChanged(_ row: Int) {
-        guard self.converterServerSnapshot?.replaceSuggestionSelectionIndex != row else {
+        guard self.currentConverterView?.replaceSuggestionSelectionIndex != row else {
             return
         }
         if let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
             .replaceSuggestion(.selectReplaceSuggestionCandidate(index: row))
         }) {
-            self.converterServerSnapshot = response.snapshot
+            self.currentConverterView = response.snapshot
             self.inputState = response.inputState.inputState
             self.refreshMarkedText()
             self.refreshReplaceSuggestionWindow()
@@ -871,7 +871,7 @@ extension azooKeyMacInputController {
         self.replaceSuggestionWindow.setIsVisible(false)
         self.replaceSuggestionWindow.orderOut(nil)
 
-        guard let converterServerSnapshot, !converterServerSnapshot.isEmpty else {
+        guard let currentConverterView, !currentConverterView.isEmpty else {
             self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: skipped because converter server composition is empty")
             return
         }
@@ -891,11 +891,11 @@ extension azooKeyMacInputController {
                         self.showReplaceSuggestionError(message: "ConverterServerから候補を取得できませんでした")
                         return
                     }
-                    guard self.converterServerSnapshot?.convertTarget == response.snapshot.convertTarget else {
+                    guard self.currentConverterView?.convertTarget == response.snapshot.convertTarget else {
                         self.segmentsManager.appendDebugMessage("候補ウィンドウ更新をスキップ: composition changed")
                         return
                     }
-                    self.converterServerSnapshot = response.snapshot
+                    self.currentConverterView = response.snapshot
                     self.inputState = response.inputState.inputState
                     self.refreshMarkedText()
                     self.refreshReplaceSuggestionWindow()
@@ -917,7 +917,7 @@ extension azooKeyMacInputController {
         }) else {
             return
         }
-        self.converterServerSnapshot = response.snapshot
+        self.currentConverterView = response.snapshot
         if let client = self.client() {
             for effect in response.effects {
                 self.apply(effect, client: client)
@@ -931,7 +931,7 @@ extension azooKeyMacInputController {
     }
 
     @MainActor private func finishReplaceSuggestionComposition() {
-        if self.converterServerSnapshot != nil {
+        if self.currentConverterView != nil {
             self.discardConverterServerComposition()
         }
         self.inputState = .none
