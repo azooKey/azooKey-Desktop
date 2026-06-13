@@ -130,7 +130,46 @@ import Testing
     #expect(submitSessionID == "session-1")
 }
 
+@Test func converterServerSettingsCommandsRoundTrip() throws {
+    let capabilities = ConverterSettingClientCapabilities(
+        supportedKinds: [.toggle, .selector, .button],
+        supportedActions: ["resetLearningData"],
+        supportedCustomSurfaces: ["inputStyle"]
+    )
+    let list = ConverterServerCommand.listSettings(sessionID: "session-1", capabilities: capabilities)
+    let update = ConverterServerCommand.updateSetting(
+        sessionID: "session-1",
+        key: Config.TypeBackSlash.key,
+        value: .bool(true)
+    )
+
+    guard case .listSettings(let listSessionID, let roundTripCapabilities) =
+        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(list)) else {
+        Issue.record("Expected listSettings command after round trip")
+        return
+    }
+    #expect(listSessionID == "session-1")
+    #expect(roundTripCapabilities == capabilities)
+
+    guard case .updateSetting(let updateSessionID, let key, let value) =
+        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(update)) else {
+        Issue.record("Expected updateSetting command after round trip")
+        return
+    }
+    #expect(updateSessionID == "session-1")
+    #expect(key == Config.TypeBackSlash.key)
+    #expect(value == .bool(true))
+}
+
 @Test func converterServerResponseCarriesClientEffects() throws {
+    let setting = ConverterSettingDescriptor(
+        key: Config.TypeBackSlash.key,
+        title: "円記号の代わりにバックスラッシュを入力",
+        section: "入力オプション",
+        kind: .toggle,
+        value: .bool(true),
+        requiresClientUpdate: false
+    )
     let response = ConverterServerResponse(
         handled: true,
         effects: [
@@ -140,6 +179,7 @@ import Testing
         ],
         inputState: .composing,
         inputLanguage: .english,
+        settings: [setting],
         snapshot: .empty
     )
     let decoded = try ConverterServerCodec.decodeResponse(from: ConverterServerCodec.encode(response))
@@ -148,4 +188,5 @@ import Testing
     #expect(decoded.effects == response.effects)
     #expect(decoded.inputState == .composing)
     #expect(decoded.inputLanguage == .english)
+    #expect(decoded.settings == [setting])
 }

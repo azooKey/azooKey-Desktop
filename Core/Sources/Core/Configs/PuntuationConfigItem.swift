@@ -18,7 +18,7 @@ extension Config {
 extension Config.PunctuationStyle {
     public var value: Value {
         get {
-            guard let data = UserDefaults.standard.data(forKey: Self.key) else {
+            guard let data = Config.data(forKey: Self.key) else {
                 print(#file, #line, "data is not set yet")
                 // この場合、過去の設定を反映する
                 return if Config.Deprecated.TypeCommaAndPeriod().value {
@@ -38,7 +38,7 @@ extension Config.PunctuationStyle {
         nonmutating set {
             do {
                 let encoded = try JSONEncoder().encode(newValue)
-                UserDefaults.standard.set(encoded, forKey: Self.key)
+                Config.set(encoded, forKey: Self.key)
             } catch {
                 print(#file, #line, error)
             }

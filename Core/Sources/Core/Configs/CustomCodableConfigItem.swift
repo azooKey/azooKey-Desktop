@@ -16,7 +16,7 @@ protocol CustomCodableConfigItem: ConfigItem {
 extension CustomCodableConfigItem {
     public var value: Value {
         get {
-            guard let data = UserDefaults.standard.data(forKey: Self.key) else {
+            guard let data = Config.data(forKey: Self.key) else {
                 print(#file, #line, "data is not set yet")
                 return Self.default
             }
@@ -31,7 +31,7 @@ extension CustomCodableConfigItem {
         nonmutating set {
             do {
                 let encoded = try JSONEncoder().encode(newValue)
-                UserDefaults.standard.set(encoded, forKey: Self.key)
+                Config.set(encoded, forKey: Self.key)
             } catch {
                 print(#file, #line, error)
             }
@@ -218,7 +218,7 @@ extension Config {
         public static var `default`: Value {
             // Migration: If user had OpenAI API enabled, preserve that setting
             let legacyKey = Config.Deprecated.EnableOpenAiApiKey.key
-            if let legacyValue = UserDefaults.standard.object(forKey: legacyKey) as? Bool,
+            if let legacyValue = Config.object(forKey: legacyKey) as? Bool,
                legacyValue {
                 return .openAI
             }

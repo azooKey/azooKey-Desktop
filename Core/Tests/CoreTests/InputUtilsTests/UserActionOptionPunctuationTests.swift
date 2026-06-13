@@ -10,6 +10,13 @@ private func inputString(from action: UserAction) -> String? {
     return pieces.inputString(preferIntention: true)
 }
 
+private func rawInputString(from action: UserAction) -> String? {
+    guard case .input(let pieces) = action else {
+        return nil
+    }
+    return pieces.inputString(preferIntention: false)
+}
+
 private func makeEvent(
     logicalKey: String,
     characters: String?,
@@ -24,7 +31,7 @@ private func makeEvent(
 }
 
 @Test func testOptionPunctuationMappings() async throws {
-    let defaults = UserDefaults.standard
+    let defaults = Config.userDefaults
     let key = Config.PunctuationStyle.key
     let originalData = defaults.data(forKey: key)
     defer {
@@ -82,4 +89,27 @@ private func makeEvent(
         eventCore: makeEvent(logicalKey: ".", characters: "˘", modifiers: shiftOption),
         inputLanguage: .japanese
     )) == "˘")
+}
+
+@Test func testTypeBackSlashCanBeInjectedWithoutReadingProcessDefaults() async throws {
+    #expect(rawInputString(from: UserAction.getUserAction(
+        eventCore: makeEvent(logicalKey: "¥", characters: "¥", modifiers: []),
+        inputLanguage: .japanese,
+        typeBackSlash: true
+    )) == "\\")
+    #expect(rawInputString(from: UserAction.getUserAction(
+        eventCore: makeEvent(logicalKey: "¥", characters: "¥", modifiers: [.option]),
+        inputLanguage: .japanese,
+        typeBackSlash: true
+    )) == "¥")
+    #expect(rawInputString(from: UserAction.getUserAction(
+        eventCore: makeEvent(logicalKey: "¥", characters: "¥", modifiers: []),
+        inputLanguage: .japanese,
+        typeBackSlash: false
+    )) == "¥")
+    #expect(rawInputString(from: UserAction.getUserAction(
+        eventCore: makeEvent(logicalKey: "¥", characters: "¥", modifiers: [.option]),
+        inputLanguage: .japanese,
+        typeBackSlash: false
+    )) == "\\")
 }

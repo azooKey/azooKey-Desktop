@@ -45,7 +45,7 @@ protocol KeyboardShortcutConfigItem: ConfigItem<KeyboardShortcut> {
 extension KeyboardShortcutConfigItem {
     public var value: KeyboardShortcut {
         get {
-            guard let data = UserDefaults.standard.data(forKey: Self.key) else {
+            guard let data = Config.data(forKey: Self.key) else {
                 return Self.default
             }
             do {
@@ -58,7 +58,7 @@ extension KeyboardShortcutConfigItem {
         nonmutating set {
             do {
                 let encoded = try JSONEncoder().encode(newValue)
-                UserDefaults.standard.set(encoded, forKey: Self.key)
+                Config.set(encoded, forKey: Self.key)
             } catch {
                 // エンコード失敗時は何もしない
             }

@@ -68,7 +68,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     /// ピン留めプロンプトのキャッシュを更新
     func reloadPinnedPromptsCache() {
-        guard let data = UserDefaults.standard.data(forKey: Config.PromptHistory.key),
+        guard let data = Config.data(forKey: Config.PromptHistory.key),
               let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) else {
             self.pinnedPromptsCache = []
             return

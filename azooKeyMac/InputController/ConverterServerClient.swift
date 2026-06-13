@@ -72,6 +72,35 @@ final class ConverterServerClient {
         }
     }
 
+    func listSettings(
+        capabilities: ConverterSettingClientCapabilities,
+        completion: @escaping ([ConverterSettingDescriptor]?) -> Void
+    ) {
+        send(
+            { sessionID in
+                .listSettings(sessionID: sessionID, capabilities: capabilities)
+            },
+            completion: { response in
+                completion(response?.settings)
+            }
+        )
+    }
+
+    func updateSetting(
+        key: String,
+        value: ConverterSettingValue,
+        completion: @escaping (Bool) -> Void
+    ) {
+        send(
+            { sessionID in
+                .updateSetting(sessionID: sessionID, key: key, value: value)
+            },
+            completion: { response in
+                completion(response != nil)
+            }
+        )
+    }
+
     func send(
         _ commandBuilder: @escaping (String) -> ConverterServerCommand,
         completion: @escaping (ConverterServerResponse?) -> Void

@@ -51,7 +51,7 @@ private final class ConfigStateStore<Item: ConfigItem>: ObservableObject {
         // and rely on SwiftUI / @Published to coalesce updates per run loop tick.
         self.observer = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
-            object: UserDefaults.standard,
+            object: Config.userDefaults,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in

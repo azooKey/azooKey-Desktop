@@ -448,13 +448,13 @@ struct ConfigWindow: View {
                             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
                             availabilityCheckDone = true
 
-                            let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
+                            let hasSetAIBackend = Config.object(forKey: "hasSetAIBackendManually") as? Bool ?? false
                             if !hasSetAIBackend,
                                aiBackend.value == .off,
                                let availability = foundationModelsAvailability,
                                availability.isAvailable {
                                 aiBackend.value = .foundationModels
-                                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                                Config.set(true, forKey: "hasSetAIBackendManually")
                             }
 
                             if aiBackend.value == .foundationModels,
@@ -465,7 +465,7 @@ struct ConfigWindow: View {
                         }
                     }
                     .onChange(of: aiBackend.value) { _ in
-                        UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
+                        Config.set(true, forKey: "hasSetAIBackendManually")
                     }
                 }
 

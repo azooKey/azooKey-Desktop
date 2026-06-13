@@ -7,14 +7,14 @@ protocol IntConfigItem: ConfigItem<Int> {
 extension IntConfigItem {
     public var value: Int {
         get {
-            if let value = UserDefaults.standard.object(forKey: Self.key) {
+            if let value = Config.object(forKey: Self.key) {
                 value as? Int ?? Self.default
             } else {
                 Self.default
             }
         }
         nonmutating set {
-            UserDefaults.standard.set(newValue, forKey: Self.key)
+            Config.set(newValue, forKey: Self.key)
         }
     }
 }

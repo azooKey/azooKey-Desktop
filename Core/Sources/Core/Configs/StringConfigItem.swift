@@ -12,10 +12,10 @@ protocol StringConfigItem: ConfigItem<String> {}
 extension StringConfigItem {
     public var value: String {
         get {
-            UserDefaults.standard.string(forKey: Self.key) ?? ""
+            Config.string(forKey: Self.key) ?? ""
         }
         nonmutating set {
-            UserDefaults.standard.set(newValue, forKey: Self.key)
+            Config.set(newValue, forKey: Self.key)
         }
     }
 }
@@ -46,11 +46,11 @@ extension Config {
 
         public var value: String {
             get {
-                let stored = UserDefaults.standard.string(forKey: Self.key) ?? ""
+                let stored = Config.string(forKey: Self.key) ?? ""
                 return stored.isEmpty ? Self.default : stored
             }
             nonmutating set {
-                UserDefaults.standard.set(newValue, forKey: Self.key)
+                Config.set(newValue, forKey: Self.key)
             }
         }
     }

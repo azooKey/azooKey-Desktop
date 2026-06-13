@@ -107,7 +107,12 @@ public enum UserAction {
 
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
-    public static func getUserAction(eventCore: KeyEventCore, inputLanguage: InputLanguage) -> UserAction {
+    public static func getUserAction(
+        eventCore: KeyEventCore,
+        inputLanguage: InputLanguage,
+        typeBackSlash: Bool? = nil
+    ) -> UserAction {
+        let typeBackSlash = typeBackSlash ?? Config.TypeBackSlash().value
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
         func keyMap(_ string: String, invertPunctuation: Bool = false) -> [InputPiece] {
             switch inputLanguage {
@@ -161,13 +166,13 @@ public enum UserAction {
             case ("¥", [.shift, .option]), ("¥", [.shift]), ("\\", [.shift, .option]), ("\\", [.shift]):
                 return .input(keyMap("|"))
             case ("¥", []), ("\\", []):
-                return if Config.TypeBackSlash().value {
+                return if typeBackSlash {
                     .input(keyMap("\\"))
                 } else {
                     .input(keyMap("¥"))
                 }
             case ("¥", [.option]), ("\\", [.option]):
-                return if Config.TypeBackSlash().value {
+                return if typeBackSlash {
                     .input(keyMap("¥"))
                 } else {
                     .input(keyMap("\\"))

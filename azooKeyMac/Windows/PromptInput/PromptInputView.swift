@@ -444,7 +444,7 @@ struct PromptInputView: View {
 
     private func loadPromptHistory() {
         // Try to load as Data first (new format)
-        if let data = UserDefaults.standard.data(forKey: Config.PromptHistory.key) {
+        if let data = Config.data(forKey: Config.PromptHistory.key) {
             if let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
                 promptHistory = history
                 return
@@ -457,7 +457,7 @@ struct PromptInputView: View {
         }
 
         // Fallback to string format (legacy)
-        let historyString = UserDefaults.standard.string(forKey: Config.PromptHistory.key) ?? ""
+        let historyString = Config.string(forKey: Config.PromptHistory.key) ?? ""
         if !historyString.isEmpty,
            let data = historyString.data(using: .utf8) {
             if let history = try? JSONDecoder().decode([PromptHistoryItem].self, from: data) {
@@ -548,7 +548,7 @@ struct PromptInputView: View {
 
     private func savePinnedHistory() {
         if let data = try? JSONEncoder().encode(promptHistory) {
-            UserDefaults.standard.set(data, forKey: Config.PromptHistory.key)
+            Config.set(data, forKey: Config.PromptHistory.key)
         }
     }
 

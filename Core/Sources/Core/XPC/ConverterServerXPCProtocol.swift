@@ -25,6 +25,8 @@ public enum ConverterServerCodec {
 public enum ConverterServerCommand: Codable, Sendable {
     case activate(sessionID: String)
     case deactivate(sessionID: String)
+    case listSettings(sessionID: String, capabilities: ConverterSettingClientCapabilities)
+    case updateSetting(sessionID: String, key: String, value: ConverterSettingValue)
     case snapshot(sessionID: String, inputState: ConverterInputState)
     case stopComposition(sessionID: String)
     case forgetMemory(sessionID: String)
@@ -36,6 +38,102 @@ public enum ConverterServerCommand: Codable, Sendable {
     case requestReplaceSuggestion(sessionID: String, leftSideContext: String?)
     case selectReplaceSuggestionCandidate(sessionID: String, index: Int)
     case submitSelectedReplaceSuggestion(sessionID: String)
+}
+
+public struct ConverterSettingClientCapabilities: Codable, Sendable, Equatable {
+    public var supportedKinds: Set<ConverterSettingKindIdentifier>
+    public var supportedActions: Set<String>
+    public var supportedCustomSurfaces: Set<String>
+
+    public init(
+        supportedKinds: Set<ConverterSettingKindIdentifier> = [],
+        supportedActions: Set<String> = [],
+        supportedCustomSurfaces: Set<String> = []
+    ) {
+        self.supportedKinds = supportedKinds
+        self.supportedActions = supportedActions
+        self.supportedCustomSurfaces = supportedCustomSurfaces
+    }
+}
+
+public enum ConverterSettingKindIdentifier: String, Codable, Sendable, Hashable {
+    case toggle
+    case selector
+    case textField
+    case number
+    case button
+    case custom
+}
+
+public enum ConverterSettingKind: Codable, Sendable, Equatable {
+    case toggle
+    case selector(options: [ConverterSettingOption])
+    case textField(secure: Bool)
+    case number(min: Double?, max: Double?, step: Double?)
+    case button(action: String)
+    case custom(surface: String)
+
+    public var identifier: ConverterSettingKindIdentifier {
+        switch self {
+        case .toggle:
+            .toggle
+        case .selector:
+            .selector
+        case .textField:
+            .textField
+        case .number:
+            .number
+        case .button:
+            .button
+        case .custom:
+            .custom
+        }
+    }
+}
+
+public enum ConverterSettingValue: Codable, Sendable, Equatable {
+    case bool(Bool)
+    case string(String)
+    case int(Int)
+    case double(Double)
+}
+
+public struct ConverterSettingOption: Codable, Sendable, Equatable {
+    public var title: String
+    public var value: ConverterSettingValue
+
+    public init(title: String, value: ConverterSettingValue) {
+        self.title = title
+        self.value = value
+    }
+}
+
+public struct ConverterSettingDescriptor: Codable, Sendable, Equatable {
+    public var key: String
+    public var title: String
+    public var section: String
+    public var kind: ConverterSettingKind
+    public var value: ConverterSettingValue?
+    public var isEnabled: Bool
+    public var requiresClientUpdate: Bool
+
+    public init(
+        key: String,
+        title: String,
+        section: String,
+        kind: ConverterSettingKind,
+        value: ConverterSettingValue? = nil,
+        isEnabled: Bool = true,
+        requiresClientUpdate: Bool = false
+    ) {
+        self.key = key
+        self.title = title
+        self.section = section
+        self.kind = kind
+        self.value = value
+        self.isEnabled = isEnabled
+        self.requiresClientUpdate = requiresClientUpdate
+    }
 }
 
 public struct ConverterSessionConfig: Codable, Sendable {
@@ -144,6 +242,7 @@ public struct ConverterServerResponse: Codable, Sendable {
     public var effects: [ConverterClientEffect]
     public var inputState: ConverterInputState
     public var inputLanguage: InputLanguage?
+    public var settings: [ConverterSettingDescriptor]
     public var snapshot: ConverterSessionSnapshot
 
     public init(
@@ -151,12 +250,14 @@ public struct ConverterServerResponse: Codable, Sendable {
         effects: [ConverterClientEffect] = [],
         inputState: ConverterInputState = .none,
         inputLanguage: InputLanguage? = nil,
+        settings: [ConverterSettingDescriptor] = [],
         snapshot: ConverterSessionSnapshot
     ) {
         self.handled = handled
         self.effects = effects
         self.inputState = inputState
         self.inputLanguage = inputLanguage
+        self.settings = settings
         self.snapshot = snapshot
     }
 }
