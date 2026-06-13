@@ -107,7 +107,7 @@ import Testing
     let submit = ConverterServerCommand.submitSelectedReplaceSuggestion(sessionID: "session-1")
 
     guard case .requestReplaceSuggestion(let requestSessionID, let leftSideContext) =
-        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(request)) else {
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(request)) else {
         Issue.record("Expected requestReplaceSuggestion command after round trip")
         return
     }
@@ -115,7 +115,7 @@ import Testing
     #expect(leftSideContext == "左文脈")
 
     guard case .selectReplaceSuggestionCandidate(let selectSessionID, let index) =
-        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(select)) else {
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(select)) else {
         Issue.record("Expected selectReplaceSuggestionCandidate command after round trip")
         return
     }
@@ -123,7 +123,7 @@ import Testing
     #expect(index == 2)
 
     guard case .submitSelectedReplaceSuggestion(let submitSessionID) =
-        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(submit)) else {
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(submit)) else {
         Issue.record("Expected submitSelectedReplaceSuggestion command after round trip")
         return
     }
@@ -131,6 +131,11 @@ import Testing
 }
 
 @Test func converterServerSettingsCommandsRoundTrip() throws {
+    guard case .shutdown = try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(.shutdown)) else {
+        Issue.record("Expected shutdown command after round trip")
+        return
+    }
+
     let capabilities = ConverterSettingClientCapabilities(
         supportedKinds: [.toggle, .selector, .button],
         supportedActions: ["resetLearningData"],
@@ -144,7 +149,7 @@ import Testing
     )
 
     guard case .listSettings(let listSessionID, let roundTripCapabilities) =
-        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(list)) else {
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(list)) else {
         Issue.record("Expected listSettings command after round trip")
         return
     }
@@ -152,7 +157,7 @@ import Testing
     #expect(roundTripCapabilities == capabilities)
 
     guard case .updateSetting(let updateSessionID, let key, let value) =
-        try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(update)) else {
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(update)) else {
         Issue.record("Expected updateSetting command after round trip")
         return
     }

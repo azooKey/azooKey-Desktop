@@ -1,6 +1,5 @@
 import Cocoa
 import Core
-import Darwin
 import SwiftUI
 
 struct ConfigWindow: View {
@@ -25,6 +24,7 @@ struct ConfigWindow: View {
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
 
+    @State private var converterServerClient = ConverterServerClient()
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -65,17 +65,6 @@ struct ConfigWindow: View {
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
         case successfulUpdate
-    }
-
-    private enum ConverterProcessRestartError: LocalizedError {
-        case launchctlFailed(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .launchctlFailed(let message):
-                "launchctl kickstart failed: \(message)"
-            }
-        }
     }
 
     private var azooKeyApplicationSupportDirectoryURL: URL {
@@ -195,50 +184,11 @@ struct ConfigWindow: View {
         }
         self.converterProcessRestartInProgress = true
         self.converterProcessRestartMessage = nil
-        Task {
-            do {
-                try await Task.detached(priority: .utility) {
-                    try Self.restartConverterProcessService()
-                }.value
-                await MainActor.run {
-                    self.converterProcessRestartMessage = "再起動しました"
-                    self.converterProcessRestartInProgress = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.converterProcessRestartMessage = error.localizedDescription
-                    self.converterProcessRestartInProgress = false
-                }
+        self.converterServerClient.restartServer { success in
+            DispatchQueue.main.async {
+                self.converterProcessRestartMessage = success ? "再起動しました" : "Converter Processに再起動を依頼できませんでした"
+                self.converterProcessRestartInProgress = false
             }
-        }
-    }
-
-    nonisolated private static func restartConverterProcessService() throws {
-        let serviceName = "dev.ensan.inputmethod.azooKeyMac.ConverterServer"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        process.arguments = [
-            "kickstart",
-            "-k",
-            "gui/\(getuid())/\(serviceName)"
-        ]
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let standardError = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let standardOutput = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let message = [standardError, standardOutput]
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: "\n")
-            throw ConverterProcessRestartError.launchctlFailed(message.isEmpty ? "exit status \(process.terminationStatus)" : message)
         }
     }
 

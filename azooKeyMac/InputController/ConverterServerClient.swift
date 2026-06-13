@@ -101,6 +101,13 @@ final class ConverterServerClient {
         )
     }
 
+    func restartServer(completion: @escaping (Bool) -> Void) {
+        sendResolved(.shutdown) { [weak self] response in
+            self?.invalidateConnection()
+            completion(response != nil)
+        }
+    }
+
     func send(
         _ commandBuilder: @escaping (String) -> ConverterServerCommand,
         completion: @escaping (ConverterServerResponse?) -> Void

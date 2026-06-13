@@ -1,4 +1,5 @@
 import Core
+import Darwin
 import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
@@ -131,6 +132,9 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
     // swiftlint:disable:next cyclomatic_complexity
     private func handle(_ command: ConverterServerCommand) async throws -> ConverterServerResponse {
         switch command {
+        case .shutdown:
+            Self.scheduleShutdown()
+            return ConverterServerResponse(snapshot: .empty)
         case .activate(let sessionID):
             let session = try getSession(sessionID)
             session.manager.activate()
@@ -845,6 +849,12 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             throw ConverterServerError.invalidSettingValue(key)
         }
         return boolValue
+    }
+
+    private static func scheduleShutdown() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            exit(EXIT_SUCCESS)
+        }
     }
 
     @MainActor

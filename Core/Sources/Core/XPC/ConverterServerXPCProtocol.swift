@@ -23,6 +23,7 @@ public enum ConverterServerCodec {
 }
 
 public enum ConverterServerCommand: Codable, Sendable {
+    case shutdown
     case activate(sessionID: String)
     case deactivate(sessionID: String)
     case listSettings(sessionID: String, capabilities: ConverterSettingClientCapabilities)
