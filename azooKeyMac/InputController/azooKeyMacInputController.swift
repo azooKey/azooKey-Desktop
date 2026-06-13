@@ -376,7 +376,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             enableOptionDirectFullWidthInput: Config.OptionDirectFullWidthInput().value,
             typeBackSlash: Config.TypeBackSlash().value,
             optionDirectInputText: optionDirectInputText,
-            leftSideContext: self.getLeftSideContext(maxCount: 30)
+            context: self.currentConverterTextContext()
         )
         guard let response = self.converterServerClient.sendSync({ _ in
             .handleKeyEvent(request)
@@ -791,9 +791,8 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
     func candidateSubmitted() {
         Task { @MainActor in
             if self.currentConverterView != nil {
-                let leftSideContext = self.getLeftSideContext(maxCount: 30)
                 if let response = self.converterServerClient.sendIfSessionOpenSync({ _ in
-                    .candidate(.submitSelectedCandidate(leftSideContext: leftSideContext))
+                    .candidate(.submitSelectedCandidate(context: self.currentConverterTextContext()))
                 }) {
                     self.currentConverterView = response.snapshot
                     if let client = self.client() {
@@ -827,14 +826,47 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
 }
 
 extension azooKeyMacInputController: SegmentManagerDelegate {
-    func getLeftSideContext(maxCount: Int) -> String? {
-        let endIndex = client().markedRange().location
+    private func currentConverterTextContext() -> ConverterTextContext {
+        ConverterTextContext(
+            leftSideContext: self.getLeftSideContext(),
+            rightSideContext: self.getRightSideContext()
+        )
+    }
+
+    func getLeftSideContext(maxCount: Int = ConverterTextContext.transportCharacterLimit) -> String? {
+        let endIndex = self.contextRange().location
         let leftRange = NSRange(location: max(endIndex - maxCount, 0), length: min(endIndex, maxCount))
         var actual = NSRange()
         // 同じ行の文字のみコンテキストに含める
         let leftSideContext = self.client().string(from: leftRange, actualRange: &actual)
         self.segmentsManager.appendDebugMessage("\(#function): leftSideContext=\(leftSideContext ?? "nil")")
         return leftSideContext
+    }
+
+    func getRightSideContext(maxCount: Int = ConverterTextContext.transportCharacterLimit) -> String? {
+        let range = self.contextRange()
+        let startIndex = range.location + range.length
+        let documentLength = self.client().length()
+        guard startIndex < documentLength else {
+            return nil
+        }
+        let rightRange = NSRange(location: startIndex, length: min(documentLength - startIndex, maxCount))
+        var actual = NSRange()
+        let rightSideContext = self.client().string(from: rightRange, actualRange: &actual)
+        self.segmentsManager.appendDebugMessage("\(#function): rightSideContext=\(rightSideContext ?? "nil")")
+        return rightSideContext
+    }
+
+    private func contextRange() -> NSRange {
+        let markedRange = self.client().markedRange()
+        if markedRange.location != NSNotFound {
+            return markedRange
+        }
+        let selectedRange = self.client().selectedRange()
+        if selectedRange.location != NSNotFound {
+            return selectedRange
+        }
+        return NSRange(location: 0, length: 0)
     }
 }
 
@@ -879,9 +911,8 @@ extension azooKeyMacInputController {
             self.segmentsManager.appendDebugMessage("requestReplaceSuggestion: skipped because session config sync failed")
             return
         }
-        let leftSideContext = self.getLeftSideContext(maxCount: 100)
         self.converterServerClient.sendIfSessionOpen(
-            { _ in .replaceSuggestion(.request(leftSideContext: leftSideContext)) },
+            { _ in .replaceSuggestion(.request(context: self.currentConverterTextContext())) },
             completion: { [weak self] response in
                 Task { @MainActor in
                     guard let self else {

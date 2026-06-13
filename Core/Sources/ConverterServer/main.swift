@@ -148,9 +148,14 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         case .selectCandidate(let index):
             session.manager.requestSelectingRow(index)
             return makeResponse(for: session, inputState: .selecting)
-        case .submitSelectedCandidate(let leftSideContext):
+        case .submitSelectedCandidate(let context):
+            session.setContext(context)
             var effects: [ConverterClientEffect] = []
-            submitSelectedCandidate(manager: session.manager, leftSideContext: leftSideContext, effects: &effects)
+            submitSelectedCandidate(
+                manager: session.manager,
+                leftSideContext: session.conversionLeftSideContext(),
+                effects: &effects
+            )
             let nextInputState: InputState = session.manager.isEmpty ? .none : .previewing
             return makeResponse(
                 for: session,
@@ -167,8 +172,9 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         session: ConverterSession
     ) async throws -> ConverterServerResponse {
         switch command {
-        case .request(let leftSideContext):
-            try await requestReplaceSuggestion(session: session, leftSideContext: leftSideContext)
+        case .request(let context):
+            session.setContext(context)
+            try await requestReplaceSuggestion(session: session)
             return makeResponse(for: session, inputState: .replaceSuggestion, responseInputState: .replaceSuggestion)
         case .selectReplaceSuggestionCandidate(let index):
             session.selectReplaceSuggestion(at: index)

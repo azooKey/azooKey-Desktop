@@ -63,7 +63,7 @@ import Testing
         enableOptionDirectFullWidthInput: true,
         typeBackSlash: true,
         optionDirectInputText: "a",
-        leftSideContext: "左文脈",
+        context: .init(leftSideContext: "左文脈", rightSideContext: "右文脈"),
         visibleCandidateStartIndex: 3
     )
     let command = ConverterServerCommand.session(sessionID: "session-1", command: .handleKeyEvent(request))
@@ -104,7 +104,7 @@ import Testing
 @Test func converterServerReplaceSuggestionCommandsRoundTrip() throws {
     let request = ConverterServerCommand.session(
         sessionID: "session-1",
-        command: .replaceSuggestion(.request(leftSideContext: "左文脈"))
+        command: .replaceSuggestion(.request(context: .init(leftSideContext: "左文脈", rightSideContext: "右文脈")))
     )
     let select = ConverterServerCommand.session(
         sessionID: "session-1",
@@ -115,13 +115,14 @@ import Testing
         command: .replaceSuggestion(.submitSelectedReplaceSuggestion)
     )
 
-    guard case .session(let requestSessionID, .replaceSuggestion(.request(let leftSideContext))) =
+    guard case .session(let requestSessionID, .replaceSuggestion(.request(let context))) =
             try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(request)) else {
         Issue.record("Expected requestReplaceSuggestion command after round trip")
         return
     }
     #expect(requestSessionID == "session-1")
-    #expect(leftSideContext == "左文脈")
+    #expect(context.leftSideContext == "左文脈")
+    #expect(context.rightSideContext == "右文脈")
 
     guard case .session(let selectSessionID, .replaceSuggestion(.selectReplaceSuggestionCandidate(let index))) =
             try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(select)) else {
@@ -137,6 +138,22 @@ import Testing
         return
     }
     #expect(submitSessionID == "session-1")
+}
+
+@Test func converterServerCandidateCommandsRoundTripContext() throws {
+    let context = ConverterTextContext(leftSideContext: "左文脈", rightSideContext: "右文脈")
+    let submit = ConverterServerCommand.session(
+        sessionID: "session-1",
+        command: .candidate(.submitSelectedCandidate(context: context))
+    )
+
+    guard case .session(let sessionID, .candidate(.submitSelectedCandidate(let roundTripContext))) =
+            try ConverterServerCodec.decodeCommand(from: ConverterServerCodec.encode(submit)) else {
+        Issue.record("Expected submitSelectedCandidate command after round trip")
+        return
+    }
+    #expect(sessionID == "session-1")
+    #expect(roundTripContext == context)
 }
 
 @Test func converterServerSettingsCommandsRoundTrip() throws {

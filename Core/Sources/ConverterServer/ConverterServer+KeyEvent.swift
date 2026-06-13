@@ -9,7 +9,7 @@ extension ConverterServer {
         request: ConverterKeyEventRequest
     ) throws -> ConverterServerResponse {
         let session = try getSession(sessionID)
-        session.setLeftSideContext(request.leftSideContext)
+        session.setContext(request.context)
         Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
         Config.DebugTypoCorrection().value = request.enableTypoCorrection
 
@@ -88,6 +88,7 @@ extension ConverterServer {
         let manager = session.manager
         let inputState = request.inputState.inputState
         let inputStyle = Self.resolveInputStyle(request.inputLanguage == .english ? .direct : request.inputStyle)
+        let leftSideContext = session.conversionLeftSideContext()
         switch action {
         case .consume:
             return true
@@ -121,14 +122,14 @@ extension ConverterServer {
             manager.insertCompositionSeparator(inputStyle: inputStyle, skipUpdate: true)
             manager.update(requestRichCandidates: true)
         case .submitSelectedCandidate:
-            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+            submitSelectedCandidate(manager: manager, leftSideContext: leftSideContext, effects: &effects)
         case .selectNextCandidate:
             manager.requestSelectingNextCandidate()
         case .selectPrevCandidate:
             manager.requestSelectingPrevCandidate()
         case .selectNumberCandidate(let number):
             manager.requestSelectingRow(request.visibleCandidateStartIndex + number - 1)
-            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+            submitSelectedCandidate(manager: manager, leftSideContext: leftSideContext, effects: &effects)
             manager.requestResettingSelection()
         case .selectInputLanguage(let language):
             inputLanguage = language
@@ -161,20 +162,20 @@ extension ConverterServer {
         case .forgetMemory:
             manager.forgetMemory()
         case .submitKatakanaCandidate:
-            submitTransformedCandidate(.katakana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+            submitTransformedCandidate(.katakana, manager: manager, inputState: inputState, leftSideContext: leftSideContext, effects: &effects)
         case .submitHiraganaCandidate:
-            submitTransformedCandidate(.hiragana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+            submitTransformedCandidate(.hiragana, manager: manager, inputState: inputState, leftSideContext: leftSideContext, effects: &effects)
         case .submitHankakuKatakanaCandidate:
-            submitTransformedCandidate(.halfWidthKatakana, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+            submitTransformedCandidate(.halfWidthKatakana, manager: manager, inputState: inputState, leftSideContext: leftSideContext, effects: &effects)
         case .submitFullWidthRomanCandidate:
-            submitTransformedCandidate(.fullWidthRoman, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+            submitTransformedCandidate(.fullWidthRoman, manager: manager, inputState: inputState, leftSideContext: leftSideContext, effects: &effects)
         case .submitHalfWidthRomanCandidate:
-            submitTransformedCandidate(.halfWidthRoman, manager: manager, inputState: inputState, leftSideContext: request.leftSideContext, effects: &effects)
+            submitTransformedCandidate(.halfWidthRoman, manager: manager, inputState: inputState, leftSideContext: leftSideContext, effects: &effects)
         case .requestPredictiveSuggestion:
             manager.insertAtCursorPosition("つづき", inputStyle: inputStyle)
             effects.append(.requestReplaceSuggestion)
         case .acceptPredictionCandidate:
-            acceptPredictionCandidate(manager: manager, leftSideContext: request.leftSideContext)
+            acceptPredictionCandidate(manager: manager, leftSideContext: leftSideContext)
         case .requestReplaceSuggestion:
             session.clearReplaceSuggestions()
             effects.append(.requestReplaceSuggestion)
@@ -198,7 +199,7 @@ extension ConverterServer {
                 effects.append(.insertText(String(Character(unicodeScalar))))
             }
         case .submitSelectedCandidateAndEnterUnicodeInputMode:
-            submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
+            submitSelectedCandidate(manager: manager, leftSideContext: leftSideContext, effects: &effects)
             if !manager.isEmpty {
                 effects.append(.insertText(manager.convertTarget))
                 manager.stopComposition()
@@ -266,8 +267,7 @@ extension ConverterServer {
 
     @MainActor
     func requestReplaceSuggestion(
-        session: ConverterSession,
-        leftSideContext: String?
+        session: ConverterSession
     ) async throws {
         session.clearReplaceSuggestions()
         guard !session.manager.isEmpty else {
@@ -283,7 +283,7 @@ extension ConverterServer {
             backend = .openAI
         }
         let composingText = session.manager.convertTarget
-        let prompt = session.config.includeContextInAITransform ? (leftSideContext ?? "") : ""
+        let prompt = session.config.includeContextInAITransform ? session.replaceSuggestionPromptContext() : ""
         let request = OpenAIRequest(
             prompt: prompt,
             target: composingText,

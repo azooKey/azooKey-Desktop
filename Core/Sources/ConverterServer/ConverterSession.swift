@@ -2,8 +2,11 @@ import Core
 import KanaKanjiConverterModuleWithDefaultDictionary
 
 final class ConverterSession: SegmentManagerDelegate {
+    static let conversionContextLength = 30
+    static let replaceSuggestionContextLength = 100
+
     let manager: SegmentsManager
-    private var leftSideContext: String?
+    private var context = ConverterTextContext()
     var config = ConverterSessionConfig(
         aiBackendPreference: .off,
         openAIModelName: Config.OpenAiModelName.default,
@@ -19,15 +22,40 @@ final class ConverterSession: SegmentManagerDelegate {
         self.manager.delegate = self
     }
 
-    func setLeftSideContext(_ value: String?) {
-        self.leftSideContext = value
+    func setContext(_ context: ConverterTextContext) {
+        self.context = context
     }
 
     func getLeftSideContext(maxCount: Int) -> String? {
-        guard let leftSideContext else {
+        guard let leftSideContext = context.leftSideContext else {
             return nil
         }
         return String(leftSideContext.suffix(maxCount))
+    }
+
+    func getRightSideContext(maxCount: Int) -> String? {
+        guard let rightSideContext = context.rightSideContext else {
+            return nil
+        }
+        return String(rightSideContext.prefix(maxCount))
+    }
+
+    func conversionLeftSideContext() -> String? {
+        getLeftSideContext(maxCount: Self.conversionContextLength)
+    }
+
+    func replaceSuggestionPromptContext() -> String {
+        let leftSideContext = getLeftSideContext(maxCount: Self.replaceSuggestionContextLength) ?? ""
+        let rightSideContext = getRightSideContext(maxCount: Self.replaceSuggestionContextLength) ?? ""
+        guard !leftSideContext.isEmpty || !rightSideContext.isEmpty else {
+            return ""
+        }
+        return [
+            leftSideContext.isEmpty ? nil : "Text before: ...\(leftSideContext)",
+            rightSideContext.isEmpty ? nil : "Text after: \(rightSideContext)..."
+        ]
+        .compactMap(\.self)
+        .joined(separator: "\n")
     }
 
     func clearReplaceSuggestions() {

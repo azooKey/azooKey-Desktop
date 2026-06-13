@@ -112,13 +112,13 @@ public enum ConverterCandidateCommand: Codable, Sendable {
     case selectCandidate(index: Int)
 
     /// 選択中の変換候補を確定する。
-    case submitSelectedCandidate(leftSideContext: String?)
+    case submitSelectedCandidate(context: ConverterTextContext)
 }
 
 /// AI 置換候補に対する操作。
 public enum ConverterReplaceSuggestionCommand: Codable, Sendable {
     /// 現在の composition に対する置換候補を生成する。
-    case request(leftSideContext: String?)
+    case request(context: ConverterTextContext)
 
     /// 置換候補ウィンドウで指定行を選択する。
     case selectReplaceSuggestionCandidate(index: Int)
@@ -287,6 +287,25 @@ public struct ConverterSecretString: Codable, Sendable, CustomStringConvertible,
     }
 }
 
+/// 変換位置の前後にあるドキュメント文脈。
+///
+/// Client は macOS の text input API から取得できた範囲をこの型に詰めて Server に渡す。
+/// どの処理で何文字使うかは Server 側が決めるため、各 command には maxCount を持たせない。
+public struct ConverterTextContext: Codable, Sendable, Equatable {
+    /// XPC で運ぶ文脈の上限。
+    ///
+    /// 実際に変換で使う長さは Server 側で用途別に切り詰める。
+    public static let transportCharacterLimit = 200
+
+    public var leftSideContext: String?
+    public var rightSideContext: String?
+
+    public init(leftSideContext: String? = nil, rightSideContext: String? = nil) {
+        self.leftSideContext = leftSideContext
+        self.rightSideContext = rightSideContext
+    }
+}
+
 /// Client が受け取ったキーイベントと、その時点での IMK/UI 状態。
 ///
 /// Server はこの情報だけを見て変換処理を進め、Client に必要な effect と snapshot を返す。
@@ -303,7 +322,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
     public var enableOptionDirectFullWidthInput: Bool
     public var typeBackSlash: Bool
     public var optionDirectInputText: String?
-    public var leftSideContext: String?
+    public var context: ConverterTextContext
     public var visibleCandidateStartIndex: Int
 
     public init(
@@ -319,7 +338,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         enableOptionDirectFullWidthInput: Bool = false,
         typeBackSlash: Bool = false,
         optionDirectInputText: String? = nil,
-        leftSideContext: String?,
+        context: ConverterTextContext = .init(),
         visibleCandidateStartIndex: Int = 0
     ) {
         self.event = event
@@ -334,7 +353,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         self.enableOptionDirectFullWidthInput = enableOptionDirectFullWidthInput
         self.typeBackSlash = typeBackSlash
         self.optionDirectInputText = optionDirectInputText
-        self.leftSideContext = leftSideContext
+        self.context = context
         self.visibleCandidateStartIndex = visibleCandidateStartIndex
     }
 }
