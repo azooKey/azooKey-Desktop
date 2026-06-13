@@ -1,5 +1,6 @@
 import Cocoa
 import Core
+import Darwin
 import SwiftUI
 
 struct ConfigWindow: View {
@@ -39,6 +40,8 @@ struct ConfigWindow: View {
     @State private var debugTypoCorrectionState: DebugTypoCorrectionState = .notDownloaded
     @State private var debugTypoCorrectionDownloadInProgress = false
     @State private var debugTypoCorrectionErrorMessage: String?
+    @State private var converterProcessRestartInProgress = false
+    @State private var converterProcessRestartMessage: String?
 
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
@@ -62,6 +65,17 @@ struct ConfigWindow: View {
     private enum SystemUserDictionaryUpdateMessage {
         case error(any Error)
         case successfulUpdate
+    }
+
+    private enum ConverterProcessRestartError: LocalizedError {
+        case launchctlFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .launchctlFailed(let message):
+                "launchctl kickstart failed: \(message)"
+            }
+        }
     }
 
     private var azooKeyApplicationSupportDirectoryURL: URL {
@@ -171,6 +185,60 @@ struct ConfigWindow: View {
             try fileManager.copyItem(at: sourceURL, to: targetURL)
         } catch {
             // The status check below will surface a notDownloaded/failed state.
+        }
+    }
+
+    @MainActor
+    private func restartConverterProcess() {
+        guard !self.converterProcessRestartInProgress else {
+            return
+        }
+        self.converterProcessRestartInProgress = true
+        self.converterProcessRestartMessage = nil
+        Task {
+            do {
+                try await Task.detached(priority: .utility) {
+                    try Self.restartConverterProcessService()
+                }.value
+                await MainActor.run {
+                    self.converterProcessRestartMessage = "再起動しました"
+                    self.converterProcessRestartInProgress = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.converterProcessRestartMessage = error.localizedDescription
+                    self.converterProcessRestartInProgress = false
+                }
+            }
+        }
+    }
+
+    nonisolated private static func restartConverterProcessService() throws {
+        let serviceName = "dev.ensan.inputmethod.azooKeyMac.ConverterServer"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = [
+            "kickstart",
+            "-k",
+            "gui/\(getuid())/\(serviceName)"
+        ]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let standardError = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let standardOutput = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let message = [standardError, standardOutput]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            throw ConverterProcessRestartError.launchctlFailed(message.isEmpty ? "exit status \(process.terminationStatus)" : message)
         }
     }
 
@@ -715,6 +783,24 @@ struct ConfigWindow: View {
                     HStack {
                         Button("Finderで開く") {
                             self.openAzooKeyDataDirectoryInFinder()
+                        }
+                    }
+                }
+                LabeledContent("Converter Process") {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Button("再起動") {
+                            self.restartConverterProcess()
+                        }
+                        .disabled(self.converterProcessRestartInProgress)
+                        if self.converterProcessRestartInProgress {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        if let converterProcessRestartMessage {
+                            Text(converterProcessRestartMessage)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
