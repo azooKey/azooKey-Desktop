@@ -77,8 +77,8 @@ final class ConverterServerClient {
         completion: @escaping ([ConverterSettingDescriptor]?) -> Void
     ) {
         send(
-            { sessionID in
-                .listSettings(sessionID: sessionID, capabilities: capabilities)
+            { _ in
+                .settings(.list(capabilities: capabilities))
             },
             completion: { response in
                 completion(response?.settings)
@@ -92,8 +92,8 @@ final class ConverterServerClient {
         completion: @escaping (Bool) -> Void
     ) {
         send(
-            { sessionID in
-                .updateSetting(sessionID: sessionID, key: key, value: value)
+            { _ in
+                .settings(.update(key: key, value: value))
             },
             completion: { response in
                 completion(response != nil)
@@ -109,7 +109,7 @@ final class ConverterServerClient {
     }
 
     func send(
-        _ commandBuilder: @escaping (String) -> ConverterServerCommand,
+        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
         openSession { [weak self] sessionID in
@@ -117,33 +117,36 @@ final class ConverterServerClient {
                 completion(nil)
                 return
             }
-            self.sendResolved(commandBuilder(sessionID), completion: completion)
+            self.sendResolved(
+                .session(sessionID: sessionID, command: commandBuilder(sessionID)),
+                completion: completion
+            )
         }
     }
 
-    func sendSync(_ commandBuilder: (String) -> ConverterServerCommand) -> ConverterServerResponse? {
+    func sendSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
         guard let sessionID = openSessionSync() else {
             return nil
         }
-        return sendResolvedSync(commandBuilder(sessionID))
+        return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
     }
 
-    func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterServerCommand) -> ConverterServerResponse? {
+    func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
         guard let sessionID else {
             return nil
         }
-        return sendResolvedSync(commandBuilder(sessionID))
+        return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
     }
 
     func sendIfSessionOpen(
-        _ commandBuilder: @escaping (String) -> ConverterServerCommand,
+        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
         guard let sessionID else {
             completion(nil)
             return
         }
-        sendResolved(commandBuilder(sessionID), completion: completion)
+        sendResolved(.session(sessionID: sessionID, command: commandBuilder(sessionID)), completion: completion)
     }
 
     private func remoteObjectProxy(completion: @escaping (ConverterServerXPCProtocol?) -> Void) {
