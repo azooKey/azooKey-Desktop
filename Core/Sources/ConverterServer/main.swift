@@ -326,7 +326,6 @@ private final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unch
             submitSelectedCandidate(manager: manager, leftSideContext: request.leftSideContext, effects: &effects)
             manager.requestResettingSelection()
         case .selectInputLanguage(let language):
-            manager.stopComposition()
             inputLanguage = language
             effects.append(.switchInputLanguage(language))
         case .commitMarkedTextAndSelectInputLanguage(let language):

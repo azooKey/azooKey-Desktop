@@ -265,6 +265,54 @@ private func makeControlEvent(
     }
 }
 
+@Test func testEisuKeepsCompositionWhenSwitchingToEnglish() {
+    let event = makeControlEvent(
+        logicalKey: nil,
+        characters: nil,
+        modifiers: [],
+        keyCode: 102
+    )
+    let composingStates: [InputState] = [.composing, .previewing, .replaceSuggestion]
+    for state in composingStates {
+        let (action, callback) = state.event(
+            eventCore: event,
+            userAction: .英数,
+            inputLanguage: .japanese,
+            liveConversionEnabled: false,
+            enableDebugWindow: false,
+            enableSuggestion: false
+        )
+        guard case .selectInputLanguage(.english) = action, case .fallthrough = callback else {
+            Issue.record("Expected Eisu in \(state) to keep composition while switching, got \(action), \(callback)")
+            return
+        }
+    }
+}
+
+@Test func testKanaDoesNotDropJapaneseComposition() {
+    let event = makeControlEvent(
+        logicalKey: nil,
+        characters: nil,
+        modifiers: [],
+        keyCode: 104
+    )
+    let composingStates: [InputState] = [.composing, .previewing, .selecting, .replaceSuggestion]
+    for state in composingStates {
+        let (action, callback) = state.event(
+            eventCore: event,
+            userAction: .かな,
+            inputLanguage: .japanese,
+            liveConversionEnabled: false,
+            enableDebugWindow: false,
+            enableSuggestion: false
+        )
+        guard case .selectInputLanguage(.japanese) = action, case .fallthrough = callback else {
+            Issue.record("Expected Kana in Japanese \(state) to keep composition, got \(action), \(callback)")
+            return
+        }
+    }
+}
+
 @Test func testNonModifierUnknownStillFallsThroughDuringComposing() {
     // Ctrlを伴わない.unknownは従来通りfallthroughされる（既存挙動の回帰防止）
     let bareEvent = makeControlEvent(

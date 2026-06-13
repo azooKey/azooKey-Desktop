@@ -65,6 +65,10 @@ struct ConfigWindow: View {
     }
 
     private var azooKeyApplicationSupportDirectoryURL: URL {
+        AppGroup.applicationSupportDirectoryURL()
+    }
+
+    private var legacyAzooKeyApplicationSupportDirectoryURL: URL {
         if #available(macOS 13, *) {
             URL.applicationSupportDirectory
                 .appending(path: "azooKey", directoryHint: .isDirectory)
@@ -77,6 +81,12 @@ struct ConfigWindow: View {
     private var debugTypoCorrectionModelDirectoryURL: URL {
         DebugTypoCorrectionWeights.modelDirectoryURL(
             azooKeyApplicationSupportDirectoryURL: self.azooKeyApplicationSupportDirectoryURL
+        )
+    }
+
+    private var legacyDebugTypoCorrectionModelDirectoryURL: URL {
+        DebugTypoCorrectionWeights.modelDirectoryURL(
+            azooKeyApplicationSupportDirectoryURL: self.legacyAzooKeyApplicationSupportDirectoryURL
         )
     }
 
@@ -97,8 +107,13 @@ struct ConfigWindow: View {
     @MainActor
     private func refreshDebugTypoCorrectionState() async {
         let modelDirectoryURL = self.debugTypoCorrectionModelDirectoryURL
-        let state = await Task.detached(priority: .utility) {
-            DebugTypoCorrectionWeights.state(modelDirectoryURL: modelDirectoryURL)
+        let legacyModelDirectoryURL = self.legacyDebugTypoCorrectionModelDirectoryURL
+        let state = await Task.detached(priority: .utility) { () -> DebugTypoCorrectionState in
+            Self.migrateLegacyDebugTypoCorrectionWeightsIfNeeded(
+                from: legacyModelDirectoryURL,
+                to: modelDirectoryURL
+            )
+            return DebugTypoCorrectionWeights.state(modelDirectoryURL: modelDirectoryURL)
         }.value
         self.debugTypoCorrectionState = state
         if state != .failed {
@@ -133,6 +148,29 @@ struct ConfigWindow: View {
                     self.debugTypoCorrectionDownloadInProgress = false
                 }
             }
+        }
+    }
+
+    nonisolated private static func migrateLegacyDebugTypoCorrectionWeightsIfNeeded(from sourceURL: URL, to targetURL: URL) {
+        guard sourceURL.standardizedFileURL != targetURL.standardizedFileURL else {
+            return
+        }
+        guard !DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: targetURL),
+              DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: sourceURL) else {
+            return
+        }
+        do {
+            let fileManager = FileManager.default
+            try fileManager.createDirectory(
+                at: targetURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if fileManager.fileExists(atPath: targetURL.path) {
+                try fileManager.removeItem(at: targetURL)
+            }
+            try fileManager.copyItem(at: sourceURL, to: targetURL)
+        } catch {
+            // The status check below will surface a notDownloaded/failed state.
         }
     }
 

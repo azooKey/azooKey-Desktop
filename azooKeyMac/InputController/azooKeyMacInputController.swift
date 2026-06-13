@@ -241,7 +241,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 if self.inputLanguage == .japanese {
                     self.inputLanguage = .english
                     self.segmentsManager.stopJapaneseInput()
-                    self.discardConverterServerComposition()
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()
                 }
@@ -509,7 +508,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .english:
             client.selectMode("dev.ensan.inputmethod.azooKeyMac.Roman")
             self.segmentsManager.stopJapaneseInput()
-            self.discardConverterServerComposition()
         case .japanese:
             client.selectMode("dev.ensan.inputmethod.azooKeyMac.Japanese")
         }
