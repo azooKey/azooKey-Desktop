@@ -9,6 +9,7 @@ import Cocoa
 import Core
 import InputMethodKit
 import KanaKanjiConverterModuleWithDefaultDictionary
+import Sparkle
 import SwiftUI
 
 // Necessary to launch this app
@@ -34,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var configWindowController: NSWindowController?
     var userDictionaryEditorWindowController: NSWindowController?
     var kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
+    private var updaterController: SPUStandardUpdaterController?
 
     private var userDictionaryMemoryDirectoryURL: URL {
         AppGroup.memoryDirectoryURL()
@@ -122,10 +124,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func checkForUpdates(_ sender: Any?) {
+        guard let updaterController else {
+            let alert = NSAlert()
+            alert.messageText = "自動アップデートは未設定です"
+            alert.informativeText = "SPARKLE_FEED_URL と SPARKLE_PUBLIC_ED_KEY を設定したビルドで利用できます。"
+            alert.runModal()
+            return
+        }
+        updaterController.checkForUpdates(sender)
+    }
+
+    private func configureUpdaterIfAvailable() {
+        guard
+            let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+            !feedURL.isEmpty,
+            let publicEDKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
+            !publicEDKey.isEmpty
+        else {
+            NSLog("Sparkle updater is disabled because SUFeedURL or SUPublicEDKey is not configured.")
+            return
+        }
+        self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    }
+
+    private func addApplicationMenuIfNeeded() {
+        let appMenuItem = NSMenuItem(title: "azooKey", action: nil, keyEquivalent: "")
+        NSApp.mainMenu?.addItem(appMenuItem)
+
+        let appSubmenu = NSMenu(title: "azooKey")
+        appMenuItem.submenu = appSubmenu
+
+        let checkForUpdatesItem = NSMenuItem(title: "更新を確認...", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        checkForUpdatesItem.target = self
+        appSubmenu.addItem(checkForUpdatesItem)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Insert code here to initialize your application
         self.server = IMKServer(name: Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String, bundleIdentifier: Bundle.main.bundleIdentifier)
         NSLog("tried connection")
+        self.configureUpdaterIfAvailable()
 
         // Keychainから設定値を非同期で読み込み
         Task {
@@ -137,6 +176,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if NSApp.mainMenu == nil {
             NSApp.mainMenu = NSMenu()
         }
+
+        self.addApplicationMenuIfNeeded()
 
         // Add an Edit menu
         let editMenu = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")

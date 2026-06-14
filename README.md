@@ -124,7 +124,36 @@ ls -lh azooKeyMac/Resources/zenz-v3.1-small-gguf/ggml-model-Q5_K_M.gguf
 * Git LFSが導入されていない環境では、重みファイルがローカル環境に落とせていない場合があります。`azooKeyMac/Resources/zenz-v3.1-small-gguf/ggml-model-Q5_K_M.gguf` が数十MB以上あるかを確認し、ポインタのままであれば `git -C azooKeyMac/Resources/zenz-v3.1-small-gguf lfs pull` を実行してください
 
 ### pkgファイルの作成
-`pkgbuild.sh`によって配布用のdmgファイルを作成できます。`build/azooKeyMac.app` としてDeveloper IDで署名済みの.appを配置してください。
+`pkgbuild.sh`によって配布用のpkgファイルを作成できます。作成された `azooKey-release-signed.pkg` は初回インストールと上書きインストールの両方で利用します。
+
+自動アップデートはSparkle経由のpkg更新として配布します。リリースビルドではSparkleの `generate_keys` で作成した公開鍵を `SPARKLE_PUBLIC_ED_KEY` に設定してください。
+
+初回のみ、SparkleのEdDSA鍵を生成します。`generate_keys` は秘密鍵を実行したMacのlogin Keychainに保存し、アプリへ埋め込む公開鍵を出力します。秘密鍵はGitHubやリポジトリに置かないでください。
+
+```sh
+xcodebuild -resolvePackageDependencies \
+  -project azooKeyMac.xcodeproj \
+  -scheme azooKeyMac \
+  -clonedSourcePackagesDirPath ./build/source-packages
+
+./build/source-packages/artifacts/sparkle/Sparkle/bin/generate_keys
+```
+
+出力された `SUPublicEDKey` の文字列を、以後のrelease時に `SPARKLE_PUBLIC_ED_KEY` として渡します。
+
+GitHub Releaseの作成は `create_release.sh` で行います。このスクリプトは実行中のcommitにtagを打ち、`pkgbuild.sh` を実行し、`azooKey-release-signed.pkg` と `appcast.xml` をGitHub Releaseへアップロードします。release前に `CURRENT_PROJECT_VERSION` を増やしてください。
+
+```sh
+SPARKLE_PUBLIC_ED_KEY="..." ./create_release.sh --stable-release
+SPARKLE_PUBLIC_ED_KEY="..." ./create_release.sh --pre-release
+SPARKLE_PUBLIC_ED_KEY="..." ./create_release.sh --test-release
+```
+
+stable releaseのtagは標準で `vMARKETING_VERSION`、pre-releaseのtagは `vMARKETING_VERSION-pre.CURRENT_PROJECT_VERSION` になります。必要な場合は `--tag`、`--repo`、`--remote` で上書きできます。
+
+`--test-release` は自動アップデートの動作検証用です。標準では固定tag `sparkle-update-test` のGitHub Releaseを作成または更新し、アプリに埋め込むfeed URLも `https://github.com/azooKey/azooKey-Desktop/releases/download/sparkle-update-test/appcast.xml` に切り替えます。このpkgを手動インストールした環境では、以後Sparkleが検証用feedを見に行きます。tag名を変える場合は `TEST_RELEASE_TAG` または `--tag`、feed URLを別の固定URLにしたい場合は `SPARKLE_FEED_URL` を指定してください。
+
+pkg更新後、postinstallはConverterServerのLaunchAgentを再登録してConverterServerだけを再起動します。既に起動しているazooKeyMacクライアントは終了せず、クライアント側の更新は次回ログイン後に反映されます。
 
 ### v1.0リリースに向けて
 [meta: v1.0のリリースに向けたロードマップ（#181）](https://github.com/azooKey/azooKey-Desktop/issues/181)をご覧ください．

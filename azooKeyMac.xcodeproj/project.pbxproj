@@ -16,6 +16,7 @@
 		551434E82D576B6600A9B5CA /* lm_c_abc.marisa in Resources */ = {isa = PBXBuildFile; fileRef = 551434E12D576B6600A9B5CA /* lm_c_abc.marisa */; };
 		551434EA2D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf in Resources */ = {isa = PBXBuildFile; fileRef = 551434E92D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf */; };
 		554A26602DB37657003C5CFB /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 554A265F2DB37657003C5CFB /* Core */; };
+		556B9A102EFD000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 556B9A0F2EFD000000000001 /* Sparkle */; };
 		556C52FB2BAAAF7E00EB343F /* en.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52F92BAAAF7D00EB343F /* en.tiff */; };
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
@@ -75,6 +76,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				554A26602DB37657003C5CFB /* Core in Frameworks */,
+				556B9A102EFD000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -175,6 +177,7 @@
 			name = azooKeyMac;
 			packageProductDependencies = (
 				554A265F2DB37657003C5CFB /* Core */,
+				556B9A0F2EFD000000000001 /* Sparkle */,
 			);
 			productName = azooKeyMac;
 			productReference = 1A41E61426E745D9009B65D7 /* azooKeyMac.app */;
@@ -256,6 +259,7 @@
 			mainGroup = 1A41E60B26E745D9009B65D7;
 			packageReferences = (
 				554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */,
+				556B9A0E2EFD000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 1A41E61526E745D9009B65D7 /* Products */;
 			projectDirPath = "";
@@ -530,6 +534,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ensan.inputmethod.azooKeyMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_FEED_URL = "https://github.com/azooKey/azooKey-Desktop/releases/latest/download/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objcxx;
 				SWIFT_VERSION = 5.0;
@@ -566,6 +572,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ensan.inputmethod.azooKeyMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_FEED_URL = "https://github.com/azooKey/azooKey-Desktop/releases/latest/download/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objcxx;
 				SWIFT_VERSION = 5.0;
@@ -712,6 +720,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		556B9A0E2EFD000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		554A265F2DB37657003C5CFB /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -721,6 +740,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */;
 			productName = Core;
+		};
+		556B9A0F2EFD000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 556B9A0E2EFD000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

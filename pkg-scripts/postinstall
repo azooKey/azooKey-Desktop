@@ -6,7 +6,24 @@ app_path="/Library/Input Methods/azooKeyMac.app"
 server_path="${app_path}/Contents/MacOS/ConverterServer"
 agent_dir="/Library/LaunchAgents"
 agent_path="${agent_dir}/${service_name}.plist"
+state_dir="/private/tmp/dev.ensan.inputmethod.azooKeyMac.pkg"
+install_state_path="${state_dir}/install-state"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+install_state="initial_install"
+if [ -f "${install_state_path}" ]; then
+    install_state="$(cat "${install_state_path}")"
+fi
+rm -f "${install_state_path}"
+rmdir "${state_dir}" >/dev/null 2>&1 || true
+
+case "${install_state}" in
+    initial_install|update)
+        ;;
+    *)
+        install_state="initial_install"
+        ;;
+esac
 
 if [ ! -x "${server_path}" ]; then
     echo "ConverterServer not found: ${server_path}" >&2
@@ -19,7 +36,7 @@ chown root:wheel "${agent_path}"
 
 console_user="$(stat -f %Su /dev/console)"
 if [ -z "${console_user}" ] || [ "${console_user}" = "root" ] || [ "${console_user}" = "_mbsetupuser" ]; then
-    echo "No active console user; ${service_name} will start on next login."
+    echo "No active console user; ${service_name} will start on next login. install_state=${install_state}"
     exit 0
 fi
 
@@ -36,4 +53,8 @@ launchctl bootstrap "${gui_domain}" "${agent_path}"
 launchctl kickstart -k "${gui_domain}/${service_name}"
 launchctl print "${gui_domain}/${service_name}" >/dev/null
 
-echo "Installed and started ${service_name}"
+if [ "${install_state}" = "update" ]; then
+    echo "Updated azooKeyMac and restarted ${service_name}; azooKeyMac client will keep running until next login."
+else
+    echo "Installed azooKeyMac and started ${service_name}"
+fi

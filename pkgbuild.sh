@@ -8,6 +8,14 @@ EXPORT_PATH="./build/export"
 EXPORT_OPTIONS_PLIST="./exportOptions.plist"
 PKG_SCRIPTS_SOURCE_PATH="./pkg-scripts"
 PKG_SCRIPTS_PATH="./build/pkg-scripts"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://github.com/azooKey/azooKey-Desktop/releases/latest/download/appcast.xml}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$(mktemp -d)}"
+CLONED_SOURCE_PACKAGES_DIR_PATH="${CLONED_SOURCE_PACKAGES_DIR_PATH:-$(mktemp -d)}"
+
+if [ -z "${SPARKLE_PUBLIC_ED_KEY}" ]; then
+  echo "warning: SPARKLE_PUBLIC_ED_KEY is not set; Sparkle updater will be disabled in this build." >&2
+fi
 
 # 1. Clean Build
 rm -rf ./build
@@ -23,10 +31,12 @@ xcodebuild \
   clean archive \
   -configuration "${CONFIGURATION}" \
   -archivePath "${ARCHIVE_PATH}" \
-  -derivedDataPath "$(mktemp -d)" \
-  -clonedSourcePackagesDirPath $(mktemp -d) \
+  -derivedDataPath "${DERIVED_DATA_PATH}" \
+  -clonedSourcePackagesDirPath "${CLONED_SOURCE_PACKAGES_DIR_PATH}" \
   -allowProvisioningUpdates \
-  -destination "generic/platform=macOS"
+  -destination "generic/platform=macOS" \
+  SPARKLE_FEED_URL="${SPARKLE_FEED_URL}" \
+  SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY}"
 
 # 3. Export
 xcodebuild -exportArchive \
@@ -55,9 +65,10 @@ rm ${EXPORT_PATH}/DistributionSummary.plist
 rm ${EXPORT_PATH}/ExportOptions.plist
 
 mkdir -p "${PKG_SCRIPTS_PATH}"
+cp "${PKG_SCRIPTS_SOURCE_PATH}/preinstall" "${PKG_SCRIPTS_PATH}/preinstall"
 cp "${PKG_SCRIPTS_SOURCE_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/postinstall"
 cp "./Tools/write_converter_server_launch_agent.sh" "${PKG_SCRIPTS_PATH}/write_converter_server_launch_agent.sh"
-chmod +x "${PKG_SCRIPTS_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/write_converter_server_launch_agent.sh"
+chmod +x "${PKG_SCRIPTS_PATH}/preinstall" "${PKG_SCRIPTS_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/write_converter_server_launch_agent.sh"
 
 # Suppose we have build/azooKeyMac.app
 # Use this script to create a plist package for distribution
