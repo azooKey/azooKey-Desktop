@@ -1,18 +1,20 @@
-import Core
 import Foundation
+
+#if os(macOS)
 
 private enum ConverterServerXPC {
     static let machServiceName = "dev.ensan.inputmethod.azooKeyMac.ConverterServer"
 }
 
-@objc private protocol ConverterServerXPCProtocol {
+@objc protocol ConverterServerXPCProtocol {
     func openSession(with reply: @escaping @Sendable (String) -> Void)
     func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void)
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void)
     func ping(_ message: String, with reply: @escaping @Sendable (String) -> Void)
 }
 
-final class ConverterServerClient {
+public final class ConverterServerClient: @unchecked Sendable {
+    private let connectionFactory: () -> NSXPCConnection
     private var connection: NSXPCConnection?
     private var sessionID: String?
     private let syncTimeout: TimeInterval = 0.8
@@ -20,15 +22,25 @@ final class ConverterServerClient {
     private var shouldAttemptReconnect = false
     private var nextReconnectAttemptDate = Date.distantPast
 
-    var onLog: ((String) -> Void)?
-    var hasOpenSession: Bool {
+    public convenience init() {
+        self.init {
+            NSXPCConnection(machServiceName: ConverterServerXPC.machServiceName, options: [])
+        }
+    }
+
+    init(connectionFactory: @escaping () -> NSXPCConnection) {
+        self.connectionFactory = connectionFactory
+    }
+
+    public var onLog: (@Sendable (String) -> Void)?
+    public var hasOpenSession: Bool {
         sessionID != nil
     }
-    var canSendOrReconnect: Bool {
+    public var canSendOrReconnect: Bool {
         sessionID != nil || !hasOpenedSession || (shouldAttemptReconnect && Date() >= nextReconnectAttemptDate)
     }
 
-    func openSession(completion: ((String?) -> Void)? = nil) {
+    public func openSession(completion: (@Sendable (String?) -> Void)? = nil) {
         if let sessionID {
             completion?(sessionID)
             return
@@ -36,7 +48,7 @@ final class ConverterServerClient {
         openSessionOnServer(completion: completion)
     }
 
-    func openSessionSync() -> String? {
+    public func openSessionSync() -> String? {
         if let sessionID {
             return sessionID
         }
@@ -49,19 +61,19 @@ final class ConverterServerClient {
         return sessionID
     }
 
-    func closeSession() {
+    public func closeSession() {
         guard let sessionID else {
             invalidateConnection()
             return
         }
-        remoteObjectProxy { [weak self] proxy in
-            proxy?.closeSession(sessionID) { _ in
-                self?.invalidateConnection()
+        remoteObjectProxy { [self] proxy in
+            proxy?.closeSession(sessionID) { [self] _ in
+                self.invalidateConnection()
             }
         }
     }
 
-    func ping(_ message: String, completion: @escaping (String?) -> Void) {
+    public func ping(_ message: String, completion: @escaping @Sendable (String?) -> Void) {
         remoteObjectProxy { proxy in
             proxy?.ping(message) { response in
                 completion(response)
@@ -72,9 +84,9 @@ final class ConverterServerClient {
         }
     }
 
-    func listSettings(
+    public func listSettings(
         capabilities: ConverterSettingClientCapabilities,
-        completion: @escaping ([ConverterSettingDescriptor]?) -> Void
+        completion: @escaping @Sendable ([ConverterSettingDescriptor]?) -> Void
     ) {
         send(
             { _ in
@@ -86,10 +98,10 @@ final class ConverterServerClient {
         )
     }
 
-    func updateSetting(
+    public func updateSetting(
         key: String,
         value: ConverterSettingValue,
-        completion: @escaping (Bool) -> Void
+        completion: @escaping @Sendable (Bool) -> Void
     ) {
         send(
             { _ in
@@ -101,19 +113,19 @@ final class ConverterServerClient {
         )
     }
 
-    func restartServer(completion: @escaping (Bool) -> Void) {
+    public func restartServer(completion: @escaping @Sendable (Bool) -> Void) {
         sendResolved(.shutdown) { [weak self] response in
             self?.invalidateConnection()
             completion(response != nil)
         }
     }
 
-    func send(
-        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
-        completion: @escaping (ConverterServerResponse?) -> Void
+    public func send(
+        _ commandBuilder: @escaping @Sendable (String) -> ConverterSessionCommand,
+        completion: @escaping @Sendable (ConverterServerResponse?) -> Void
     ) {
-        openSession { [weak self] sessionID in
-            guard let self, let sessionID else {
+        openSession { [self] sessionID in
+            guard let sessionID else {
                 completion(nil)
                 return
             }
@@ -124,23 +136,23 @@ final class ConverterServerClient {
         }
     }
 
-    func sendSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
+    public func sendSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
         guard let sessionID = openSessionSync() else {
             return nil
         }
         return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
     }
 
-    func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
+    public func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
         guard let sessionID else {
             return nil
         }
         return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
     }
 
-    func sendIfSessionOpen(
-        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
-        completion: @escaping (ConverterServerResponse?) -> Void
+    public func sendIfSessionOpen(
+        _ commandBuilder: @escaping @Sendable (String) -> ConverterSessionCommand,
+        completion: @escaping @Sendable (ConverterServerResponse?) -> Void
     ) {
         guard let sessionID else {
             completion(nil)
@@ -149,7 +161,7 @@ final class ConverterServerClient {
         sendResolved(.session(sessionID: sessionID, command: commandBuilder(sessionID)), completion: completion)
     }
 
-    private func remoteObjectProxy(completion: @escaping (ConverterServerXPCProtocol?) -> Void) {
+    private func remoteObjectProxy(completion: @escaping @Sendable (ConverterServerXPCProtocol?) -> Void) {
         let connection = ensureConnection()
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ [weak self] error in
             self?.onLog?("ConverterServer XPC error: \(error.localizedDescription)")
@@ -164,7 +176,7 @@ final class ConverterServerClient {
 
     private func sendResolved(
         _ command: ConverterServerCommand,
-        completion: @escaping (ConverterServerResponse?) -> Void
+        completion: @escaping @Sendable (ConverterServerResponse?) -> Void
     ) {
         do {
             let data = try ConverterServerCodec.encode(command)
@@ -173,9 +185,9 @@ final class ConverterServerClient {
                     completion(nil)
                     return
                 }
-                proxy.handleCommand(data) { [weak self] responseData, errorMessage in
+                proxy.handleCommand(data) { [self] responseData, errorMessage in
                     if let errorMessage {
-                        self?.onLog?("ConverterServer command failed: \(errorMessage)")
+                        self.onLog?("ConverterServer command failed: \(errorMessage)")
                         completion(nil)
                         return
                     }
@@ -192,9 +204,9 @@ final class ConverterServerClient {
         }
     }
 
-    private func openSessionOnServer(completion: ((String?) -> Void)? = nil) {
-        remoteObjectProxy { [weak self] proxy in
-            guard let self, let proxy else {
+    private func openSessionOnServer(completion: (@Sendable (String?) -> Void)? = nil) {
+        remoteObjectProxy { [self] proxy in
+            guard let proxy else {
                 completion?(nil)
                 return
             }
@@ -212,15 +224,15 @@ final class ConverterServerClient {
     private func sendResolvedSync(_ command: ConverterServerCommand) -> ConverterServerResponse? {
         do {
             let data = try ConverterServerCodec.encode(command)
-            return waitForResult(timeout: syncTimeout) { [weak self] complete in
-                self?.remoteObjectProxy { proxy in
+            return waitForResult(timeout: syncTimeout) { complete in
+                self.remoteObjectProxy { proxy in
                     guard let proxy else {
                         complete(nil)
                         return
                     }
                     proxy.handleCommand(data) { responseData, errorMessage in
                         if let errorMessage {
-                            self?.onLog?("ConverterServer command failed: \(errorMessage)")
+                            self.onLog?("ConverterServer command failed: \(errorMessage)")
                             complete(nil)
                             return
                         }
@@ -242,7 +254,7 @@ final class ConverterServerClient {
         if let connection {
             return connection
         }
-        let connection = NSXPCConnection(machServiceName: ConverterServerXPC.machServiceName, options: [])
+        let connection = self.connectionFactory()
         connection.remoteObjectInterface = NSXPCInterface(with: ConverterServerXPCProtocol.self)
         connection.interruptionHandler = { [weak self] in
             self?.onLog?("ConverterServer connection interrupted")
@@ -310,3 +322,4 @@ private func waitForResult<Value>(
     }
     return result.get()
 }
+#endif
