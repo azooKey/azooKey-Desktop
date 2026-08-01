@@ -5,9 +5,16 @@ import KanaKanjiConverterModuleWithDefaultDictionary
 
 @objc(azooKeyMacInputController)
 class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // swiftlint:disable:this type_name
-    var segmentsManager: SegmentsManager
-    private(set) var inputState: InputState = .none
-    private var inputLanguage: InputLanguage = .japanese
+    let inputSession: InputSession
+    var segmentsManager: SegmentsManager {
+        self.inputSession.segmentsManager
+    }
+    var inputState: InputState {
+        self.inputSession.inputState
+    }
+    private var inputLanguage: InputLanguage {
+        self.inputSession.inputLanguage
+    }
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -105,11 +112,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         let applicationDirectoryURL = AppGroup.memoryDirectoryURL()
         let containerURL = AppGroup.containerURL()
-        self.segmentsManager = SegmentsManager(
+        let segmentsManager = SegmentsManager(
             kanaKanjiConverter: (NSApplication.shared.delegate as? AppDelegate)!.kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
             containerURL: containerURL
         )
+        self.inputSession = InputSession(segmentsManager: segmentsManager)
 
         self.appMenu = NSMenu(title: "azooKey")
         self.liveConversionToggleMenuItem = NSMenuItem()
@@ -180,20 +188,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
-        // Unicode入力モードの場合は状態だけリセットして終了
-        // マウスクリック等でOSがMarkedTextを確定した場合、IME側からは消せないため
-        if case .unicodeInput = self.inputState {
-            self.inputState = .none
+        let result = self.inputSession.commitComposition()
+        guard result.handled else {
             return
         }
-        if self.segmentsManager.isEmpty {
-            return
-        }
-        let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
         if let client = sender as? IMKTextInput {
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.apply(result.effects, client: client)
         }
-        self.inputState = .none
         self.refreshMarkedText()
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
@@ -215,28 +216,15 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 // メニューバーやshortcut経由の切り替えに対応する。
                 // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
                 if self.inputLanguage == .japanese {
-                    self.inputLanguage = .english
-                    self.segmentsManager.stopJapaneseInput()
+                    self.inputSession.synchronizeInputLanguage(.english)
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()
                 }
             } else {
                 // 日本語モードへの切り替え
                 if self.inputLanguage == .english {
-                    self.inputLanguage = .japanese
-                    let (clientAction, clientActionCallback) = self.inputState.event(
-                        eventCore: .init(modifierFlags: [], characters: nil, charactersIgnoringModifiers: nil, keyCode: 0x00),
-                        userAction: .かな,
-                        inputLanguage: self.inputLanguage,
-                        liveConversionEnabled: false,
-                        enableDebugWindow: false,
-                        enableSuggestion: false
-                    )
-                    _ = self.handleClientAction(
-                        clientAction,
-                        clientActionCallback: clientActionCallback,
-                        client: self.client()
-                    )
+                    self.inputSession.synchronizeInputLanguage(.japanese)
+                    _ = self.handleClientAction(.selectInputLanguage(.japanese), clientActionCallback: .fallthrough, client: self.client())
                 }
             }
         }
@@ -299,7 +287,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 }
                 if !self.segmentsManager.isEmpty {
                     _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
-                    self.switchInputLanguage(.english, client: client)
+                    _ = self.handleClientAction(.selectInputLanguage(.english), clientActionCallback: .fallthrough, client: client)
                     return true
                 }
             }
@@ -348,15 +336,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
         // IMK のキー所有権は handle の戻り値で同期的に決まるため、通常入力は
         // XPC の一時切断に左右されないローカル composition で処理する。
-        let (clientAction, clientActionCallback) = inputState.event(
+        let result = self.inputSession.handle(
             eventCore: event.keyEventCore,
             userAction: userAction,
-            inputLanguage: self.inputLanguage,
-            liveConversionEnabled: Config.LiveConversion().value,
-            enableDebugWindow: Config.DebugWindow().value,
-            enableSuggestion: aiBackendEnabled
+            configuration: .init(
+                inputStyle: self.inputStyle,
+                liveConversionEnabled: Config.LiveConversion().value,
+                enableDebugWindow: Config.DebugWindow().value,
+                enableSuggestion: aiBackendEnabled
+            ),
+            numberCandidateIndex: self.candidatesViewController.getNumberCandidate(num:)
         )
-        return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
+        return self.apply(result, client: client)
     }
 
     private var inputStyle: InputStyle {
@@ -378,185 +369,61 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
     }
 
-    // この種のコードは複雑にしかならないので、lintを無効にする
-    // swiftlint:disable:next cyclomatic_complexity
     @MainActor func handleClientAction(_ clientAction: ClientAction, clientActionCallback: ClientActionCallback, client: IMKTextInput) -> Bool {
-        // return only false
-        switch clientAction {
-        case .showCandidateWindow:
-            self.segmentsManager.requestSetCandidateWindowState(visible: true)
-        case .hideCandidateWindow:
-            self.segmentsManager.requestSetCandidateWindowState(visible: false)
-        case .enterFirstCandidatePreviewMode:
-            self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: false)
-            self.segmentsManager.requestSetCandidateWindowState(visible: false)
-        case .enterCandidateSelectionMode:
-            self.segmentsManager.insertCompositionSeparator(inputStyle: self.inputStyle, skipUpdate: true)
-            self.segmentsManager.update(requestRichCandidates: true)
-        case .appendToMarkedText(let string):
-            // 英語モードの場合は.directでローマ字変換せずそのまま入力
-            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
-        case .appendPieceToMarkedText(let pieces):
-            // 英語モードの場合は.directでローマ字変換せずそのまま入力
-            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
-        case .insertWithoutMarkedText(let string):
-            client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
-        case .editSegment(let count):
-            self.segmentsManager.editSegment(count: count)
-        case .commitMarkedText:
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-        case .commitMarkedTextAndAppendToMarkedText(let string):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            // 英語モードの場合は.directでローマ字変換せずそのまま入力
-            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
-            self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
-        case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            // 英語モードの場合は.directでローマ字変換せずそのまま入力
-            let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
-            self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
-        case .submitSelectedCandidate:
-            self.submitSelectedCandidate()
-        case .removeLastMarkedText:
-            self.segmentsManager.deleteBackwardFromCursorPosition()
-            self.segmentsManager.requestResettingSelection()
-        case .selectPrevCandidate:
-            self.segmentsManager.requestSelectingPrevCandidate()
-        case .selectNextCandidate:
-            self.segmentsManager.requestSelectingNextCandidate()
-        case .selectNumberCandidate(let num):
-            self.segmentsManager.requestSelectingRow(self.candidatesViewController.getNumberCandidate(num: num))
-            self.submitSelectedCandidate()
-            self.segmentsManager.requestResettingSelection()
-        case .submitHiraganaCandidate:
-            self.submitCandidate(self.segmentsManager.getModifiedRubyCandidate(inputState: self.inputState) {
-                $0.toHiragana()
-            })
-        case .submitKatakanaCandidate:
-            self.submitCandidate(self.segmentsManager.getModifiedRubyCandidate(inputState: self.inputState) {
-                $0.toKatakana()
-            })
-        case .submitHankakuKatakanaCandidate:
-            self.submitCandidate(self.segmentsManager.getModifiedRubyCandidate(inputState: self.inputState) {
-                $0.toKatakana().applyingTransform(.fullwidthToHalfwidth, reverse: false)!
-            })
-        case .submitFullWidthRomanCandidate:
-            self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
-                $0.applyingTransform(.fullwidthToHalfwidth, reverse: true)!
-            })
-        case .submitHalfWidthRomanCandidate:
-            self.submitCandidate(self.segmentsManager.getModifiedRomanCandidate {
-                $0.applyingTransform(.fullwidthToHalfwidth, reverse: false)!
-            })
-        case .enableDebugWindow:
-            self.segmentsManager.requestDebugWindowMode(enabled: true)
-        case .disableDebugWindow:
-            self.segmentsManager.requestDebugWindowMode(enabled: false)
-        case .stopComposition:
-            self.segmentsManager.stopComposition()
-        case .forgetMemory:
-            self.segmentsManager.forgetMemory()
-        case .selectInputLanguage(let language):
-            self.switchInputLanguage(language, client: client)
-        case .commitMarkedTextAndSelectInputLanguage(let language):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.switchInputLanguage(language, client: client)
-        // PredictiveSuggestion
-        case .requestPredictiveSuggestion:
-            // 「つづき」を直接入力し、コンテキストを渡す
-            self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: self.inputStyle)
-            self.requestReplaceSuggestion()
-        case .acceptPredictionCandidate:
-            self.acceptPredictionCandidate()
-        // ReplaceSuggestion
-        case .requestReplaceSuggestion:
-            self.requestReplaceSuggestion()
-        case .selectNextReplaceSuggestionCandidate:
-            self.replaceSuggestionsViewController.selectNextCandidate()
-        case .selectPrevReplaceSuggestionCandidate:
-            self.replaceSuggestionsViewController.selectPrevCandidate()
-        case .submitReplaceSuggestionCandidate:
-            self.submitSelectedSuggestionCandidate()
-        case .hideReplaceSuggestionWindow:
-            self.replaceSuggestionWindow.setIsVisible(false)
-            self.replaceSuggestionWindow.orderOut(nil)
-        // Selected Text Transform
-        case .showPromptInputWindow:
-            self.segmentsManager.appendDebugMessage("Executing showPromptInputWindow")
-            self.showPromptInputWindow()
-        case .transformSelectedText(let selectedText, let prompt):
-            self.segmentsManager.appendDebugMessage("Executing transformSelectedText with text: '\(selectedText)' and prompt: '\(prompt)'")
-            self.transformSelectedText(selectedText: selectedText, prompt: prompt)
-        // Unicode Input (Shift+Ctrl+U)
-        case .enterUnicodeInputMode:
-            // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
-            break
-        case .appendToUnicodeInput:
-            // markedText の更新は refreshMarkedText で行われる
-            break
-        case .removeLastUnicodeInput:
-            // markedText の更新は refreshMarkedText で行われる
-            break
-        case .submitUnicodeInput(let codePoint):
-            if let scalar = UInt32(codePoint, radix: 16), let unicodeScalar = Unicode.Scalar(scalar) {
-                let character = String(Character(unicodeScalar))
-                client.insertText(character, replacementRange: NSRange(location: NSNotFound, length: 0))
-            }
-        case .cancelUnicodeInput:
-            // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
-            break
-        case .submitSelectedCandidateAndEnterUnicodeInputMode:
-            // 選択中の候補を確定
-            self.submitSelectedCandidate()
-            // 残りのテキストがあればひらがなのまま確定
-            if !self.segmentsManager.isEmpty {
-                let text = self.segmentsManager.convertTarget
-                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-                self.segmentsManager.stopComposition()
-            }
-        // MARK: 特殊ケース
-        case .consume:
-            // 何もせず先に進む
-            break
-        case .fallthrough:
+        let result = self.inputSession.handle(
+            clientAction,
+            callback: clientActionCallback,
+            inputStyle: self.inputStyle,
+            numberCandidateIndex: self.candidatesViewController.getNumberCandidate(num:)
+        )
+        return self.apply(result, client: client)
+    }
+
+    @MainActor
+    private func apply(_ result: InputSession.Result, client: IMKTextInput) -> Bool {
+        guard result.handled else {
             return false
         }
-
-        switch clientActionCallback {
-        case .fallthrough:
-            break
-        case .transition(let inputState):
-            // 遷移した時にreplaceSuggestionWindowをhideする
-            if inputState != .replaceSuggestion {
-                self.replaceSuggestionWindow.orderOut(nil)
-            }
-            if inputState == .none {
-                self.switchInputLanguage(self.inputLanguage, client: client)
-            }
-            self.inputState = inputState
-        case .basedOnBackspace(let ifIsEmpty, let ifIsNotEmpty), .basedOnSubmitCandidate(let ifIsEmpty, let ifIsNotEmpty):
-            self.inputState = self.segmentsManager.isEmpty ? ifIsEmpty : ifIsNotEmpty
-        }
-
+        self.apply(result.effects, client: client)
         self.refreshMarkedText()
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
         return true
     }
 
-    @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
-        self.inputLanguage = language
+    @MainActor
+    private func apply(_ effects: [InputSession.Effect], client: IMKTextInput) {
+        for effect in effects {
+            switch effect {
+            case .insertText(let text):
+                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            case .selectInputLanguage(let language):
+                self.applyInputLanguage(language, client: client)
+            case .selectNextReplaceSuggestionCandidate:
+                self.replaceSuggestionsViewController.selectNextCandidate()
+            case .selectPrevReplaceSuggestionCandidate:
+                self.replaceSuggestionsViewController.selectPrevCandidate()
+            case .submitReplaceSuggestionCandidate:
+                self.submitSelectedSuggestionCandidate()
+            case .hideReplaceSuggestionWindow:
+                self.replaceSuggestionWindow.setIsVisible(false)
+                self.replaceSuggestionWindow.orderOut(nil)
+            case .requestReplaceSuggestion:
+                self.requestReplaceSuggestion()
+            case .showPromptInputWindow:
+                self.showPromptInputWindow()
+            case .transformSelectedText(let selectedText, let prompt):
+                self.transformSelectedText(selectedText: selectedText, prompt: prompt)
+            }
+        }
+    }
+
+    @MainActor
+    private func applyInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
         client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
         switch language {
         case .english:
             client.selectMode("dev.ensan.inputmethod.azooKeyMac.Roman")
-            self.segmentsManager.stopJapaneseInput()
         case .japanese:
             client.selectMode("dev.ensan.inputmethod.azooKeyMac.Japanese")
         }
@@ -711,25 +578,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionHideWorkItem = nil
     }
 
-    @MainActor
-    private func acceptPredictionCandidate() {
-        let predictions = self.requestPreferredPredictionCandidates()
-        guard let prediction = predictions.first else {
-            return
-        }
-        let deleteCount = prediction.deleteCount
-        if deleteCount > 0 {
-            self.segmentsManager.deleteBackwardFromCursorPosition(count: deleteCount)
-        }
-        let appendText = prediction.appendText
-
-        guard !appendText.isEmpty else {
-            return
-        }
-
-        self.segmentsManager.insertAtCursorPosition(appendText, inputStyle: .direct)
-    }
-
     private func requestPreferredPredictionCandidates() -> [SegmentsManager.PredictionCandidate] {
         SegmentsManager.preferredPredictionCandidates(
             typoCorrectionCandidates: self.segmentsManager.requestTypoCorrectionPredictionCandidates(),
@@ -786,19 +634,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     @MainActor
     func submitCandidate(_ candidate: Candidate) {
         if let client = self.client() {
-            // インサートを行う前にコンテキストを取得する
-            let cleanLeftSideContext = self.segmentsManager.getCleanLeftSideContext(maxCount: 30)
-            client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            // アプリケーションサポートのディレクトリを準備しておく
-            self.segmentsManager.prefixCandidateCommited(candidate, leftSideContext: cleanLeftSideContext ?? "")
+            self.apply(self.inputSession.submitCandidate(candidate), client: client)
         }
     }
 
     @MainActor
     func submitSelectedCandidate() {
-        if let candidate = self.segmentsManager.selectedCandidate {
-            self.submitCandidate(candidate)
-            self.segmentsManager.requestResettingSelection()
+        if let client = self.client() {
+            self.apply(self.inputSession.submitSelectedCandidate(), client: client)
         }
     }
 }
