@@ -50,10 +50,17 @@ extension azooKeyMacInputController {
         }
         let hasSelection = client.selectedRange().length > 0
         if hasSelection {
-            self.showPromptInputWindow()
+            _ = self.handleClientAction(.showPromptInputWindow, clientActionCallback: .fallthrough, client: client)
             return
         }
-        _ = self.requestPredictiveSuggestionWithConverterServer(client: client)
+        switch self.inputState {
+        case .composing, .replaceSuggestion:
+            _ = self.handleClientAction(.requestReplaceSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
+        case .none:
+            _ = self.handleClientAction(.requestPredictiveSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
+        default:
+            break
+        }
     }
 
     @MainActor @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
