@@ -4,6 +4,12 @@
 <dict>
 	<key>LSUIElement</key>
 	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>$(SPARKLE_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 	<key>ComponentInputModeDict</key>
 	<dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>

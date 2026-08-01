@@ -21,5 +21,10 @@ DerivedData/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
+!azooKeyMac.xcodeproj/project.xcworkspace/
+azooKeyMac.xcodeproj/project.xcworkspace/*
+!azooKeyMac.xcodeproj/project.xcworkspace/xcshareddata/
+!azooKeyMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+!azooKeyMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 **/xcshareddata/WorkspaceSettings.xcsettings
 !*.xcworkspace/contents.xcworkspacedata

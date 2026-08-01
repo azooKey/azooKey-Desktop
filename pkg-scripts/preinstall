@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+app_path="/Library/Input Methods/azooKeyMac.app"
+state_dir="/private/tmp/dev.ensan.inputmethod.azooKeyMac.pkg"
+install_state_path="${state_dir}/install-state"
+
+mkdir -p "${state_dir}"
+if [ -d "${app_path}" ]; then
+    echo "update" > "${install_state_path}"
+else
+    echo "initial_install" > "${install_state_path}"
+fi
