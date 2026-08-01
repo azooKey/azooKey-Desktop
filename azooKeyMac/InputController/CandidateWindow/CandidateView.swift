@@ -1,6 +1,5 @@
 import Cocoa
 import Core
-import KanaKanjiConverterModule
 
 protocol CandidatesViewControllerDelegate: AnyObject {
     func candidateSubmitted()
@@ -12,7 +11,11 @@ class CandidatesViewController: BaseCandidateViewController {
     private var showedRows: ClosedRange = 0...8
     var showCandidateIndex = false
 
-    override func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
+    override func updateCandidatePresentations(
+        _ candidates: [ConverterCandidatePresentation],
+        selectionIndex: Int?,
+        cursorLocation: CGPoint
+    ) {
         self.showedRows = selectionIndex == nil ? 0...8 : self.showedRows
         super.updateCandidatePresentations(
             candidates,
@@ -21,8 +24,10 @@ class CandidatesViewController: BaseCandidateViewController {
         )
     }
 
-    override internal func updateSelectionCallback(_ row: Int) {
-        delegate?.candidateSelectionChanged(row)
+    override internal func updateSelectionCallback(_ row: Int, notifySelectionChange: Bool) {
+        if notifySelectionChange {
+            delegate?.candidateSelectionChanged(row)
+        }
 
         if !self.showedRows.contains(row) {
             if row < self.showedRows.lowerBound {
@@ -34,8 +39,8 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        let candidate = self.candidates[row].candidate
-        let annotationText = self.candidates[row].displayContext.annotationText
+        let candidate = self.candidates[row]
+        let annotationText = candidate.annotationText
         let isWithinShowedRows = self.showedRows.contains(row)
         let displayIndex = row - self.showedRows.lowerBound + 1 // showedRowsの下限からの相対的な位置
         let displayText: String
@@ -95,7 +100,7 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
-        let hasAnnotation = self.candidates.contains { $0.displayContext.annotationText != nil }
+        let hasAnnotation = self.candidates.contains { $0.annotationText != nil }
         if self.showCandidateIndex {
             return maxContentWidth + 48 + (hasAnnotation ? 56 : 0)
         } else {
@@ -114,7 +119,7 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        let candidateText = candidates[row].candidate.text
+        let candidateText = candidates[row].text
         let attributedString = NSMutableAttributedString()
 
         let isSelected = currentSelectedRow == row

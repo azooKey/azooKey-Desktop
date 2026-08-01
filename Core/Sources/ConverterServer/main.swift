@@ -41,7 +41,9 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
     }
 
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void) {
-        Task { @MainActor in
+        // キー入力の応答はユーザー操作のクリティカルパスなので、システム負荷が高い時も
+        // utility/background work より先に実行される優先度で Server actor へ渡す。
+        Task(priority: .userInitiated) { @MainActor in
             do {
                 let command = try ConverterServerCodec.decodeCommand(from: data)
                 let response = try await self.handle(command)
@@ -58,9 +60,30 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         case .shutdown:
             Self.scheduleShutdown()
             return ConverterServerResponse(snapshot: .empty)
+        case .maintenance(let command):
+            return try handle(command)
         case .session(let sessionID, let command):
             return try await handle(command, sessionID: sessionID)
         }
+    }
+
+    @MainActor
+    private func handle(_ command: ConverterMaintenanceCommand) throws -> ConverterServerResponse {
+        switch command {
+        case .synchronizeUserDictionary(let forceExport):
+            let memoryDirectoryURL = AppGroup.memoryDirectoryURL()
+            if forceExport || !CompiledUserDictionaryStore.hasExportedDictionary(memoryDirectoryURL: memoryDirectoryURL) {
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+            }
+            for session in sessions.values {
+                session.manager.reloadUserDictionary()
+            }
+        case .resetLearningData:
+            for session in sessions.values {
+                session.manager.resetLearningData()
+            }
+        }
+        return ConverterServerResponse(snapshot: .empty)
     }
 
     @MainActor
@@ -93,10 +116,21 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         switch command {
         case .activate:
             session.manager.activate()
-            return makeResponse(for: session, inputState: .none)
+            return makeResponse(for: session, inputState: session.inputState)
         case .deactivate:
             session.manager.deactivate()
-            return makeResponse(for: session, inputState: .none)
+            session.inputState = .none
+            session.clearReplaceSuggestions()
+            return makeResponse(for: session, inputState: session.inputState)
+        case .synchronizeInputLanguage(let language):
+            session.inputLanguage = language
+            if language == .english {
+                session.manager.stopJapaneseInput()
+            }
+            return makeResponse(
+                for: session,
+                inputState: session.inputState
+            )
         }
     }
 
@@ -124,18 +158,25 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         session: ConverterSession
     ) -> ConverterServerResponse {
         switch command {
-        case .snapshot(let inputState):
-            return makeResponse(for: session, inputState: inputState.inputState)
+        case .snapshot:
+            return makeResponse(for: session, inputState: session.inputState)
         case .stopComposition:
             session.manager.stopComposition()
-            return makeResponse(for: session, inputState: .none)
+            session.inputState = .none
+            return makeResponse(for: session, inputState: session.inputState)
         case .forgetMemory:
             session.manager.forgetMemory()
-            return makeResponse(for: session, inputState: .none)
-        case .commit(let inputState):
-            let text = session.manager.commitMarkedText(inputState: inputState.inputState)
+            return makeResponse(for: session, inputState: session.inputState)
+        case .commit:
+            let text = session.manager.commitMarkedText(inputState: session.inputState)
             let effects: [ConverterClientEffect] = text.isEmpty ? [] : [.insertText(text)]
-            return makeResponse(for: session, inputState: .none, effects: effects, responseInputState: ConverterInputState.none)
+            session.inputState = .none
+            return makeResponse(
+                for: session,
+                inputState: session.inputState,
+                effects: effects,
+                responseInputState: ConverterInputState.none
+            )
         }
     }
 
@@ -147,7 +188,8 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         switch command {
         case .selectCandidate(let index):
             session.manager.requestSelectingRow(index)
-            return makeResponse(for: session, inputState: .selecting)
+            session.inputState = .selecting
+            return makeResponse(for: session, inputState: session.inputState)
         case .submitSelectedCandidate(let context):
             session.setContext(context)
             var effects: [ConverterClientEffect] = []
@@ -157,6 +199,7 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
                 effects: &effects
             )
             let nextInputState: InputState = session.manager.isEmpty ? .none : .previewing
+            session.inputState = nextInputState
             return makeResponse(
                 for: session,
                 inputState: nextInputState,
@@ -175,14 +218,17 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         case .request(let context):
             session.setContext(context)
             try await requestReplaceSuggestion(session: session)
-            return makeResponse(for: session, inputState: .replaceSuggestion, responseInputState: .replaceSuggestion)
+            session.inputState = .replaceSuggestion
+            return makeResponse(for: session, inputState: session.inputState, responseInputState: .replaceSuggestion)
         case .selectReplaceSuggestionCandidate(let index):
             session.selectReplaceSuggestion(at: index)
-            return makeResponse(for: session, inputState: .replaceSuggestion, responseInputState: .replaceSuggestion)
+            session.inputState = .replaceSuggestion
+            return makeResponse(for: session, inputState: session.inputState, responseInputState: .replaceSuggestion)
         case .submitSelectedReplaceSuggestion:
             var effects: [ConverterClientEffect] = []
             let didSubmit = submitSelectedReplaceSuggestion(session: session, effects: &effects)
             let nextInputState: InputState = didSubmit ? .none : .replaceSuggestion
+            session.inputState = nextInputState
             return makeResponse(
                 for: session,
                 inputState: nextInputState,

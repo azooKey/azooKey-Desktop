@@ -46,14 +46,13 @@ import Testing
 
 @Test func converterServerHandleKeyEventCommandRoundTrips() throws {
     let request = ConverterKeyEventRequest(
+        eventID: 42,
         event: KeyEventCore(
             modifierFlags: [.shift],
             characters: "A",
             charactersIgnoringModifiers: "a",
             keyCode: 0
         ),
-        inputState: .none,
-        inputLanguage: .japanese,
         inputStyle: .defaultRomanToKana,
         liveConversionEnabled: true,
         enableDebugWindow: false,
@@ -75,6 +74,27 @@ import Testing
     }
     #expect(sessionID == "session-1")
     #expect(roundTripRequest == request)
+}
+
+@Test func converterServerMaintenanceCommandsRoundTrip() throws {
+    for command in [
+        ConverterServerCommand.maintenance(.synchronizeUserDictionary(forceExport: true)),
+        ConverterServerCommand.maintenance(.resetLearningData)
+    ] {
+        let roundTrip = try ConverterServerCodec.decodeCommand(
+            from: ConverterServerCodec.encode(command)
+        )
+        switch (command, roundTrip) {
+        case (
+            .maintenance(.synchronizeUserDictionary(forceExport: true)),
+            .maintenance(.synchronizeUserDictionary(forceExport: true))
+        ),
+        (.maintenance(.resetLearningData), .maintenance(.resetLearningData)):
+            break
+        default:
+            Issue.record("Expected maintenance command after round trip, got \(roundTrip)")
+        }
+    }
 }
 
 @Test func converterServerSessionConfigCommandRoundTrips() throws {

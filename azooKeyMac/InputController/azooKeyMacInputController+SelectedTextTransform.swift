@@ -55,45 +55,45 @@ extension azooKeyMacInputController {
         var afterActualRange = NSRange()
         let afterText = (afterLength > 0) ? (client.string(from: afterRange, actualRange: &afterActualRange) ?? "") : ""
 
-        self.segmentsManager.appendDebugMessage("getContextAroundSelection: Before context: '\(beforeText)'")
-        self.segmentsManager.appendDebugMessage("getContextAroundSelection: Selected text: '\(selectedText)'")
-        self.segmentsManager.appendDebugMessage("getContextAroundSelection: After context: '\(afterText)'")
+        self.appendDebugMessage("getContextAroundSelection: Before context: '\(beforeText)'")
+        self.appendDebugMessage("getContextAroundSelection: Selected text: '\(selectedText)'")
+        self.appendDebugMessage("getContextAroundSelection: After context: '\(afterText)'")
 
         return TextContext(before: beforeText, selected: selectedText, after: afterText)
     }
 
     @MainActor
     func showPromptInputWindow(initialPrompt: String? = nil) {
-        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Starting")
+        self.appendDebugMessage("showPromptInputWindow: Starting")
 
         // Set flag to prevent recursive calls
         self.isPromptWindowVisible = true
 
         // Get selected text
         guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("showPromptInputWindow: No client available")
+            self.appendDebugMessage("showPromptInputWindow: No client available")
             self.isPromptWindowVisible = false
             return
         }
 
         let selectedRange = client.selectedRange()
-        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Selected range in window: \(selectedRange)")
+        self.appendDebugMessage("showPromptInputWindow: Selected range in window: \(selectedRange)")
 
         guard selectedRange.length > 0 else {
-            self.segmentsManager.appendDebugMessage("showPromptInputWindow: No selected text in window")
+            self.appendDebugMessage("showPromptInputWindow: No selected text in window")
             self.isPromptWindowVisible = false
             return
         }
 
         var actualRange = NSRange()
         guard let selectedText = client.string(from: selectedRange, actualRange: &actualRange) else {
-            self.segmentsManager.appendDebugMessage("showPromptInputWindow: Failed to get selected text")
+            self.appendDebugMessage("showPromptInputWindow: Failed to get selected text")
             self.isPromptWindowVisible = false
             return
         }
 
-        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Selected text: '\(selectedText)'")
-        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Storing selected range for later use: \(selectedRange)")
+        self.appendDebugMessage("showPromptInputWindow: Selected text: '\(selectedText)'")
+        self.appendDebugMessage("showPromptInputWindow: Storing selected range for later use: \(selectedRange)")
 
         // Get context around selection
         let context = self.getContextAroundSelection(client: client, selectedRange: selectedRange)
@@ -108,7 +108,7 @@ extension azooKeyMacInputController {
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
         cursorLocation = rect.origin
 
-        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Cursor location: \(cursorLocation)")
+        self.appendDebugMessage("showPromptInputWindow: Cursor location: \(cursorLocation)")
 
         // Show prompt input window with preview functionality
         self.promptInputWindow.showPromptInput(
@@ -118,7 +118,7 @@ extension azooKeyMacInputController {
                 guard let self = self else {
                     return
                 }
-                self.segmentsManager.appendDebugMessage("showPromptInputWindow: Preview requested for prompt: '\(prompt)'")
+                self.appendDebugMessage("showPromptInputWindow: Preview requested for prompt: '\(prompt)'")
 
                 Task {
                     do {
@@ -133,7 +133,7 @@ extension azooKeyMacInputController {
                         callback(result)
                     } catch {
                         await MainActor.run {
-                            self.segmentsManager.appendDebugMessage("showPromptInputWindow: Preview error: \(error)")
+                            self.appendDebugMessage("showPromptInputWindow: Preview error: \(error)")
                         }
                         callback("Error: \(error.localizedDescription)")
                     }
@@ -143,7 +143,7 @@ extension azooKeyMacInputController {
                 guard let self = self else {
                     return
                 }
-                self.segmentsManager.appendDebugMessage("showPromptInputWindow: Applying transformed text: '\(transformedText)'")
+                self.appendDebugMessage("showPromptInputWindow: Applying transformed text: '\(transformedText)'")
 
                 // Close the window first, then restore focus and replace text
                 self.promptInputWindow.close()
@@ -152,7 +152,7 @@ extension azooKeyMacInputController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     if let app = currentApp {
                         app.activate(options: [])
-                        self.segmentsManager.appendDebugMessage("showPromptInputWindow: Restored focus to original app")
+                        self.appendDebugMessage("showPromptInputWindow: Restored focus to original app")
                     }
 
                     // Replace text after focus is restored
@@ -162,13 +162,13 @@ extension azooKeyMacInputController {
                 }
             },
             completion: { [weak self] prompt in
-                self?.segmentsManager.appendDebugMessage("showPromptInputWindow: Window closed with prompt: \(prompt ?? "nil")")
+                self?.appendDebugMessage("showPromptInputWindow: Window closed with prompt: \(prompt ?? "nil")")
                 self?.isPromptWindowVisible = false
 
                 // Restore focus on cancel (prompt == nil) here so every closing path including window-level Esc ends up restoring focus.
                 if prompt == nil, let app = currentApp {
                     app.activate(options: [])
-                    self?.segmentsManager.appendDebugMessage("showPromptInputWindow: Restored focus to original app on cancel")
+                    self?.appendDebugMessage("showPromptInputWindow: Restored focus to original app on cancel")
                 }
                 // 設定変更に備えてキャッシュを更新
                 self?.reloadPinnedPromptsCache()
@@ -180,15 +180,15 @@ extension azooKeyMacInputController {
     func triggerAiTranslation(initialPrompt: String) -> Bool {
         let aiBackendEnabled = Config.AIBackendPreference().value != .off
         guard aiBackendEnabled else {
-            self.segmentsManager.appendDebugMessage("AI translation ignored: AI backend is off")
+            self.appendDebugMessage("AI translation ignored: AI backend is off")
             return false
         }
         if self.isPromptWindowVisible {
-            self.segmentsManager.appendDebugMessage("AI translation ignored: prompt window already visible")
+            self.appendDebugMessage("AI translation ignored: prompt window already visible")
             return true
         }
-        guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("AI translation ignored: No client available")
+        guard self.client() != nil else {
+            self.appendDebugMessage("AI translation ignored: No client available")
             return false
         }
         self.showPromptInputWindow(initialPrompt: initialPrompt)
@@ -197,15 +197,15 @@ extension azooKeyMacInputController {
 
     @MainActor
     func transformSelectedText(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") {
-        self.segmentsManager.appendDebugMessage("transformSelectedText: Starting with text '\(selectedText)' and prompt '\(prompt)'")
+        self.appendDebugMessage("transformSelectedText: Starting with text '\(selectedText)' and prompt '\(prompt)'")
 
         let aiBackend = Config.AIBackendPreference().value
         guard aiBackend != .off else {
-            self.segmentsManager.appendDebugMessage("transformSelectedText: AI backend is not enabled")
+            self.appendDebugMessage("transformSelectedText: AI backend is not enabled")
             return
         }
 
-        self.segmentsManager.appendDebugMessage("transformSelectedText: AI backend is enabled (\(aiBackend.rawValue)), starting request")
+        self.appendDebugMessage("transformSelectedText: AI backend is enabled (\(aiBackend.rawValue)), starting request")
 
         Task {
             do {
@@ -232,7 +232,7 @@ extension azooKeyMacInputController {
                 systemPrompt += "\n\nUser instructions: \(prompt)"
 
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Created system prompt")
+                    self.appendDebugMessage("transformSelectedText: Created system prompt")
                 }
 
                 let backend: AIBackend
@@ -249,7 +249,7 @@ extension azooKeyMacInputController {
                 if backend == .openAI {
                     guard !apiKey.isEmpty else {
                         await MainActor.run {
-                            self.segmentsManager.appendDebugMessage("transformSelectedText: No OpenAI API key configured")
+                            self.appendDebugMessage("transformSelectedText: No OpenAI API key configured")
                         }
                         return
                     }
@@ -259,7 +259,7 @@ extension azooKeyMacInputController {
                     let message = backend == .openAI
                         ? "transformSelectedText: API key found, making request"
                         : "transformSelectedText: Using Foundation Models, making request"
-                    self.segmentsManager.appendDebugMessage(message)
+                    self.appendDebugMessage(message)
                 }
 
                 let modelName = Config.OpenAiModelName().value
@@ -270,20 +270,20 @@ extension azooKeyMacInputController {
                     apiKey: apiKey,
                     apiEndpoint: self.endpoint,
                     logger: { [weak self] message in
-                        self?.segmentsManager.appendDebugMessage(message)
+                        self?.appendDebugMessage(message)
                     }
                 )
 
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: API request completed, result: \(result)")
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Result obtained: '\(result)'")
+                    self.appendDebugMessage("transformSelectedText: API request completed, result: \(result)")
+                    self.appendDebugMessage("transformSelectedText: Result obtained: '\(result)'")
                     // Note: This method lacks the stored range information.
                     // Text replacement should be handled by showPromptInputWindow instead.
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Note - This path should not be used for text replacement")
+                    self.appendDebugMessage("transformSelectedText: Note - This path should not be used for text replacement")
                 }
             } catch {
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("transformSelectedText: Error occurred: \(error)")
+                    self.appendDebugMessage("transformSelectedText: Error occurred: \(error)")
                 }
             }
         }
@@ -291,28 +291,28 @@ extension azooKeyMacInputController {
 
     @MainActor
     func replaceSelectedText(with newText: String, usingRange storedRange: NSRange) {
-        self.segmentsManager.appendDebugMessage("replaceSelectedText: Starting with new text: '\(newText)'")
-        self.segmentsManager.appendDebugMessage("replaceSelectedText: Using stored range: \(storedRange)")
+        self.appendDebugMessage("replaceSelectedText: Starting with new text: '\(newText)'")
+        self.appendDebugMessage("replaceSelectedText: Using stored range: \(storedRange)")
 
         guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("replaceSelectedText: No client available")
+            self.appendDebugMessage("replaceSelectedText: No client available")
             return
         }
 
         // Check current selection for comparison
         let currentSelectedRange = client.selectedRange()
-        self.segmentsManager.appendDebugMessage("replaceSelectedText: Current selected range: \(currentSelectedRange)")
-        self.segmentsManager.appendDebugMessage("replaceSelectedText: Stored range to use: \(storedRange)")
+        self.appendDebugMessage("replaceSelectedText: Current selected range: \(currentSelectedRange)")
+        self.appendDebugMessage("replaceSelectedText: Stored range to use: \(storedRange)")
 
         if storedRange.length > 0 {
-            self.segmentsManager.appendDebugMessage("replaceSelectedText: Starting text replacement")
+            self.appendDebugMessage("replaceSelectedText: Starting text replacement")
 
             // Simplified approach: Try IMK first, fallback to clipboard if needed
             if !self.replaceTextUsingIMK(newText: newText, storedRange: storedRange) {
                 self.replaceTextUsingClipboard(newText: newText, storedRange: storedRange)
             }
         } else {
-            self.segmentsManager.appendDebugMessage("replaceSelectedText: Stored range has no length")
+            self.appendDebugMessage("replaceSelectedText: Stored range has no length")
         }
     }
 
@@ -320,10 +320,10 @@ extension azooKeyMacInputController {
 
     @MainActor
     private func replaceTextUsingIMK(newText: String, storedRange: NSRange) -> Bool {
-        self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: Attempting IMK text replacement")
+        self.appendDebugMessage("replaceTextUsingIMK: Attempting IMK text replacement")
 
         guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: No client available")
+            self.appendDebugMessage("replaceTextUsingIMK: No client available")
             return false
         }
 
@@ -336,9 +336,9 @@ extension azooKeyMacInputController {
             let expectedLocation = storedRange.location + newText.count
 
             if abs(currentRange.location - expectedLocation) <= Constants.cursorPositionTolerance {
-                self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: IMK replacement appears successful")
+                self.appendDebugMessage("replaceTextUsingIMK: IMK replacement appears successful")
             } else {
-                self.segmentsManager.appendDebugMessage("replaceTextUsingIMK: IMK replacement may have failed")
+                self.appendDebugMessage("replaceTextUsingIMK: IMK replacement may have failed")
             }
         }
 
@@ -347,10 +347,10 @@ extension azooKeyMacInputController {
 
     @MainActor
     private func replaceTextUsingClipboard(newText: String, storedRange: NSRange) {
-        self.segmentsManager.appendDebugMessage("replaceTextUsingClipboard: Starting clipboard-based replacement")
+        self.appendDebugMessage("replaceTextUsingClipboard: Starting clipboard-based replacement")
 
         guard let client = self.client() else {
-            self.segmentsManager.appendDebugMessage("replaceTextUsingClipboard: No client available")
+            self.appendDebugMessage("replaceTextUsingClipboard: No client available")
             return
         }
 
@@ -389,13 +389,13 @@ extension azooKeyMacInputController {
     // Get transformation preview without applying it
     func getTransformationPreview(selectedText: String, prompt: String, beforeContext: String = "", afterContext: String = "") async throws -> String {
         await MainActor.run {
-            self.segmentsManager.appendDebugMessage("getTransformationPreview: Starting preview request")
+            self.appendDebugMessage("getTransformationPreview: Starting preview request")
         }
 
         let aiBackend = Config.AIBackendPreference().value
         guard aiBackend != .off else {
             await MainActor.run {
-                self.segmentsManager.appendDebugMessage("getTransformationPreview: AI backend is not enabled")
+                self.appendDebugMessage("getTransformationPreview: AI backend is not enabled")
             }
             throw NSError(domain: "TransformationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "AI transformation is not available. Please enable AI backend in preferences."])
         }
@@ -436,14 +436,14 @@ extension azooKeyMacInputController {
         if backend == .openAI {
             guard !apiKey.isEmpty else {
                 await MainActor.run {
-                    self.segmentsManager.appendDebugMessage("getTransformationPreview: No OpenAI API key configured")
+                    self.appendDebugMessage("getTransformationPreview: No OpenAI API key configured")
                 }
                 throw NSError(domain: "TransformationError", code: -2, userInfo: [NSLocalizedDescriptionKey: "OpenAI API key is missing. Please configure your API key in preferences."])
             }
         }
 
         await MainActor.run {
-            self.segmentsManager.appendDebugMessage("getTransformationPreview: Sending preview request (\(backend.rawValue))")
+            self.appendDebugMessage("getTransformationPreview: Sending preview request (\(backend.rawValue))")
         }
 
         let modelName = Config.OpenAiModelName().value
@@ -454,12 +454,12 @@ extension azooKeyMacInputController {
             apiKey: apiKey,
             apiEndpoint: self.endpoint,
             logger: { [weak self] message in
-                self?.segmentsManager.appendDebugMessage(message)
+                self?.appendDebugMessage(message)
             }
         )
 
         await MainActor.run {
-            self.segmentsManager.appendDebugMessage("getTransformationPreview: Preview result: '\(result)'")
+            self.appendDebugMessage("getTransformationPreview: Preview result: '\(result)'")
         }
 
         return result

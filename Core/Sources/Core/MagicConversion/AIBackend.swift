@@ -1,7 +1,7 @@
 import Foundation
 
 // AI Backend selection
-public enum AIBackend: String, Codable, CaseIterable {
+public enum AIBackend: String, Codable, CaseIterable, Sendable {
     case foundationModels = "Foundation Models"
     case openAI = "OpenAI API"
 

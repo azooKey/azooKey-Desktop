@@ -1,5 +1,4 @@
 import Cocoa
-import KanaKanjiConverterModule
 
 @MainActor protocol ReplaceSuggestionsViewControllerDelegate: AnyObject {
     func replaceSuggestionSelectionChanged(_ row: Int)
@@ -9,8 +8,10 @@ import KanaKanjiConverterModule
 class ReplaceSuggestionsViewController: BaseCandidateViewController {
     weak var delegate: (any ReplaceSuggestionsViewControllerDelegate)?
 
-    override internal func updateSelectionCallback(_ row: Int) {
-        delegate?.replaceSuggestionSelectionChanged(row)
+    override internal func updateSelectionCallback(_ row: Int, notifySelectionChange: Bool) {
+        if notifySelectionChange {
+            delegate?.replaceSuggestionSelectionChanged(row)
+        }
     }
 
     func submitSelectedCandidate() {

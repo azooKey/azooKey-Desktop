@@ -24,6 +24,7 @@ extension ConverterServer {
             handled: handled,
             effects: effects,
             inputState: responseInputState ?? ConverterInputState(inputState),
+            inputLanguage: session.inputLanguage,
             settings: settings,
             snapshot: snapshot(for: session, inputState: inputState)
         )
@@ -32,7 +33,10 @@ extension ConverterServer {
     @MainActor
     func snapshot(for session: ConverterSession, inputState: InputState) -> ConverterSessionSnapshot {
         let manager = session.manager
-        if manager.isEmpty {
+        if manager.isEmpty, case .unicodeInput = inputState {
+            // Unicode input は SegmentsManager の composition を使わず、Server が
+            // 所有する inputState 自体を marked text として描画する。
+        } else if manager.isEmpty {
             return .empty
         }
         let markedText: ConverterMarkedText
@@ -85,9 +89,21 @@ extension ConverterServer {
     static func makeSegmentsManager() -> SegmentsManager {
         CustomInputTableStore.registerIfExists()
         let containerURL = AppGroup.containerURL()
+        let applicationDirectoryURL = AppGroup.memoryDirectoryURL()
+        let typoCorrectionDirectoryURL = DebugTypoCorrectionWeights.modelDirectoryURL(
+            azooKeyApplicationSupportDirectoryURL: applicationDirectoryURL.deletingLastPathComponent()
+        )
+        try? FileManager.default.createDirectory(
+            at: applicationDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.createDirectory(
+            at: typoCorrectionDirectoryURL,
+            withIntermediateDirectories: true
+        )
         return SegmentsManager(
             kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
-            applicationDirectoryURL: AppGroup.memoryDirectoryURL(),
+            applicationDirectoryURL: applicationDirectoryURL,
             containerURL: containerURL,
             context: .init(useZenzai: true, resourcesDirectoryURL: appResourcesDirectoryURL())
         )
@@ -95,10 +111,13 @@ extension ConverterServer {
 
     static func appResourcesDirectoryURL() -> URL {
         if let executableURL = Bundle.main.executableURL {
-            return executableURL
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Resources", isDirectory: true)
+            var directoryURL = executableURL.deletingLastPathComponent()
+            while directoryURL.path != "/" {
+                if directoryURL.lastPathComponent == "Contents" {
+                    return directoryURL.appendingPathComponent("Resources", isDirectory: true)
+                }
+                directoryURL.deleteLastPathComponent()
+            }
         }
         if let resourceURL = Bundle.main.resourceURL {
             return resourceURL

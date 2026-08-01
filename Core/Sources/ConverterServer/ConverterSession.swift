@@ -6,6 +6,10 @@ final class ConverterSession: SegmentManagerDelegate {
     static let replaceSuggestionContextLength = 100
 
     let manager: SegmentsManager
+    var inputState: InputState = .none
+    var inputLanguage: InputLanguage = .japanese
+    var lastHandledKeyEventID: UInt64?
+    var lastKeyEventResponse: ConverterServerResponse?
     private var context = ConverterTextContext()
     var config = ConverterSessionConfig(
         aiBackendPreference: .off,
