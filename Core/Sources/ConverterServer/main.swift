@@ -15,8 +15,11 @@ private enum ConverterServerXPC {
 }
 
 final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Sendable {
+    private static let learningDataCommitDelay: TimeInterval = 2
+
     private var sessions: [String: ConverterSession] = [:]
     private let kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
+    private let learningDataCommitScheduler = DebouncedActionScheduler()
 
     func openSession(with reply: @escaping @Sendable (String) -> Void) {
         DispatchQueue.main.async {
@@ -52,8 +55,14 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
             do {
                 let command = try ConverterServerCodec.decodeCommand(from: data)
                 let response = try await self.handle(command)
+                self.learningDataCommitScheduler.postponeIfScheduled(
+                    after: Self.learningDataCommitDelay
+                )
                 reply(try ConverterServerCodec.encode(response), nil)
             } catch {
+                self.learningDataCommitScheduler.postponeIfScheduled(
+                    after: Self.learningDataCommitDelay
+                )
                 reply(nil, error.localizedDescription as NSString)
             }
         }
@@ -157,7 +166,10 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
             session.manager.activate()
             return makeResponse(for: session, inputState: session.inputState)
         case .deactivate:
-            session.manager.deactivate()
+            // アプリ切替直後のキー入力を、学習データの同期I/Oで塞がない。
+            // 共有Converterはプロセス内に残るため、永続化だけ入力のアイドル時まで遅延できる。
+            session.manager.deactivate(flushLearningData: false)
+            scheduleLearningDataCommit()
             session.inputState = .none
             session.clearReplaceSuggestions()
             return makeResponse(for: session, inputState: session.inputState)
@@ -294,6 +306,13 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
     private static func scheduleShutdown() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             exit(EXIT_SUCCESS)
+        }
+    }
+
+    @MainActor
+    private func scheduleLearningDataCommit() {
+        learningDataCommitScheduler.schedule(after: Self.learningDataCommitDelay) { [weak self] in
+            self?.kanaKanjiConverter.commitUpdateLearningData()
         }
     }
 
