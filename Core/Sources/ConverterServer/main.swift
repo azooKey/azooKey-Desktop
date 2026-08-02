@@ -22,11 +22,7 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 let sessionID = UUID().uuidString
-                let conversionSessionID = self.kanaKanjiConverter.createSession()
-                self.sessions[sessionID] = ConverterSession(
-                    manager: Self.makeSegmentsManager(kanaKanjiConverter: self.kanaKanjiConverter),
-                    conversionSessionID: conversionSessionID
-                )
+                self.createSessionIfNeeded(sessionID)
                 reply(sessionID)
             }
         }
@@ -71,9 +67,24 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
             return ConverterServerResponse(snapshot: .empty)
         case .maintenance(let command):
             return try handle(command)
+        case .openSession(let sessionID, let command):
+            createSessionIfNeeded(sessionID)
+            return try await handle(command, sessionID: sessionID)
         case .session(let sessionID, let command):
             return try await handle(command, sessionID: sessionID)
         }
+    }
+
+    @MainActor
+    private func createSessionIfNeeded(_ sessionID: String) {
+        guard sessions[sessionID] == nil else {
+            return
+        }
+        let conversionSessionID = kanaKanjiConverter.createSession()
+        sessions[sessionID] = ConverterSession(
+            manager: Self.makeSegmentsManager(kanaKanjiConverter: kanaKanjiConverter),
+            conversionSessionID: conversionSessionID
+        )
     }
 
     @MainActor

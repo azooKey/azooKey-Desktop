@@ -11,6 +11,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private var pendingKeyEventCount = 0
     private var nextKeyEventID: UInt64 = 0
     private var activationGeneration: UInt64 = 0
+    private var pendingConverterServerActivation: ConverterSessionActivation?
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -146,26 +147,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         self.activationGeneration &+= 1
-        let activationGeneration = self.activationGeneration
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.updateTransformSelectedTextMenuItemEnabledState()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
-        self.syncConverterServerSessionConfig()
-        self.converterServerClient.send(
-            { _ in .lifecycle(.synchronizeInputLanguage(self.inputLanguage)) },
-            completion: { _ in }
+        self.pendingConverterServerActivation = ConverterSessionActivation(
+            config: self.converterServerSessionConfig,
+            inputLanguage: self.inputLanguage
         )
-        self.converterServerClient.send({ _ in .lifecycle(.activate) }, completion: { [weak self] response in
-            guard let self,
-                  self.activationGeneration == activationGeneration,
-                  let response else {
-                return
-            }
-            self.currentConverterView = response.snapshot
-            self.inputState = response.inputState.inputState
-            self.inputLanguage = response.inputLanguage ?? self.inputLanguage
-        })
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
@@ -186,8 +175,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     @MainActor
     override func deactivateServer(_ sender: Any!) {
         self.activationGeneration &+= 1
+        self.pendingConverterServerActivation = nil
         self.converterServerClient.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { _ in })
         self.currentConverterView = nil
+        self.inputState = .none
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
@@ -373,8 +364,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             enableOptionDirectFullWidthInput: Config.OptionDirectFullWidthInput().value,
             typeBackSlash: Config.TypeBackSlash().value,
             optionDirectInputText: optionDirectInputText,
-            context: self.currentConverterTextContext()
+            context: self.currentConverterTextContext(),
+            activation: self.pendingConverterServerActivation
         )
+        self.pendingConverterServerActivation = nil
         self.pendingKeyEventCount += 1
         let activationGeneration = self.activationGeneration
         self.converterServerClient.sendKeyEvent(request) { [weak self] response in

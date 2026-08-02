@@ -17,6 +17,52 @@ import Testing
     }
 }
 
+@Test func keyEventCommandCarriesDeferredActivation() throws {
+    let config = ConverterSessionConfig(
+        aiBackendPreference: .off,
+        openAIModelName: "model",
+        openAIEndpoint: "https://example.com",
+        openAIAPIKey: .init("secret"),
+        includeContextInAITransform: false
+    )
+    let request = ConverterKeyEventRequest(
+        eventID: 1,
+        event: KeyEventCore(
+            modifierFlags: [],
+            characters: "a",
+            charactersIgnoringModifiers: "a",
+            keyCode: 0
+        ),
+        inputStyle: .defaultRomanToKana,
+        liveConversionEnabled: true,
+        enableDebugWindow: false,
+        enableSuggestion: false,
+        typeBackSlash: true,
+        activation: .init(config: config, inputLanguage: .english)
+    )
+    let command = ConverterServerCommand.openSession(
+        sessionID: "session-1",
+        command: .handleKeyEvent(request)
+    )
+
+    let data = try ConverterServerCodec.encode(command)
+    let roundTrip = try ConverterServerCodec.decodeCommand(from: data)
+    guard case .openSession(
+        let sessionID,
+        .handleKeyEvent(let roundTripRequest)
+    ) = roundTrip else {
+        Issue.record("Expected atomic session opening with deferred activation, got \(roundTrip)")
+        return
+    }
+    guard let activation = roundTripRequest.activation else {
+        Issue.record("Expected deferred activation")
+        return
+    }
+    #expect(sessionID == "session-1")
+    #expect(activation.config == config)
+    #expect(activation.inputLanguage == .english)
+}
+
 @Test func converterServerSnapshotCarriesPredictionCandidates() throws {
     let snapshot = ConverterSessionSnapshot(
         markedText: ConverterSessionSnapshot.empty.markedText,

@@ -21,9 +21,6 @@ final class ConverterServerClient {
     private var hasOpenedSession = false
     private var shouldAttemptReconnect = false
     private var nextReconnectAttemptDate = Date.distantPast
-    private var isOpeningSession = false
-    private var openSessionGeneration: UInt64 = 0
-    private var openSessionCompletions: [(String?) -> Void] = []
     private let commandQueue = OrderedAsyncCommandQueue<ConverterServerResponse?>()
 
     nonisolated init() {}
@@ -37,39 +34,6 @@ final class ConverterServerClient {
     }
     var pendingCommandCount: Int {
         commandQueue.count
-    }
-
-    func openSession(completion: ((String?) -> Void)? = nil) {
-        if let sessionID {
-            completion?(sessionID)
-            return
-        }
-        if let completion {
-            openSessionCompletions.append(completion)
-        }
-        guard !isOpeningSession else {
-            return
-        }
-        isOpeningSession = true
-        openSessionGeneration &+= 1
-        let generation = openSessionGeneration
-        openSessionOnServer { [weak self] sessionID in
-            guard let self, self.openSessionGeneration == generation else {
-                return
-            }
-            self.openSessionGeneration &+= 1
-            self.isOpeningSession = false
-            if let sessionID {
-                self.sessionID = sessionID
-                self.hasOpenedSession = true
-                self.shouldAttemptReconnect = false
-                self.nextReconnectAttemptDate = .distantPast
-                self.onLog?("ConverterServer session opened: \(sessionID)")
-            }
-            let completions = self.openSessionCompletions
-            self.openSessionCompletions.removeAll()
-            completions.forEach { $0(sessionID) }
-        }
     }
 
     func closeSession() {
@@ -168,7 +132,7 @@ final class ConverterServerClient {
         _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
-        guard sessionID != nil || isOpeningSession else {
+        guard sessionID != nil else {
             completion(nil)
             return
         }
@@ -180,6 +144,7 @@ final class ConverterServerClient {
         retriesOnFailure: Bool,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
+        var proposedSessionID: String?
         commandQueue.enqueue(
             timeout: Self.commandTimeout,
             timeoutOutcome: retriesOnFailure ? .retry : .finish(nil),
@@ -198,21 +163,27 @@ final class ConverterServerClient {
                     }
                     return
                 }
-                self.openSession { [weak self] sessionID in
-                    guard let self, let sessionID else {
-                        self?.recordReconnectFailure()
-                        finish(retriesOnFailure ? .retry : .finish(nil))
+                let sessionID = self.sessionID ?? proposedSessionID ?? UUID().uuidString
+                proposedSessionID = sessionID
+                let sessionCommand = commandBuilder(sessionID)
+                let command: ConverterServerCommand = if self.sessionID == nil {
+                    .openSession(sessionID: sessionID, command: sessionCommand)
+                } else {
+                    .session(sessionID: sessionID, command: sessionCommand)
+                }
+                self.sendResolved(command) { [weak self] response in
+                    guard let self else {
+                        finish(.finish(nil))
                         return
                     }
-                    self.sendResolved(
-                        .session(sessionID: sessionID, command: commandBuilder(sessionID))
-                    ) { [weak self] response in
-                        if response == nil, retriesOnFailure {
-                            self?.recordReconnectFailure()
-                            finish(.retry)
-                        } else {
-                            finish(.finish(response))
-                        }
+                    if response != nil, self.sessionID == nil {
+                        self.acceptOpenedSession(sessionID)
+                    }
+                    if response == nil, retriesOnFailure {
+                        self.recordReconnectFailure()
+                        finish(.retry)
+                    } else {
+                        finish(.finish(response))
                     }
                 }
             },
@@ -298,20 +269,6 @@ final class ConverterServerClient {
         }
     }
 
-    private func openSessionOnServer(completion: ((String?) -> Void)? = nil) {
-        remoteObjectProxy { proxy in
-            guard let proxy else {
-                completion?(nil)
-                return
-            }
-            proxy.openSession { sessionID in
-                DispatchQueue.main.async {
-                    completion?(sessionID)
-                }
-            }
-        }
-    }
-
     private func ensureConnection() -> NSXPCConnection {
         if let connection {
             return connection
@@ -358,17 +315,17 @@ final class ConverterServerClient {
         nextReconnectAttemptDate = Date().addingTimeInterval(0.2)
     }
 
+    private func acceptOpenedSession(_ sessionID: String) {
+        self.sessionID = sessionID
+        hasOpenedSession = true
+        shouldAttemptReconnect = false
+        nextReconnectAttemptDate = .distantPast
+        onLog?("ConverterServer session opened: \(sessionID)")
+    }
+
     private func handleCommandTimeout() {
         onLog?("ConverterServer command timed out")
         recordReconnectFailure()
         resetConnection(preservingSession: true)
-        guard isOpeningSession else {
-            return
-        }
-        openSessionGeneration &+= 1
-        isOpeningSession = false
-        let completions = openSessionCompletions
-        openSessionCompletions.removeAll()
-        completions.forEach { $0(nil) }
     }
 }
