@@ -12,13 +12,18 @@ private enum ConverterServerXPC {
     func ping(_ message: String, with reply: @escaping @Sendable (String) -> Void)
 }
 
+@MainActor
 final class ConverterServerClient {
     private var connection: NSXPCConnection?
     private var sessionID: String?
-    private let syncTimeout: TimeInterval = 0.8
     private var hasOpenedSession = false
     private var shouldAttemptReconnect = false
     private var nextReconnectAttemptDate = Date.distantPast
+    private var isOpeningSession = false
+    private var openSessionCompletions: [(String?) -> Void] = []
+    private let commandQueue = OrderedAsyncCommandQueue<ConverterServerResponse?>()
+
+    nonisolated init() {}
 
     var onLog: ((String) -> Void)?
     var hasOpenSession: Bool {
@@ -27,26 +32,31 @@ final class ConverterServerClient {
     var canSendOrReconnect: Bool {
         sessionID != nil || !hasOpenedSession || (shouldAttemptReconnect && Date() >= nextReconnectAttemptDate)
     }
+    var pendingCommandCount: Int {
+        commandQueue.count
+    }
 
     func openSession(completion: ((String?) -> Void)? = nil) {
         if let sessionID {
             completion?(sessionID)
             return
         }
-        openSessionOnServer(completion: completion)
-    }
-
-    func openSessionSync() -> String? {
-        if let sessionID {
-            return sessionID
+        if let completion {
+            openSessionCompletions.append(completion)
         }
-        let sessionID = waitForResult(timeout: syncTimeout) { [weak self] complete in
-            self?.openSessionOnServer(completion: complete)
+        guard !isOpeningSession else {
+            return
         }
-        if sessionID == nil {
-            recordReconnectFailure()
+        isOpeningSession = true
+        openSessionOnServer { [weak self] sessionID in
+            guard let self else {
+                return
+            }
+            self.isOpeningSession = false
+            let completions = self.openSessionCompletions
+            self.openSessionCompletions.removeAll()
+            completions.forEach { $0(sessionID) }
         }
-        return sessionID
     }
 
     func closeSession() {
@@ -56,7 +66,9 @@ final class ConverterServerClient {
         }
         remoteObjectProxy { [weak self] proxy in
             proxy?.closeSession(sessionID) { _ in
-                self?.invalidateConnection()
+                Task { @MainActor in
+                    self?.invalidateConnection()
+                }
             }
         }
     }
@@ -102,8 +114,23 @@ final class ConverterServerClient {
     }
 
     func restartServer(completion: @escaping (Bool) -> Void) {
-        sendResolved(.shutdown) { [weak self] response in
+        enqueueGlobal(.shutdown) { [weak self] response in
             self?.invalidateConnection()
+            completion(response != nil)
+        }
+    }
+
+    func synchronizeUserDictionary(
+        forceExport: Bool,
+        completion: @escaping (Bool) -> Void
+    ) {
+        enqueueGlobal(.maintenance(.synchronizeUserDictionary(forceExport: forceExport))) { response in
+            completion(response != nil)
+        }
+    }
+
+    func resetLearningData(completion: @escaping (Bool) -> Void) {
+        enqueueGlobal(.maintenance(.resetLearningData)) { response in
             completion(response != nil)
         }
     }
@@ -112,49 +139,87 @@ final class ConverterServerClient {
         _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
-        openSession { [weak self] sessionID in
-            guard let self, let sessionID else {
-                completion(nil)
-                return
-            }
-            self.sendResolved(
-                .session(sessionID: sessionID, command: commandBuilder(sessionID)),
-                completion: completion
-            )
-        }
+        enqueue(commandBuilder, retriesOnFailure: false, completion: completion)
     }
 
-    func sendSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
-        guard let sessionID = openSessionSync() else {
-            return nil
-        }
-        return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
-    }
-
-    func sendIfSessionOpenSync(_ commandBuilder: (String) -> ConverterSessionCommand) -> ConverterServerResponse? {
-        guard let sessionID else {
-            return nil
-        }
-        return sendResolvedSync(.session(sessionID: sessionID, command: commandBuilder(sessionID)))
+    /// キーイベントはタイムアウトで捨てず、1件ずつ順番に Server へ送る。
+    /// XPC が一時的に切断した場合も先頭イベントを保持して再接続後に再送する。
+    func sendKeyEvent(
+        _ request: ConverterKeyEventRequest,
+        completion: @escaping (ConverterServerResponse?) -> Void
+    ) {
+        enqueue({ _ in .handleKeyEvent(request) }, retriesOnFailure: true, completion: completion)
     }
 
     func sendIfSessionOpen(
         _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
-        guard let sessionID else {
+        guard sessionID != nil || isOpeningSession else {
             completion(nil)
             return
         }
-        sendResolved(.session(sessionID: sessionID, command: commandBuilder(sessionID)), completion: completion)
+        enqueue(commandBuilder, retriesOnFailure: false, completion: completion)
+    }
+
+    private func enqueue(
+        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
+        retriesOnFailure: Bool,
+        completion: @escaping (ConverterServerResponse?) -> Void
+    ) {
+        commandQueue.enqueue(
+            operation: { [weak self] finish in
+                guard let self else {
+                    finish(.finish(nil))
+                    return
+                }
+                self.openSession { [weak self] sessionID in
+                    guard let self, let sessionID else {
+                        finish(retriesOnFailure ? .retry : .finish(nil))
+                        return
+                    }
+                    self.sendResolved(
+                        .session(sessionID: sessionID, command: commandBuilder(sessionID))
+                    ) { [weak self] response in
+                        if response == nil, retriesOnFailure {
+                            self?.recordReconnectFailure()
+                            finish(.retry)
+                        } else {
+                            finish(.finish(response))
+                        }
+                    }
+                }
+            },
+            completion: completion
+        )
+    }
+
+    private func enqueueGlobal(
+        _ command: ConverterServerCommand,
+        completion: @escaping (ConverterServerResponse?) -> Void
+    ) {
+        commandQueue.enqueue(
+            operation: { [weak self] finish in
+                guard let self else {
+                    finish(.finish(nil))
+                    return
+                }
+                self.sendResolved(command) { response in
+                    finish(.finish(response))
+                }
+            },
+            completion: completion
+        )
     }
 
     private func remoteObjectProxy(completion: @escaping (ConverterServerXPCProtocol?) -> Void) {
         let connection = ensureConnection()
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ [weak self] error in
-            self?.onLog?("ConverterServer XPC error: \(error.localizedDescription)")
-            self?.resetConnection()
-            completion(nil)
+            DispatchQueue.main.async {
+                self?.onLog?("ConverterServer XPC error: \(error.localizedDescription)")
+                self?.resetConnection(preservingSession: true)
+                completion(nil)
+            }
         }) as? ConverterServerXPCProtocol else {
             completion(nil)
             return
@@ -174,16 +239,22 @@ final class ConverterServerClient {
                     return
                 }
                 proxy.handleCommand(data) { [weak self] responseData, errorMessage in
-                    if let errorMessage {
-                        self?.onLog?("ConverterServer command failed: \(errorMessage)")
-                        completion(nil)
-                        return
+                    let errorDescription = errorMessage.map(String.init)
+                    DispatchQueue.main.async {
+                        if let errorDescription {
+                            self?.onLog?("ConverterServer command failed: \(errorDescription)")
+                            if errorDescription.hasPrefix("Unknown converter session:") {
+                                self?.resetConnection(preservingSession: false)
+                            }
+                            completion(nil)
+                            return
+                        }
+                        guard let responseData else {
+                            completion(nil)
+                            return
+                        }
+                        completion(try? ConverterServerCodec.decodeResponse(from: responseData))
                     }
-                    guard let responseData else {
-                        completion(nil)
-                        return
-                    }
-                    completion(try? ConverterServerCodec.decodeResponse(from: responseData))
                 }
             }
         } catch {
@@ -199,42 +270,15 @@ final class ConverterServerClient {
                 return
             }
             proxy.openSession { sessionID in
-                self.sessionID = sessionID
-                self.hasOpenedSession = true
-                self.shouldAttemptReconnect = false
-                self.nextReconnectAttemptDate = .distantPast
-                self.onLog?("ConverterServer session opened: \(sessionID)")
-                completion?(sessionID)
-            }
-        }
-    }
-
-    private func sendResolvedSync(_ command: ConverterServerCommand) -> ConverterServerResponse? {
-        do {
-            let data = try ConverterServerCodec.encode(command)
-            return waitForResult(timeout: syncTimeout) { [weak self] complete in
-                self?.remoteObjectProxy { proxy in
-                    guard let proxy else {
-                        complete(nil)
-                        return
-                    }
-                    proxy.handleCommand(data) { responseData, errorMessage in
-                        if let errorMessage {
-                            self?.onLog?("ConverterServer command failed: \(errorMessage)")
-                            complete(nil)
-                            return
-                        }
-                        guard let responseData else {
-                            complete(nil)
-                            return
-                        }
-                        complete(try? ConverterServerCodec.decodeResponse(from: responseData))
-                    }
+                DispatchQueue.main.async {
+                    self.sessionID = sessionID
+                    self.hasOpenedSession = true
+                    self.shouldAttemptReconnect = false
+                    self.nextReconnectAttemptDate = .distantPast
+                    self.onLog?("ConverterServer session opened: \(sessionID)")
+                    completion?(sessionID)
                 }
             }
-        } catch {
-            onLog?("ConverterServer encode failed: \(error.localizedDescription)")
-            return nil
         }
     }
 
@@ -245,68 +289,39 @@ final class ConverterServerClient {
         let connection = NSXPCConnection(machServiceName: ConverterServerXPC.machServiceName, options: [])
         connection.remoteObjectInterface = NSXPCInterface(with: ConverterServerXPCProtocol.self)
         connection.interruptionHandler = { [weak self] in
-            self?.onLog?("ConverterServer connection interrupted")
-            self?.resetConnection()
+            DispatchQueue.main.async {
+                self?.onLog?("ConverterServer connection interrupted")
+                self?.resetConnection(preservingSession: true)
+            }
         }
         connection.invalidationHandler = { [weak self] in
-            self?.onLog?("ConverterServer connection invalidated")
-            self?.resetConnection()
+            DispatchQueue.main.async {
+                self?.onLog?("ConverterServer connection invalidated")
+                self?.resetConnection(preservingSession: true)
+            }
         }
         connection.resume()
         self.connection = connection
         return connection
     }
 
-    private func resetConnection() {
+    private func resetConnection(preservingSession: Bool) {
         self.connection = nil
         if sessionID != nil || hasOpenedSession {
             shouldAttemptReconnect = true
         }
-        self.sessionID = nil
+        if !preservingSession {
+            self.sessionID = nil
+        }
     }
 
     private func invalidateConnection() {
         connection?.invalidate()
-        resetConnection()
+        resetConnection(preservingSession: false)
     }
 
     private func recordReconnectFailure() {
         shouldAttemptReconnect = true
         nextReconnectAttemptDate = Date().addingTimeInterval(2)
     }
-}
-
-private final class SyncResult<Value>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: Value?
-
-    func set(_ value: Value?) {
-        lock.lock()
-        self.value = value
-        lock.unlock()
-    }
-
-    func get() -> Value? {
-        lock.lock()
-        defer {
-            lock.unlock()
-        }
-        return value
-    }
-}
-
-private func waitForResult<Value>(
-    timeout: TimeInterval,
-    start: (@escaping @Sendable (Value?) -> Void) -> Void
-) -> Value? {
-    let semaphore = DispatchSemaphore(value: 0)
-    let result = SyncResult<Value>()
-    start { value in
-        result.set(value)
-        semaphore.signal()
-    }
-    guard semaphore.wait(timeout: .now() + timeout) == .success else {
-        return nil
-    }
-    return result.get()
 }

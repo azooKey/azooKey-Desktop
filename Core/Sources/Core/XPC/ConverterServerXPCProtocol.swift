@@ -38,8 +38,20 @@ public enum ConverterServerCommand: Codable, Sendable {
     /// 新しい Converter Process を起動する。
     case shutdown
 
+    /// Converter Process が所有する辞書・学習データを更新する。
+    case maintenance(ConverterMaintenanceCommand)
+
     /// 指定したセッションへ命令を配送する。
     case session(sessionID: String, command: ConverterSessionCommand)
+}
+
+/// Converter Process 全体が所有する変換資源への操作。
+public enum ConverterMaintenanceCommand: Codable, Sendable {
+    /// 設定からユーザー辞書をServerのstorageへ書き出し、全セッションで再読込する。
+    case synchronizeUserDictionary(forceExport: Bool)
+
+    /// 全セッションの学習データをリセットする。
+    case resetLearningData
 }
 
 /// 1つの変換セッションに対する命令。
@@ -77,6 +89,9 @@ public enum ConverterSessionLifecycleCommand: Codable, Sendable {
 
     /// セッションが持つ `SegmentsManager` を無効化する。
     case deactivate
+
+    /// macOS が通知した入力ソースの言語を Server のセッションへ反映する。
+    case synchronizeInputLanguage(InputLanguage)
 }
 
 /// Converter Process が公開する汎用設定の操作。
@@ -93,8 +108,8 @@ public enum ConverterSettingsCommand: Codable, Sendable {
 
 /// marked text と変換メモリに関する操作。
 public enum ConverterCompositionCommand: Codable, Sendable {
-    /// Client が持つ入力状態をもとに、現在の Server 状態 snapshot を返す。
-    case snapshot(inputState: ConverterInputState)
+    /// 現在の Server 状態 snapshot を返す。
+    case snapshot
 
     /// テキストを挿入せず、現在の composition を終了する。
     case stopComposition
@@ -103,7 +118,7 @@ public enum ConverterCompositionCommand: Codable, Sendable {
     case forgetMemory
 
     /// 現在の marked text を確定し、必要なら `insertText` effect を返す。
-    case commit(inputState: ConverterInputState)
+    case commit
 }
 
 /// 通常の変換候補ウィンドウに対する操作。
@@ -310,9 +325,8 @@ public struct ConverterTextContext: Codable, Sendable, Equatable {
 ///
 /// Server はこの情報だけを見て変換処理を進め、Client に必要な effect と snapshot を返す。
 public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
+    public var eventID: UInt64
     public var event: KeyEventCore
-    public var inputState: ConverterInputState
-    public var inputLanguage: InputLanguage
     public var inputStyle: ConverterInputStyle
     public var liveConversionEnabled: Bool
     public var enableDebugWindow: Bool
@@ -326,9 +340,8 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
     public var visibleCandidateStartIndex: Int
 
     public init(
+        eventID: UInt64,
         event: KeyEventCore,
-        inputState: ConverterInputState,
-        inputLanguage: InputLanguage,
         inputStyle: ConverterInputStyle,
         liveConversionEnabled: Bool,
         enableDebugWindow: Bool,
@@ -341,9 +354,8 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         context: ConverterTextContext = .init(),
         visibleCandidateStartIndex: Int = 0
     ) {
+        self.eventID = eventID
         self.event = event
-        self.inputState = inputState
-        self.inputLanguage = inputLanguage
         self.inputStyle = inputStyle
         self.liveConversionEnabled = liveConversionEnabled
         self.enableDebugWindow = enableDebugWindow
@@ -667,6 +679,12 @@ public struct ConverterCandidatePresentation: Codable, Sendable, Equatable {
         self.text = presentation.candidate.text
         self.annotationText = presentation.displayContext.annotationText
         self.extraValues = presentation.displayContext.extraValues
+    }
+
+    public init(text: String, annotationText: String? = nil, extraValues: [String: String] = [:]) {
+        self.text = text
+        self.annotationText = annotationText
+        self.extraValues = extraValues
     }
 
     public var candidatePresentation: CandidatePresentation {

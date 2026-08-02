@@ -13,7 +13,6 @@
 
 import XCTest
 import Core
-import KanaKanjiConverterModuleWithDefaultDictionary
 @testable import azooKeyMac
 
 @MainActor
@@ -48,15 +47,7 @@ final class ChromiumDeadlockRegressionTests: XCTestCase {
     func test候補が存在する状態から空配列に更新するとnumberOfVisibleRowsが0になる() {
         let vc = CandidatesViewController()
         _ = vc.view
-        let dummy = CandidatePresentation(
-            candidate: Candidate(
-                text: "テスト",
-                value: 0,
-                composingCount: .surfaceCount(3),
-                lastMid: 0,
-                data: []
-            )
-        )
+        let dummy = ConverterCandidatePresentation(text: "テスト")
         vc.updateCandidatePresentations([dummy], selectionIndex: nil, cursorLocation: .zero)
         XCTAssertEqual(vc.numberOfVisibleRows, 1, "候補が1件の状態を前提とする")
 

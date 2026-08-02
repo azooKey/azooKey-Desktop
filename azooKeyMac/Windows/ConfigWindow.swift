@@ -333,19 +333,11 @@ struct ConfigWindow: View {
 
     @MainActor
     private func resetLearningData() {
-        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
-            learningResetMessage = .error("学習データのリセットに失敗しました")
-            Task {
-                try? await Task.sleep(for: .seconds(30))
-                if case .error = learningResetMessage {
-                    learningResetMessage = nil
-                }
-            }
-            return
+        self.converterServerClient.resetLearningData { success in
+            self.learningResetMessage = success
+                ? .success
+                : .error("学習データのリセットに失敗しました")
         }
-
-        appDelegate.kanaKanjiConverter.resetMemory()
-        learningResetMessage = .success
 
         // 10秒後にメッセージを消す
         Task {

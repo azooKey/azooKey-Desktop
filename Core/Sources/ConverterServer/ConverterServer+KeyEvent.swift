@@ -9,6 +9,17 @@ extension ConverterServer {
         request: ConverterKeyEventRequest
     ) throws -> ConverterServerResponse {
         let session = try getSession(sessionID)
+        if request.eventID == session.lastHandledKeyEventID,
+           let response = session.lastKeyEventResponse {
+            return response
+        }
+        if let lastEventID = session.lastHandledKeyEventID,
+           request.eventID < lastEventID {
+            throw ConverterServerError.outOfOrderKeyEvent(
+                expectedAfter: lastEventID,
+                actual: request.eventID
+            )
+        }
         session.setContext(request.context)
         Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
         Config.DebugTypoCorrection().value = request.enableTypoCorrection
@@ -17,34 +28,37 @@ extension ConverterServer {
            let text = OptionDirectInputResolver.resolve(
             characters: request.optionDirectInputText,
             modifierFlags: request.event.modifierFlags,
-            inputLanguage: request.inputLanguage,
-            inputState: request.inputState.inputState,
+            inputLanguage: session.inputLanguage,
+            inputState: session.inputState,
             typeBackSlash: request.typeBackSlash
            ) {
-            return ConverterServerResponse(
+            let response = ConverterServerResponse(
                 effects: [.insertText(text)],
-                inputState: request.inputState,
-                inputLanguage: request.inputLanguage,
-                snapshot: snapshot(for: session, inputState: request.inputState.inputState)
+                inputState: ConverterInputState(session.inputState),
+                inputLanguage: session.inputLanguage,
+                snapshot: snapshot(for: session, inputState: session.inputState)
             )
+            session.lastHandledKeyEventID = request.eventID
+            session.lastKeyEventResponse = response
+            return response
         }
 
         let userAction = UserAction.getUserAction(
             eventCore: request.event,
-            inputLanguage: request.inputLanguage,
+            inputLanguage: session.inputLanguage,
             typeBackSlash: request.typeBackSlash
         )
-        let (clientAction, clientActionCallback) = request.inputState.inputState.event(
+        let (clientAction, clientActionCallback) = session.inputState.event(
             eventCore: request.event,
             userAction: userAction,
-            inputLanguage: request.inputLanguage,
+            inputLanguage: session.inputLanguage,
             liveConversionEnabled: request.liveConversionEnabled,
             enableDebugWindow: request.enableDebugWindow,
             enableSuggestion: request.enableSuggestion
         )
 
         var effects: [ConverterClientEffect] = []
-        var inputLanguage = request.inputLanguage
+        var inputLanguage = session.inputLanguage
         let actionHandled = perform(
             clientAction,
             request: request,
@@ -53,27 +67,35 @@ extension ConverterServer {
             effects: &effects
         )
         guard actionHandled else {
-            return ConverterServerResponse(
+            let response = ConverterServerResponse(
                 handled: false,
                 effects: effects,
-                inputState: request.inputState,
+                inputState: ConverterInputState(session.inputState),
                 inputLanguage: inputLanguage,
-                snapshot: snapshot(for: session, inputState: request.inputState.inputState)
+                snapshot: snapshot(for: session, inputState: session.inputState)
             )
+            session.lastHandledKeyEventID = request.eventID
+            session.lastKeyEventResponse = response
+            return response
         }
 
         let nextInputState = apply(
             clientActionCallback,
-            currentInputState: request.inputState.inputState,
+            currentInputState: session.inputState,
             compositionIsEmpty: session.manager.isEmpty
         )
-        return ConverterServerResponse(
+        session.inputState = nextInputState
+        session.inputLanguage = inputLanguage
+        let response = ConverterServerResponse(
             handled: !effects.contains(.fallthroughToApplication),
             effects: effects,
             inputState: ConverterInputState(nextInputState),
             inputLanguage: inputLanguage,
             snapshot: snapshot(for: session, inputState: nextInputState)
         )
+        session.lastHandledKeyEventID = request.eventID
+        session.lastKeyEventResponse = response
+        return response
     }
 
     @MainActor
@@ -86,8 +108,8 @@ extension ConverterServer {
         effects: inout [ConverterClientEffect]
     ) -> Bool {
         let manager = session.manager
-        let inputState = request.inputState.inputState
-        let inputStyle = Self.resolveInputStyle(request.inputLanguage == .english ? .direct : request.inputStyle)
+        let inputState = session.inputState
+        let inputStyle = Self.resolveInputStyle(session.inputLanguage == .english ? .direct : request.inputStyle)
         let leftSideContext = session.conversionLeftSideContext()
         switch action {
         case .consume:

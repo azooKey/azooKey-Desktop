@@ -20,7 +20,7 @@ extension azooKeyMacInputController {
     }
 
     @objc func toggleLiveConversion(_ sender: Any) {
-        self.segmentsManager.appendDebugMessage("\(#line): toggleLiveConversion")
+        self.appendDebugMessage("\(#line): toggleLiveConversion")
         let config = Config.LiveConversion()
         config.value = !self.liveConversionEnabled
         self.updateLiveConversionToggleMenuItem(newValue: config.value)
@@ -50,17 +50,10 @@ extension azooKeyMacInputController {
         }
         let hasSelection = client.selectedRange().length > 0
         if hasSelection {
-            _ = self.handleClientAction(.showPromptInputWindow, clientActionCallback: .fallthrough, client: client)
+            self.showPromptInputWindow()
             return
         }
-        switch self.inputState {
-        case .composing, .replaceSuggestion:
-            _ = self.handleClientAction(.requestReplaceSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
-        case .none:
-            _ = self.handleClientAction(.requestPredictiveSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
-        default:
-            break
-        }
+        _ = self.requestPredictiveSuggestionWithConverterServer(client: client)
     }
 
     @MainActor @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -104,15 +97,4 @@ extension azooKeyMacInputController {
         (NSApplication.shared.delegate as? AppDelegate)!.openConfigWindow()
     }
 
-    // MARK: - Application Support Directory
-    func prepareApplicationSupportDirectory() {
-        do {
-            self.segmentsManager.appendDebugMessage("\(#line): Applicatiion Support Directory Path: \(self.segmentsManager.azooKeyMemoryDir)")
-            try FileManager.default.createDirectory(at: self.segmentsManager.azooKeyMemoryDir, withIntermediateDirectories: true)
-            self.segmentsManager.appendDebugMessage("\(#line): Debug TypoCorrection Download Directory Path: \(self.segmentsManager.downloadedInputN5LMDir)")
-            try FileManager.default.createDirectory(at: self.segmentsManager.downloadedInputN5LMDir, withIntermediateDirectories: true)
-        } catch {
-            self.segmentsManager.appendDebugMessage("\(#line): \(error.localizedDescription)")
-        }
-    }
 }

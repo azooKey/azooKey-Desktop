@@ -239,6 +239,19 @@ public final class SegmentsManager {
     }
 
     @MainActor
+    public func reloadUserDictionary() {
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
+            forceReload: true
+        )
+    }
+
+    @MainActor
+    public func resetLearningData() {
+        self.kanaKanjiConverter.resetMemory()
+    }
+
+    @MainActor
     public func deactivate() {
         self.kanaKanjiConverter.stopComposition()
         self.kanaKanjiConverter.commitUpdateLearningData()
