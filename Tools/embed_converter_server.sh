@@ -36,15 +36,15 @@ fi
 
 if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
     server_identifier="${PRODUCT_BUNDLE_IDENTIFIER}.ConverterServer"
-    # ConverterServerはログインユーザーのLaunchAgentとして動作する。ここにApp Groupや
-    # application-identifierを付与すると、独立したHelper用App IDのprovisioning profileが
-    # 必要になり、AMFIが実行前に拒否する。共有コンテナはCoreのAppGroupが通常の
-    # ファイルシステムパスとして解決するため、Helperにrestricted entitlementは不要。
+    # ConverterServerも学習データや個人化モデルをApp Groupから読む。entitlementなしで
+    # Group Containersを直接参照すると、macOSが「ほかのアプリのデータ」と判定して
+    # ファイルごとのアクセス確認を表示するため、埋め込みHelperにも同じGroupを付与する。
     codesign \
         --force \
         --sign "${EXPANDED_CODE_SIGN_IDENTITY}" \
         --identifier "${server_identifier}" \
         --options runtime \
+        --entitlements "${SRCROOT}/azooKeyMac/ConverterServer.entitlements" \
         --timestamp=none \
         "${server_destination}"
     codesign --verify --strict "${server_destination}"
