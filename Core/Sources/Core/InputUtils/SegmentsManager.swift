@@ -252,9 +252,11 @@ public final class SegmentsManager {
     }
 
     @MainActor
-    public func deactivate() {
+    public func deactivate(flushLearningData: Bool = true) {
         self.kanaKanjiConverter.stopComposition()
-        self.kanaKanjiConverter.commitUpdateLearningData()
+        if flushLearningData {
+            self.kanaKanjiConverter.commitUpdateLearningData()
+        }
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other

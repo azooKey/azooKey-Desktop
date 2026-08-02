@@ -41,6 +41,10 @@ public enum ConverterServerCommand: Codable, Sendable {
     /// Converter Process が所有する辞書・学習データを更新する。
     case maintenance(ConverterMaintenanceCommand)
 
+    /// セッション作成と最初の命令を1回のXPC往復で原子的に処理する。
+    /// 同じIDで再送された場合は既存セッションへ同じ命令を配送する。
+    case openSession(sessionID: String, command: ConverterSessionCommand)
+
     /// 指定したセッションへ命令を配送する。
     case session(sessionID: String, command: ConverterSessionCommand)
 }
@@ -261,7 +265,7 @@ public struct ConverterSettingDescriptor: Codable, Sendable, Equatable {
 ///
 /// Keychain や UI 状態など Client 側に残る情報を、必要な範囲だけ Server セッションへ同期する。
 /// 永続設定の一覧・更新は `ConverterSettingsCommand` が担当する。
-public struct ConverterSessionConfig: Codable, Sendable {
+public struct ConverterSessionConfig: Codable, Sendable, Equatable {
     public var aiBackendPreference: Config.AIBackendPreference.Value
     public var openAIModelName: String
     public var openAIEndpoint: String
@@ -286,7 +290,7 @@ public struct ConverterSessionConfig: Codable, Sendable {
 /// ログ出力時に値を伏せるための秘密文字列表現。
 ///
 /// Codable では実値を運ぶが、`description` と `debugDescription` は `<redacted>` を返す。
-public struct ConverterSecretString: Codable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
+public struct ConverterSecretString: Codable, Sendable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
     public var value: String
 
     public init(_ value: String) {
@@ -321,6 +325,17 @@ public struct ConverterTextContext: Codable, Sendable, Equatable {
     }
 }
 
+/// アプリ切替後の最初のキーイベントと同時にServerへ適用するセッション初期値。
+public struct ConverterSessionActivation: Codable, Sendable, Equatable {
+    public var config: ConverterSessionConfig
+    public var inputLanguage: InputLanguage
+
+    public init(config: ConverterSessionConfig, inputLanguage: InputLanguage) {
+        self.config = config
+        self.inputLanguage = inputLanguage
+    }
+}
+
 /// Client が受け取ったキーイベントと、その時点での IMK/UI 状態。
 ///
 /// Server はこの情報だけを見て変換処理を進め、Client に必要な effect と snapshot を返す。
@@ -337,6 +352,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
     public var typeBackSlash: Bool
     public var optionDirectInputText: String?
     public var context: ConverterTextContext
+    public var activation: ConverterSessionActivation?
     public var visibleCandidateStartIndex: Int
 
     public init(
@@ -352,6 +368,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         typeBackSlash: Bool = false,
         optionDirectInputText: String? = nil,
         context: ConverterTextContext = .init(),
+        activation: ConverterSessionActivation? = nil,
         visibleCandidateStartIndex: Int = 0
     ) {
         self.eventID = eventID
@@ -366,6 +383,7 @@ public struct ConverterKeyEventRequest: Codable, Sendable, Equatable {
         self.typeBackSlash = typeBackSlash
         self.optionDirectInputText = optionDirectInputText
         self.context = context
+        self.activation = activation
         self.visibleCandidateStartIndex = visibleCandidateStartIndex
     }
 }

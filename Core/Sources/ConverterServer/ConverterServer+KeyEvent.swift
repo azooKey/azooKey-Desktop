@@ -20,6 +20,14 @@ extension ConverterServer {
                 actual: request.eventID
             )
         }
+        if let activation = request.activation {
+            session.config = activation.config
+            session.inputLanguage = activation.inputLanguage
+            if activation.inputLanguage == .english {
+                session.manager.stopJapaneseInput()
+            }
+            session.manager.activate()
+        }
         session.setContext(request.context)
         Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
         Config.DebugTypoCorrection().value = request.enableTypoCorrection

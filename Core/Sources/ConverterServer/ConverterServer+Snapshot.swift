@@ -86,7 +86,7 @@ extension ConverterServer {
     }
 
     @MainActor
-    static func makeSegmentsManager() -> SegmentsManager {
+    static func makeSegmentsManager(kanaKanjiConverter: KanaKanjiConverter) -> SegmentsManager {
         CustomInputTableStore.registerIfExists()
         let containerURL = AppGroup.containerURL()
         let applicationDirectoryURL = AppGroup.memoryDirectoryURL()
@@ -102,7 +102,7 @@ extension ConverterServer {
             withIntermediateDirectories: true
         )
         return SegmentsManager(
-            kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+            kanaKanjiConverter: kanaKanjiConverter,
             applicationDirectoryURL: applicationDirectoryURL,
             containerURL: containerURL,
             context: .init(useZenzai: true, resourcesDirectoryURL: appResourcesDirectoryURL())
