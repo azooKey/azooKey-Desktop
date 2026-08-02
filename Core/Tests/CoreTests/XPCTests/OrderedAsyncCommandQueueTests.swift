@@ -62,3 +62,39 @@ import Testing
     #expect(completed == [7])
     #expect(queue.count == 0)
 }
+
+@MainActor
+@Test func orderedQueueTimesOutAndIgnoresLateReply() {
+    var scheduledTimeout: (@MainActor @Sendable () -> Void)?
+    let queue = OrderedAsyncCommandQueue<Int>(scheduleTimeout: { _, action in
+        scheduledTimeout = action
+    })
+    var firstFinish: OrderedAsyncCommandQueue<Int>.Finish?
+    var didStartSecondOperation = false
+    var completed: [Int] = []
+    var timeoutCount = 0
+
+    queue.enqueue(
+        timeout: 1,
+        timeoutOutcome: .finish(-1),
+        onTimeout: { timeoutCount += 1 },
+        operation: { firstFinish = $0 },
+        completion: { completed.append($0) }
+    )
+    queue.enqueue(
+        operation: { finish in
+            didStartSecondOperation = true
+            finish(.finish(2))
+        },
+        completion: { completed.append($0) }
+    )
+
+    scheduledTimeout?()
+    #expect(timeoutCount == 1)
+    #expect(didStartSecondOperation)
+    #expect(completed == [-1, 2])
+    #expect(queue.count == 0)
+
+    firstFinish?(.finish(1))
+    #expect(completed == [-1, 2])
+}

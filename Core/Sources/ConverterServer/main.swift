@@ -16,12 +16,17 @@ private enum ConverterServerXPC {
 
 final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Sendable {
     private var sessions: [String: ConverterSession] = [:]
+    private let kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
 
     func openSession(with reply: @escaping @Sendable (String) -> Void) {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 let sessionID = UUID().uuidString
-                self.sessions[sessionID] = ConverterSession(manager: Self.makeSegmentsManager())
+                let conversionSessionID = self.kanaKanjiConverter.createSession()
+                self.sessions[sessionID] = ConverterSession(
+                    manager: Self.makeSegmentsManager(kanaKanjiConverter: self.kanaKanjiConverter),
+                    conversionSessionID: conversionSessionID
+                )
                 reply(sessionID)
             }
         }
@@ -30,7 +35,11 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
     func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void) {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                let removed = self.sessions.removeValue(forKey: sessionID) != nil
+                let session = self.sessions.removeValue(forKey: sessionID)
+                if let session {
+                    self.kanaKanjiConverter.removeSession(session.conversionSessionID)
+                }
+                let removed = session != nil
                 reply(removed)
             }
         }
@@ -75,13 +84,12 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
             if forceExport || !CompiledUserDictionaryStore.hasExportedDictionary(memoryDirectoryURL: memoryDirectoryURL) {
                 try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
             }
-            for session in sessions.values {
-                session.manager.reloadUserDictionary()
-            }
+            kanaKanjiConverter.updateUserDictionaryURL(
+                CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: memoryDirectoryURL),
+                forceReload: true
+            )
         case .resetLearningData:
-            for session in sessions.values {
-                session.manager.resetLearningData()
-            }
+            kanaKanjiConverter.resetMemory()
         }
         return ConverterServerResponse(snapshot: .empty)
     }
@@ -91,21 +99,41 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         let session = try getSession(sessionID)
         switch command {
         case .lifecycle(let command):
-            return handle(command, session: session)
+            return try withConverterSession(session) {
+                handle(command, session: session)
+            }
         case .settings(let command):
-            return try handle(command, session: session)
+            return try withConverterSession(session) {
+                try handle(command, session: session)
+            }
         case .updateConfig(let config):
-            session.config = config
-            return makeResponse(for: session, inputState: .none)
+            return try withConverterSession(session) {
+                session.config = config
+                return makeResponse(for: session, inputState: .none)
+            }
         case .handleKeyEvent(let request):
-            return try handleKeyEvent(sessionID: sessionID, request: request)
+            return try withConverterSession(session) {
+                try handleKeyEvent(sessionID: sessionID, request: request)
+            }
         case .composition(let command):
-            return handle(command, session: session)
+            return try withConverterSession(session) {
+                handle(command, session: session)
+            }
         case .candidate(let command):
-            return handle(command, session: session)
+            return try withConverterSession(session) {
+                handle(command, session: session)
+            }
         case .replaceSuggestion(let command):
             return try await handle(command, session: session)
         }
+    }
+
+    @MainActor
+    private func withConverterSession<Result>(
+        _ session: ConverterSession,
+        operation: () throws -> Result
+    ) throws -> Result {
+        try kanaKanjiConverter.withSession(session.conversionSessionID, operation: operation)
     }
 
     @MainActor
@@ -218,23 +246,37 @@ final class ConverterServer: NSObject, ConverterServerXPCProtocol, @unchecked Se
         case .request(let context):
             session.setContext(context)
             try await requestReplaceSuggestion(session: session)
-            session.inputState = .replaceSuggestion
-            return makeResponse(for: session, inputState: session.inputState, responseInputState: .replaceSuggestion)
+            return try withConverterSession(session) {
+                session.inputState = .replaceSuggestion
+                return makeResponse(
+                    for: session,
+                    inputState: session.inputState,
+                    responseInputState: .replaceSuggestion
+                )
+            }
         case .selectReplaceSuggestionCandidate(let index):
-            session.selectReplaceSuggestion(at: index)
-            session.inputState = .replaceSuggestion
-            return makeResponse(for: session, inputState: session.inputState, responseInputState: .replaceSuggestion)
+            return try withConverterSession(session) {
+                session.selectReplaceSuggestion(at: index)
+                session.inputState = .replaceSuggestion
+                return makeResponse(
+                    for: session,
+                    inputState: session.inputState,
+                    responseInputState: .replaceSuggestion
+                )
+            }
         case .submitSelectedReplaceSuggestion:
-            var effects: [ConverterClientEffect] = []
-            let didSubmit = submitSelectedReplaceSuggestion(session: session, effects: &effects)
-            let nextInputState: InputState = didSubmit ? .none : .replaceSuggestion
-            session.inputState = nextInputState
-            return makeResponse(
-                for: session,
-                inputState: nextInputState,
-                effects: effects,
-                responseInputState: ConverterInputState(nextInputState)
-            )
+            return try withConverterSession(session) {
+                var effects: [ConverterClientEffect] = []
+                let didSubmit = submitSelectedReplaceSuggestion(session: session, effects: &effects)
+                let nextInputState: InputState = didSubmit ? .none : .replaceSuggestion
+                session.inputState = nextInputState
+                return makeResponse(
+                    for: session,
+                    inputState: nextInputState,
+                    effects: effects,
+                    responseInputState: ConverterInputState(nextInputState)
+                )
+            }
         }
     }
 

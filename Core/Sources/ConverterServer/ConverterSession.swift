@@ -6,6 +6,7 @@ final class ConverterSession: SegmentManagerDelegate {
     static let replaceSuggestionContextLength = 100
 
     let manager: SegmentsManager
+    let conversionSessionID: KanaKanjiConverter.ConversionSessionID
     var inputState: InputState = .none
     var inputLanguage: InputLanguage = .japanese
     var lastHandledKeyEventID: UInt64?
@@ -21,8 +22,12 @@ final class ConverterSession: SegmentManagerDelegate {
     var replaceSuggestions: [Candidate] = []
     var replaceSuggestionSelectionIndex: Int?
 
-    init(manager: SegmentsManager) {
+    init(
+        manager: SegmentsManager,
+        conversionSessionID: KanaKanjiConverter.ConversionSessionID
+    ) {
         self.manager = manager
+        self.conversionSessionID = conversionSessionID
         self.manager.delegate = self
     }
 
