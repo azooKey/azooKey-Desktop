@@ -17,13 +17,16 @@ public final class SegmentsManager {
     /// テストなどの設定注入のための型。外部には設定を露出させない。
     public struct Context {
         public init() {}
-        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil) {
+        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil,
+                    dateFormatPreference: Config.DateFormatPreference.Value? = nil) {
             self.useZenzai = useZenzai
             self.resourcesDirectoryURL = resourcesDirectoryURL
+            self.dateFormatPreference = dateFormatPreference
         }
 
         var useZenzai: Bool = true
         var resourcesDirectoryURL: URL?
+        var dateFormatPreference: Config.DateFormatPreference.Value?
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
@@ -564,7 +567,7 @@ public final class SegmentsManager {
 
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: ContextLength.conversion)
         let rightSideContext = forcedRightSideContext ?? self.getCleanRightSideContext(maxCount: ContextLength.conversion)
-        let result = self.kanaKanjiConverter.requestCandidates(
+        var result = self.kanaKanjiConverter.requestCandidates(
             self.composingText,
             options: options(
                 leftSideContext: leftSideContext,
@@ -574,6 +577,24 @@ public final class SegmentsManager {
                 requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
             )
         )
+        // 文節を縮めたときは、入力全体に対する日付を補完しない。
+        if self.composingText.isAtEndIndex {
+            let dateEntries = dynamicShortcuts.compactMap { entry -> DicdataElement? in
+                guard entry.ruby == self.composingText.convertTarget.toKatakana(),
+                      entry.word.hasPrefix("<date ") else {
+                    return nil
+                }
+                let template = DateTemplateLiteral.import(from: entry.word)
+                guard template.format.contains("d") else {
+                    return nil
+                }
+                return .init(word: template.previewString(), ruby: entry.ruby, cid: CIDData.固有名詞.cid,
+                             mid: MIDData.一般.mid, value: entry.value())
+            }
+            DateCandidatePreference.apply(to: &result, dateEntries: dateEntries,
+                                          readingCount: self.composingText.convertTarget.count,
+                                          preference: self.context.dateFormatPreference ?? Config.DateFormatPreference().value)
+        }
         self.rawCandidates = result
     }
 
