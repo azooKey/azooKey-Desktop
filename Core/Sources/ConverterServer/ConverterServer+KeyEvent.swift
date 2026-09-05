@@ -367,12 +367,6 @@ extension ConverterServer {
         guard let prediction else {
             return
         }
-        if prediction.deleteCount > 0 {
-            manager.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
-        }
-        guard !prediction.appendText.isEmpty else {
-            return
-        }
-        manager.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
+        manager.acceptPredictionCandidate(prediction)
     }
 }

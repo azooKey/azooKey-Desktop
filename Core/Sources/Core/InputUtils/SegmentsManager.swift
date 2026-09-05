@@ -65,15 +65,13 @@ public final class SegmentsManager {
         public var displayText: String
         public var appendText: String
         public var deleteCount: Int = 0
+        // 通常の予測候補は、受理時に Converter へ元の候補を渡して表記を引き継ぐ。
+        var candidate: Candidate?
     }
 
     struct BackspaceTypoCorrectionLock: Sendable {
         var displayText: String
         var targetReading: String
-    }
-
-    private func candidateReading(_ candidate: Candidate) -> String {
-        candidate.data.map(\.ruby).joined()
     }
 
     public func makeCandidatePresentations(_ candidates: [Candidate]) -> [CandidatePresentation] {
@@ -894,14 +892,9 @@ public final class SegmentsManager {
         }
 
         for candidate in rawCandidates.predictionResults {
-            let reading = candidateReading(candidate)
-            guard !reading.isEmpty else {
-                continue
-            }
             if let predictionCandidate = Self.makePredictionCandidate(
                 currentTarget: target,
-                candidateReading: reading,
-                displayText: candidate.text
+                candidate: candidate
             ) {
                 return [predictionCandidate]
             }
@@ -912,8 +905,7 @@ public final class SegmentsManager {
 
     static func makePredictionCandidate(
         currentTarget: String,
-        candidateReading: String,
-        displayText: String
+        candidate: Candidate
     ) -> PredictionCandidate? {
         var matchTarget = currentTarget
         var deleteCount = 0
@@ -926,7 +918,7 @@ public final class SegmentsManager {
             return nil
         }
 
-        let readingHiragana = candidateReading.toHiragana()
+        let readingHiragana = candidate.data.map(\.ruby).joined().toHiragana()
         let matchTargetHiragana = matchTarget.toHiragana()
         guard readingHiragana.hasPrefix(matchTargetHiragana) else {
             return nil
@@ -940,7 +932,28 @@ public final class SegmentsManager {
             return nil
         }
 
-        return .init(displayText: displayText, appendText: appendText, deleteCount: deleteCount)
+        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount, candidate: candidate)
+    }
+
+    @MainActor
+    public func acceptPredictionCandidate(_ prediction: PredictionCandidate) {
+        if let candidate = prediction.candidate {
+            guard self.kanaKanjiConverter.acceptPredictionCandidate(candidate, composingText: &self.composingText) else {
+                return
+            }
+            self.lastInputStyle = .direct
+            self.lastOperation = .insert
+            self.shouldShowCandidateWindow = !self.liveConversionEnabled
+            self.updateRawCandidate()
+        } else {
+            // 誤入力訂正候補は読みの置換として適用する。
+            if prediction.deleteCount > 0 {
+                self.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
+            }
+            if !prediction.appendText.isEmpty {
+                self.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
+            }
+        }
     }
 
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
