@@ -56,13 +56,41 @@ public enum ConverterClientEventRouter {
             return .sendToServer
         }
 
-        let inputState = context.acknowledgedInputState.inputState
+        if case .fallthrough = Self.clientAction(event: event, context: context) {
+            return .fallthroughToApplication
+        }
+        return .sendToServer
+    }
+
+    /// Server の応答を待つ間、application へ同期的に置く暫定の marked text
+    /// 未確定文字列が無い状態の最初の文字が生のキーとして漏れるのを防ぐ。
+    public static func provisionalMarkedText(
+        event: KeyEventCore,
+        context: ConverterClientEventRoutingContext
+    ) -> String? {
+        guard context.acknowledgedInputState == .none else {
+            return nil
+        }
+        switch Self.clientAction(event: event, context: context) {
+        case .appendPieceToMarkedText(let pieces):
+            return pieces.inputString(preferIntention: false)
+        case .insertWithoutMarkedText(let text):
+            return text
+        default:
+            return nil
+        }
+    }
+
+    private static func clientAction(
+        event: KeyEventCore,
+        context: ConverterClientEventRoutingContext
+    ) -> ClientAction {
         let userAction = UserAction.getUserAction(
             eventCore: event,
             inputLanguage: context.acknowledgedInputLanguage,
             typeBackSlash: context.typeBackSlash
         )
-        let (action, _) = inputState.event(
+        let (action, _) = context.acknowledgedInputState.inputState.event(
             eventCore: event,
             userAction: userAction,
             inputLanguage: context.acknowledgedInputLanguage,
@@ -70,9 +98,6 @@ public enum ConverterClientEventRouter {
             enableDebugWindow: context.enableDebugWindow,
             enableSuggestion: context.enableSuggestion
         )
-        if case .fallthrough = action {
-            return .fallthroughToApplication
-        }
-        return .sendToServer
+        return action
     }
 }

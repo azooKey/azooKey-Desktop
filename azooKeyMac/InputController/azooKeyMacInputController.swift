@@ -9,6 +9,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
     private var pendingKeyEventCount = 0
+    /// Server の応答を待つ間、application に置いている暫定の marked text
+    private var provisionalMarkedText = ""
     private var nextKeyEventID: UInt64 = 0
     private var activationGeneration: UInt64 = 0
     private var pendingConverterServerActivation: ConverterSessionActivation?
@@ -178,6 +180,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.pendingConverterServerActivation = nil
         self.converterServerClient.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { _ in })
         self.currentConverterView = nil
+        self.provisionalMarkedText = ""
         self.inputState = .none
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
@@ -335,20 +338,28 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         enableSuggestion: Bool,
         optionDirectInputText: String? = nil
     ) -> Bool {
-        let disposition = ConverterClientEventRouter.disposition(
-            event: event,
-            context: .init(
-                acknowledgedInputState: ConverterInputState(self.inputState),
-                acknowledgedInputLanguage: self.inputLanguage,
-                hasPendingKeyEvents: self.pendingKeyEventCount > 0,
-                liveConversionEnabled: Config.LiveConversion().value,
-                enableDebugWindow: Config.DebugWindow().value,
-                enableSuggestion: enableSuggestion,
-                typeBackSlash: Config.TypeBackSlash().value
-            )
+        let routingContext = ConverterClientEventRoutingContext(
+            acknowledgedInputState: ConverterInputState(self.inputState),
+            acknowledgedInputLanguage: self.inputLanguage,
+            hasPendingKeyEvents: self.pendingKeyEventCount > 0,
+            liveConversionEnabled: Config.LiveConversion().value,
+            enableDebugWindow: Config.DebugWindow().value,
+            enableSuggestion: enableSuggestion,
+            typeBackSlash: Config.TypeBackSlash().value
         )
-        guard disposition == .sendToServer else {
+        guard ConverterClientEventRouter.disposition(event: event, context: routingContext) == .sendToServer else {
             return false
+        }
+        // 応答が届く前に `handle` が返るため、未確定文字列が無い状態で送る文字は
+        // ここで marked text にしておかないと application (e.g. iTerm2) へ生のキーが漏れる。
+        if let text = ConverterClientEventRouter.provisionalMarkedText(event: event, context: routingContext) {
+            self.provisionalMarkedText += text
+            self.setMarkedText(
+                ConverterMarkedText(
+                    elements: [.init(content: self.provisionalMarkedText, focus: .unfocused)],
+                    selectionRange: ConverterRange(location: self.provisionalMarkedText.count, length: 0)
+                )
+            )
         }
 
         self.nextKeyEventID &+= 1
@@ -718,6 +729,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     func refreshMarkedText() {
+        self.provisionalMarkedText = ""
+        self.setMarkedText(self.currentMarkedText())
+    }
+
+    private func setMarkedText(_ markedText: ConverterMarkedText) {
         let highlight = self.mark(
             forStyle: kTSMHiliteSelectedConvertedText,
             at: NSRange(location: NSNotFound, length: 0)
@@ -727,8 +743,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             at: NSRange(location: NSNotFound, length: 0)
         ) as? [NSAttributedString.Key: Any]
         let text = NSMutableAttributedString(string: "")
-        let currentMarkedText = self.currentMarkedText()
-        for part in currentMarkedText.elements where !part.content.isEmpty {
+        for part in markedText.elements where !part.content.isEmpty {
             let attributes: [NSAttributedString.Key: Any]? = switch part.focus {
             case .focused: highlight
             case .unfocused: underline
@@ -743,7 +758,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         self.client()?.setMarkedText(
             text,
-            selectionRange: currentMarkedText.selectionRange.nsRange,
+            selectionRange: markedText.selectionRange.nsRange,
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
     }
