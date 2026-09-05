@@ -91,6 +91,14 @@ struct ConfigWindow: View {
         )
     }
 
+    private var customInputTableFileURL: URL {
+        CustomInputTableStore.fileURL
+    }
+
+    private var legacyCustomInputTableFileURL: URL {
+        CustomInputTableStore.legacyFileURL
+    }
+
     private var debugTypoCorrectionStatusText: String {
         if self.debugTypoCorrectionDownloadInProgress {
             return "ダウンロード中..."
@@ -188,6 +196,18 @@ struct ConfigWindow: View {
     }
 
     @MainActor
+    private func migrateCustomInputTableIfNeeded() async {
+        let fileURL = self.customInputTableFileURL
+        let legacyFileURL = self.legacyCustomInputTableFileURL
+        await Task.detached(priority: .utility) {
+            Self.migrateLegacyCustomInputTableIfNeeded(
+                from: legacyFileURL,
+                to: fileURL
+            )
+        }.value
+    }
+
+    @MainActor
     private func downloadDebugTypoCorrectionWeights() {
         guard !self.debugTypoCorrectionDownloadInProgress else {
             return
@@ -237,6 +257,26 @@ struct ConfigWindow: View {
             try fileManager.copyItem(at: sourceURL, to: targetURL)
         } catch {
             // The status check below will surface a notDownloaded/failed state.
+        }
+    }
+
+    nonisolated private static func migrateLegacyCustomInputTableIfNeeded(from sourceURL: URL, to targetURL: URL) {
+        guard sourceURL.standardizedFileURL != targetURL.standardizedFileURL else {
+            return
+        }
+        let fileManager = FileManager.default
+        guard !fileManager.fileExists(atPath: targetURL.path),
+              fileManager.fileExists(atPath: sourceURL.path) else {
+            return
+        }
+        do {
+            try fileManager.createDirectory(
+                at: targetURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.copyItem(at: sourceURL, to: targetURL)
+        } catch {
+            // The converter falls back to the default input style until the table is copied.
         }
     }
 
@@ -804,6 +844,21 @@ struct ConfigWindow: View {
                     Text("かな入力（US）").tag(Config.InputStyle.Value.defaultKanaUS)
                     Text("AZIK").tag(Config.InputStyle.Value.defaultAZIK)
                     Text("カスタム").tag(Config.InputStyle.Value.custom)
+                }
+                .onAppear {
+                    guard self.inputStyle.value == .custom else {
+                        return
+                    }
+                    Task { @MainActor in
+                        await self.migrateCustomInputTableIfNeeded()
+                    }
+                }
+                .onChange(of: self.inputStyle.value) { value in
+                    if value == .custom {
+                        Task { @MainActor in
+                            await self.migrateCustomInputTableIfNeeded()
+                        }
+                    }
                 }
                 if inputStyle.value == .custom {
                     LabeledContent {
