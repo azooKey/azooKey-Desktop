@@ -72,10 +72,6 @@ public final class SegmentsManager {
         var targetReading: String
     }
 
-    private func candidateReading(_ candidate: Candidate) -> String {
-        candidate.data.map(\.ruby).joined()
-    }
-
     public func makeCandidatePresentations(_ candidates: [Candidate]) -> [CandidatePresentation] {
         let additionalPresentations = self.additionalCandidatePresentationsForSelectionIndex
         return candidates.indices.map { index in
@@ -880,40 +876,35 @@ public final class SegmentsManager {
     }
 
     public func requestPredictionCandidates() -> [PredictionCandidate] {
-        guard Config.DebugPredictiveTyping().value else {
+        guard let candidate = self.firstPredictionCandidate(),
+              let prediction = Self.makePredictionCandidate(currentTarget: self.composingText.convertTarget, candidate: candidate) else {
             return []
+        }
+        return [prediction]
+    }
+
+    private func firstPredictionCandidate() -> Candidate? {
+        guard Config.DebugPredictiveTyping().value else {
+            return nil
         }
 
         let target = self.composingText.convertTarget
         guard !target.isEmpty else {
-            return []
+            return nil
         }
 
         guard let rawCandidates else {
-            return []
+            return nil
         }
 
-        for candidate in rawCandidates.predictionResults {
-            let reading = candidateReading(candidate)
-            guard !reading.isEmpty else {
-                continue
-            }
-            if let predictionCandidate = Self.makePredictionCandidate(
-                currentTarget: target,
-                candidateReading: reading,
-                displayText: candidate.text
-            ) {
-                return [predictionCandidate]
-            }
+        return rawCandidates.predictionResults.first {
+            Self.makePredictionCandidate(currentTarget: target, candidate: $0) != nil
         }
-
-        return []
     }
 
     static func makePredictionCandidate(
         currentTarget: String,
-        candidateReading: String,
-        displayText: String
+        candidate: Candidate
     ) -> PredictionCandidate? {
         var matchTarget = currentTarget
         var deleteCount = 0
@@ -926,7 +917,7 @@ public final class SegmentsManager {
             return nil
         }
 
-        let readingHiragana = candidateReading.toHiragana()
+        let readingHiragana = candidate.data.map(\.ruby).joined().toHiragana()
         let matchTargetHiragana = matchTarget.toHiragana()
         guard readingHiragana.hasPrefix(matchTargetHiragana) else {
             return nil
@@ -940,7 +931,37 @@ public final class SegmentsManager {
             return nil
         }
 
-        return .init(displayText: displayText, appendText: appendText, deleteCount: deleteCount)
+        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount)
+    }
+
+    @MainActor
+    public func acceptPredictionCandidate() {
+        if let prediction = self.requestTypoCorrectionPredictionCandidates().first {
+            self.acceptTypoCorrectionPredictionCandidate(prediction)
+        } else if let candidate = self.firstPredictionCandidate() {
+            self.acceptPredictionCandidate(candidate)
+        }
+    }
+
+    @MainActor
+    func acceptPredictionCandidate(_ candidate: Candidate) {
+        guard self.kanaKanjiConverter.acceptPredictionCandidate(candidate, composingText: &self.composingText) else {
+            return
+        }
+        self.lastInputStyle = .direct
+        self.lastOperation = .insert
+        self.shouldShowCandidateWindow = !self.liveConversionEnabled
+        self.updateRawCandidate()
+    }
+
+    @MainActor
+    func acceptTypoCorrectionPredictionCandidate(_ prediction: PredictionCandidate) {
+        if prediction.deleteCount > 0 {
+            self.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
+        }
+        if !prediction.appendText.isEmpty {
+            self.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
+        }
     }
 
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
