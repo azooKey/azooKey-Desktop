@@ -68,6 +68,10 @@ class CandidatesViewController: BaseCandidateViewController {
         }
 
         cell.candidateTextField.attributedStringValue = attributedString
+        cell.candidateTextField.setAccessibilityLabel(
+            annotationText.map { "\(displayText)、\($0)" } ?? displayText
+        )
+        cell.candidateAnnotationTextField.setAccessibilityElement(false)
 
         if let annotationText {
             let annotationString = NSAttributedString(
@@ -100,12 +104,12 @@ class CandidatesViewController: BaseCandidateViewController {
     }
 
     override func getWindowWidth(maxContentWidth: CGFloat) -> CGFloat {
-        let hasAnnotation = self.candidates.contains { $0.annotationText != nil }
-        if self.showCandidateIndex {
-            return maxContentWidth + 48 + (hasAnnotation ? 56 : 0)
-        } else {
-            return maxContentWidth + 20 + (hasAnnotation ? 56 : 0)
-        }
+        let annotationTexts = self.candidates.compactMap(\.annotationText)
+        let annotationWidth = annotationTexts.isEmpty ? 0 : self.getMaxTextWidth(
+            candidates: annotationTexts,
+            font: .systemFont(ofSize: 12)
+        ) + 8
+        return maxContentWidth + (self.showCandidateIndex ? 48 : 20) + annotationWidth
     }
 }
 
