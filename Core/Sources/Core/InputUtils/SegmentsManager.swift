@@ -65,8 +65,6 @@ public final class SegmentsManager {
         public var displayText: String
         public var appendText: String
         public var deleteCount: Int = 0
-        // 通常の予測候補は、受理時に Converter へ元の候補を渡して表記を引き継ぐ。
-        var candidate: Candidate?
     }
 
     struct BackspaceTypoCorrectionLock: Sendable {
@@ -878,29 +876,30 @@ public final class SegmentsManager {
     }
 
     public func requestPredictionCandidates() -> [PredictionCandidate] {
-        guard Config.DebugPredictiveTyping().value else {
+        guard let candidate = self.firstPredictionCandidate(),
+              let prediction = Self.makePredictionCandidate(currentTarget: self.composingText.convertTarget, candidate: candidate) else {
             return []
+        }
+        return [prediction]
+    }
+
+    private func firstPredictionCandidate() -> Candidate? {
+        guard Config.DebugPredictiveTyping().value else {
+            return nil
         }
 
         let target = self.composingText.convertTarget
         guard !target.isEmpty else {
-            return []
+            return nil
         }
 
         guard let rawCandidates else {
-            return []
+            return nil
         }
 
-        for candidate in rawCandidates.predictionResults {
-            if let predictionCandidate = Self.makePredictionCandidate(
-                currentTarget: target,
-                candidate: candidate
-            ) {
-                return [predictionCandidate]
-            }
+        return rawCandidates.predictionResults.first {
+            Self.makePredictionCandidate(currentTarget: target, candidate: $0) != nil
         }
-
-        return []
     }
 
     static func makePredictionCandidate(
@@ -932,27 +931,36 @@ public final class SegmentsManager {
             return nil
         }
 
-        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount, candidate: candidate)
+        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount)
     }
 
     @MainActor
-    public func acceptPredictionCandidate(_ prediction: PredictionCandidate) {
-        if let candidate = prediction.candidate {
-            guard self.kanaKanjiConverter.acceptPredictionCandidate(candidate, composingText: &self.composingText) else {
-                return
-            }
-            self.lastInputStyle = .direct
-            self.lastOperation = .insert
-            self.shouldShowCandidateWindow = !self.liveConversionEnabled
-            self.updateRawCandidate()
-        } else {
-            // 誤入力訂正候補は読みの置換として適用する。
-            if prediction.deleteCount > 0 {
-                self.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
-            }
-            if !prediction.appendText.isEmpty {
-                self.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
-            }
+    public func acceptPredictionCandidate() {
+        if let prediction = self.requestTypoCorrectionPredictionCandidates().first {
+            self.acceptTypoCorrectionPredictionCandidate(prediction)
+        } else if let candidate = self.firstPredictionCandidate() {
+            self.acceptPredictionCandidate(candidate)
+        }
+    }
+
+    @MainActor
+    func acceptPredictionCandidate(_ candidate: Candidate) {
+        guard self.kanaKanjiConverter.acceptPredictionCandidate(candidate, composingText: &self.composingText) else {
+            return
+        }
+        self.lastInputStyle = .direct
+        self.lastOperation = .insert
+        self.shouldShowCandidateWindow = !self.liveConversionEnabled
+        self.updateRawCandidate()
+    }
+
+    @MainActor
+    func acceptTypoCorrectionPredictionCandidate(_ prediction: PredictionCandidate) {
+        if prediction.deleteCount > 0 {
+            self.deleteBackwardFromCursorPosition(count: prediction.deleteCount)
+        }
+        if !prediction.appendText.isEmpty {
+            self.insertAtCursorPosition(prediction.appendText, inputStyle: .direct)
         }
     }
 

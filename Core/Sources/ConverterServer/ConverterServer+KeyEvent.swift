@@ -205,7 +205,7 @@ extension ConverterServer {
             manager.insertAtCursorPosition("つづき", inputStyle: inputStyle)
             effects.append(.requestReplaceSuggestion)
         case .acceptPredictionCandidate:
-            acceptPredictionCandidate(manager: manager, leftSideContext: leftSideContext)
+            manager.acceptPredictionCandidate()
         case .requestReplaceSuggestion:
             session.clearReplaceSuggestions()
             effects.append(.requestReplaceSuggestion)
@@ -356,17 +356,5 @@ extension ConverterServer {
         session.manager.stopComposition()
         session.clearReplaceSuggestions()
         return true
-    }
-
-    @MainActor
-    func acceptPredictionCandidate(manager: SegmentsManager, leftSideContext _: String?) {
-        let prediction = SegmentsManager.preferredPredictionCandidates(
-            typoCorrectionCandidates: manager.requestTypoCorrectionPredictionCandidates(),
-            predictionCandidates: manager.requestPredictionCandidates()
-        ).first
-        guard let prediction else {
-            return
-        }
-        manager.acceptPredictionCandidate(prediction)
     }
 }

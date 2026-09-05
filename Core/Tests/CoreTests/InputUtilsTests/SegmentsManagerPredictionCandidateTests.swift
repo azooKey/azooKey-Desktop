@@ -32,7 +32,6 @@ private func makePredictionSegmentsManager() -> SegmentsManager {
     #expect(candidate?.displayText == "おはようございます")
     #expect(candidate?.appendText == "ます")
     #expect(candidate?.deleteCount == 1)
-    #expect(candidate?.candidate == source)
 }
 
 @Test func testMakePredictionCandidateKeepsDeleteCountZeroWithoutTrailingASCII() async throws {
@@ -50,12 +49,7 @@ private func makePredictionSegmentsManager() -> SegmentsManager {
 @Test func testAcceptPredictionCandidateCompletesReadingAndContinuesRomanInput() throws {
     let manager = makePredictionSegmentsManager()
     manager.insertAtCursorPosition("hida", inputStyle: .roman2kana)
-    let prediction = try #require(SegmentsManager.makePredictionCandidate(
-        currentTarget: manager.convertTarget,
-        candidate: makeCandidate(text: "←", reading: "ひだり")
-    ))
-
-    manager.acceptPredictionCandidate(prediction)
+    manager.acceptPredictionCandidate(makeCandidate(text: "←", reading: "ひだり"))
     #expect(manager.convertTarget == "ひだり")
 
     manager.insertAtCursorPosition("nimagaru", inputStyle: .roman2kana)
@@ -66,12 +60,7 @@ private func makePredictionSegmentsManager() -> SegmentsManager {
 @Test func testAcceptPredictionCandidateReplacesPendingRomanSuffix() throws {
     let manager = makePredictionSegmentsManager()
     manager.insertAtCursorPosition("arigat", inputStyle: .roman2kana)
-    let prediction = try #require(SegmentsManager.makePredictionCandidate(
-        currentTarget: manager.convertTarget,
-        candidate: makeCandidate(text: "有難う", reading: "ありがとう")
-    ))
-
-    manager.acceptPredictionCandidate(prediction)
+    manager.acceptPredictionCandidate(makeCandidate(text: "有難う", reading: "ありがとう"))
 
     #expect(manager.convertTarget == "ありがとう")
 }
@@ -80,12 +69,7 @@ private func makePredictionSegmentsManager() -> SegmentsManager {
 @Test func testAcceptPredictionCandidateRejectsStaleCandidateWithoutEditingInput() throws {
     let manager = makePredictionSegmentsManager()
     manager.insertAtCursorPosition("こんにちは", inputStyle: .direct)
-    let prediction = try #require(SegmentsManager.makePredictionCandidate(
-        currentTarget: "こんば",
-        candidate: makeCandidate(text: "今晩は", reading: "こんばんは")
-    ))
-
-    manager.acceptPredictionCandidate(prediction)
+    manager.acceptPredictionCandidate(makeCandidate(text: "今晩は", reading: "こんばんは"))
 
     #expect(manager.convertTarget == "こんにちは")
 }
@@ -100,7 +84,7 @@ private func makePredictionSegmentsManager() -> SegmentsManager {
         displayText: "今晩は"
     ))
 
-    manager.acceptPredictionCandidate(prediction)
+    manager.acceptTypoCorrectionPredictionCandidate(prediction)
 
     #expect(manager.convertTarget == "こんばんは")
 }
