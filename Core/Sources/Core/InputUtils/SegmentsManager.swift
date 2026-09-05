@@ -564,7 +564,7 @@ public final class SegmentsManager {
 
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: ContextLength.conversion)
         let rightSideContext = forcedRightSideContext ?? self.getCleanRightSideContext(maxCount: ContextLength.conversion)
-        let result = self.kanaKanjiConverter.requestCandidates(
+        var result = self.kanaKanjiConverter.requestCandidates(
             self.composingText,
             options: options(
                 leftSideContext: leftSideContext,
@@ -574,6 +574,25 @@ public final class SegmentsManager {
                 requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
             )
         )
+        if self.composingText.isAtEndIndex {
+            let postalAddresses = PostalAddressShortcuts.addresses(matching: self.composingText.convertTarget)
+            if !postalAddresses.isEmpty {
+                var postalTexts = Set(result.mainResults.map(\.text))
+                let postalCandidates = postalAddresses.compactMap { address -> Candidate? in
+                    guard postalTexts.insert(address).inserted else {
+                        return nil
+                    }
+                    return Candidate(
+                        text: address, value: -18,
+                        composingCount: .surfaceCount(self.composingText.convertTarget.count),
+                        lastMid: MIDData.一般.mid,
+                        data: [.init(word: address, ruby: self.composingText.convertTarget, cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18)],
+                        isLearningTarget: false
+                    )
+                }
+                result.mainResults.insert(contentsOf: postalCandidates, at: min(5, result.mainResults.count))
+            }
+        }
         self.rawCandidates = result
     }
 
