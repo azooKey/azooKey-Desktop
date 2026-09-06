@@ -4,15 +4,13 @@ import Testing
 private func disposition(
     event: KeyEventCore,
     state: ConverterInputState = .none,
-    language: InputLanguage = .japanese,
-    hasPendingKeyEvents: Bool = false
+    language: InputLanguage = .japanese
 ) -> ConverterClientEventDisposition {
     ConverterClientEventRouter.disposition(
         event: event,
         context: .init(
             acknowledgedInputState: state,
-            acknowledgedInputLanguage: language,
-            hasPendingKeyEvents: hasPendingKeyEvents
+            acknowledgedInputLanguage: language
         )
     )
 }
@@ -43,7 +41,7 @@ private func disposition(
     )
 }
 
-@Test func backspaceIsConsumedWhileEarlierKeyEventIsPending() {
+@Test func backspaceIsConsumedWhileComposing() {
     #expect(
         disposition(
             event: KeyEventCore(
@@ -52,12 +50,12 @@ private func disposition(
                 charactersIgnoringModifiers: nil,
                 keyCode: 51
             ),
-            hasPendingKeyEvents: true
+            state: .composing
         ) == .sendToServer
     )
 }
 
-@Test func commandShortcutAlwaysFallsThroughWhileServerIsDelayed() {
+@Test func commandShortcutAlwaysFallsThroughWhileComposing() {
     #expect(
         disposition(
             event: KeyEventCore(
@@ -66,10 +64,35 @@ private func disposition(
                 charactersIgnoringModifiers: "c",
                 keyCode: 8
             ),
-            state: .composing,
-            hasPendingKeyEvents: true
+            state: .composing
         ) == .fallthroughToApplication
     )
+}
+
+@Test func directEnglishInputDoesNotNeedServer() {
+    for event in [
+        KeyEventCore(modifierFlags: [], characters: "a", charactersIgnoringModifiers: "a", keyCode: 0),
+        KeyEventCore(modifierFlags: [], characters: "\r", charactersIgnoringModifiers: "\r", keyCode: 36),
+        KeyEventCore(modifierFlags: [], characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", keyCode: 51),
+        KeyEventCore(modifierFlags: [], characters: "\t", charactersIgnoringModifiers: "\t", keyCode: 48),
+        KeyEventCore(modifierFlags: [], characters: " ", charactersIgnoringModifiers: " ", keyCode: 49)
+    ] {
+        #expect(disposition(event: event, language: .english) == .fallthroughToApplication)
+        #expect(disposition(event: event, state: .composing, language: .english) == .sendToServer)
+    }
+}
+
+@Test func directEnglishInputPreservesBackslashSetting() {
+    let event = KeyEventCore(modifierFlags: [], characters: "¥", charactersIgnoringModifiers: "¥", keyCode: 93)
+    #expect(ConverterClientEventRouter.disposition(
+        event: event,
+        context: .init(acknowledgedInputLanguage: .english, typeBackSlash: true)
+    ) == .insertText("\\"))
+}
+
+@Test func englishDeadKeyStillUsesServerState() {
+    let event = KeyEventCore(modifierFlags: [], characters: "a", charactersIgnoringModifiers: "a", keyCode: 0)
+    #expect(disposition(event: event, state: .attachDiacritic("´"), language: .english) == .sendToServer)
 }
 
 @Test func unknownControlShortcutIsConsumedOnlyDuringComposition() {

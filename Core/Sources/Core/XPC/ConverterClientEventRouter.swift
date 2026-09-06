@@ -4,17 +4,16 @@ import Foundation
 ///
 /// 変換状態の本体は ConverterServer が所有する。Client は Server が最後に返した
 /// 読み取り専用の状態を使い、明らかな application shortcut を同期的に通す。
-/// Server の応答待ちがある間は状態が進んでいる可能性があるため、Command shortcut
-/// 以外を保守的に consume し、生のキー入力が application へ漏れることを防ぐ。
+/// キーごとに Server の応答を同期的に反映するため、未応答のキーを推測する必要はない。
 public enum ConverterClientEventDisposition: Sendable, Equatable {
     case sendToServer
     case fallthroughToApplication
+    case insertText(String)
 }
 
 public struct ConverterClientEventRoutingContext: Sendable, Equatable {
     public var acknowledgedInputState: ConverterInputState
     public var acknowledgedInputLanguage: InputLanguage
-    public var hasPendingKeyEvents: Bool
     public var liveConversionEnabled: Bool
     public var enableDebugWindow: Bool
     public var enableSuggestion: Bool
@@ -23,7 +22,6 @@ public struct ConverterClientEventRoutingContext: Sendable, Equatable {
     public init(
         acknowledgedInputState: ConverterInputState = .none,
         acknowledgedInputLanguage: InputLanguage = .japanese,
-        hasPendingKeyEvents: Bool = false,
         liveConversionEnabled: Bool = true,
         enableDebugWindow: Bool = false,
         enableSuggestion: Bool = false,
@@ -31,7 +29,6 @@ public struct ConverterClientEventRoutingContext: Sendable, Equatable {
     ) {
         self.acknowledgedInputState = acknowledgedInputState
         self.acknowledgedInputLanguage = acknowledgedInputLanguage
-        self.hasPendingKeyEvents = hasPendingKeyEvents
         self.liveConversionEnabled = liveConversionEnabled
         self.enableDebugWindow = enableDebugWindow
         self.enableSuggestion = enableSuggestion
@@ -47,13 +44,6 @@ public enum ConverterClientEventRouter {
         // Command shortcut は composition の有無にかかわらず application が所有する。
         if event.modifierFlags.contains(.command) {
             return .fallthroughToApplication
-        }
-
-        // 未応答イベントがある場合、acknowledgedInputState は古い可能性がある。
-        // ここで fallthrough するとタイムアウトした文字が英字として漏れるため、
-        // Server が順番に処理できるようイベントを consume する。
-        if context.hasPendingKeyEvents {
-            return .sendToServer
         }
 
         let inputState = context.acknowledgedInputState.inputState
@@ -72,6 +62,13 @@ public enum ConverterClientEventRouter {
         )
         if case .fallthrough = action {
             return .fallthroughToApplication
+        }
+        if context.acknowledgedInputLanguage == .english,
+           context.acknowledgedInputState == .none,
+           case .insertWithoutMarkedText(let text) = action {
+            // 通常の直接入力は application に任せる。円記号・バックスラッシュ等、
+            // azooKey の設定による置き換えが必要な場合だけ、その場で挿入する。
+            return text == event.characters ? .fallthroughToApplication : .insertText(text)
         }
         return .sendToServer
     }
