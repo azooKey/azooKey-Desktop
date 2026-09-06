@@ -1,7 +1,7 @@
 import Cocoa
 import Core
 
-protocol CandidatesViewControllerDelegate: AnyObject {
+@MainActor protocol CandidatesViewControllerDelegate: AnyObject {
     func candidateSubmitted()
     func candidateSelectionChanged(_ row: Int)
 }
