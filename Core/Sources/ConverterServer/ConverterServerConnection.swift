@@ -34,12 +34,10 @@ final class ConverterServerConnection: NSObject, ConverterServerXPCProtocol, @un
         guard markClosed() else {
             return
         }
-        Task { @MainActor in
-            // 旧Clientの再接続・同一sessionへの再送を短時間だけ許容する。
-            // 新接続が所有権を取得したsessionは、古い接続のcleanupでは削除しない。
-            DispatchQueue.main.asyncAfter(deadline: .now() + self.cleanupDelay) {
-                self.server.removeSessions(ownedBy: self.owner)
-            }
+        // 旧Clientの再接続・同一sessionへの再送を短時間だけ許容する。
+        // 新接続が所有権を取得したsessionは、古い接続のcleanupでは削除しない。
+        DispatchQueue.main.asyncAfter(deadline: .now() + self.cleanupDelay) {
+            self.server.removeSessions(ownedBy: self.owner)
         }
     }
 

@@ -179,7 +179,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override func deactivateServer(_ sender: Any!) {
         self.activationGeneration &+= 1
         self.converterSessionState.deactivate()
-        self.converterServerClient.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { _ in })
+        self.converterServerClient.sendIfSessionOpen({ .lifecycle(.deactivate) }, completion: { _ in })
         self.currentConverterView = nil
         self.inputState = .none
         self.candidatesWindow.orderOut(nil)
@@ -191,7 +191,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
-        self.sendAndApply { _ in .composition(.commit) }
+        self.sendAndApply { .composition(.commit) }
     }
 
     // MARK: - setValue: 状態同期のみ
@@ -204,24 +204,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         if tag == kTextServiceInputModePropertyTag, let value = value as? NSString,
            value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
-            let englishMode = value == "com.apple.inputmethod.Roman"
-
-            if englishMode {
-                // 英語モードへの切り替え通知（実際の処理はhandleで行う）
-                // メニューバーやshortcut経由の切り替えに対応する。
-                // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
-                if self.inputLanguage == .japanese {
-                    self.inputLanguage = .english
-                    self.synchronizeConverterInputLanguage()
-                    self.refreshCandidateWindow()
-                    self.refreshPredictionWindow()
-                }
-            } else {
-                // 日本語モードへの切り替え
-                if self.inputLanguage == .english {
-                    self.inputLanguage = .japanese
-                    self.synchronizeConverterInputLanguage()
-                }
+            let language: InputLanguage = value == "com.apple.inputmethod.Roman" ? .english : .japanese
+            guard self.inputLanguage != language else {
+                return
+            }
+            // メニューバーや shortcut 経由の切り替えも、最新モードを同期する。
+            self.inputLanguage = language
+            self.synchronizeConverterInputLanguage()
+            if language == .english {
+                self.refreshCandidateWindow()
+                self.refreshPredictionWindow()
             }
         }
     }
@@ -238,7 +230,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return
         }
         let language = self.inputLanguage
-        self.sendAndApply { _ in .lifecycle(.synchronizeInputLanguage(language)) }
+        self.sendAndApply { .lifecycle(.synchronizeInputLanguage(language)) }
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -415,7 +407,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     @MainActor
-    private func sendAndApply(_ command: @escaping (String) -> ConverterSessionCommand) {
+    private func sendAndApply(_ command: @escaping () -> ConverterSessionCommand) {
         let generation = self.activationGeneration
         if let response = self.converterServerClient.sendSynchronously(command, onlyIfSessionOpen: true),
            self.activationGeneration == generation {
@@ -505,7 +497,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private func syncConverterServerSessionConfig() {
         let config = self.converterServerSessionConfig
         self.converterServerClient.send(
-            { _ in .updateConfig(config) },
+            { .updateConfig(config) },
             completion: { _ in }
         )
     }
@@ -525,7 +517,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private func discardConverterServerComposition() {
         self.currentConverterView = nil
         self.converterServerClient.sendIfSessionOpen(
-            { _ in .composition(.stopComposition) },
+            { .composition(.stopComposition) },
             completion: { _ in }
         )
     }
@@ -595,7 +587,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let count = view.replaceSuggestionCandidates.count
         let current = view.replaceSuggestionSelectionIndex ?? (offset > 0 ? -1 : 0)
         let next = (current + offset + count) % count
-        self.sendAndApply { _ in .replaceSuggestion(.selectReplaceSuggestionCandidate(index: next)) }
+        self.sendAndApply { .replaceSuggestion(.selectReplaceSuggestionCandidate(index: next)) }
     }
 
     @MainActor private func showReplaceSuggestionError(message: String) {
@@ -773,7 +765,7 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
         guard self.currentConverterView != nil else {
             return
         }
-        self.sendAndApply { _ in .candidate(.submitSelectedCandidate(context: self.currentConverterTextContext())) }
+        self.sendAndApply { .candidate(.submitSelectedCandidate(context: self.currentConverterTextContext())) }
     }
 
     @MainActor
@@ -781,7 +773,7 @@ extension azooKeyMacInputController: CandidatesViewControllerDelegate {
         guard self.currentConverterView != nil else {
             return
         }
-        self.sendAndApply { _ in .candidate(.selectCandidate(index: row)) }
+        self.sendAndApply { .candidate(.selectCandidate(index: row)) }
     }
 }
 
@@ -835,7 +827,7 @@ extension azooKeyMacInputController: ReplaceSuggestionsViewControllerDelegate {
         guard self.currentConverterView?.replaceSuggestionSelectionIndex != row else {
             return
         }
-        self.sendAndApply { _ in .replaceSuggestion(.selectReplaceSuggestionCandidate(index: row)) }
+        self.sendAndApply { .replaceSuggestion(.selectReplaceSuggestionCandidate(index: row)) }
     }
 
     func replaceSuggestionSubmitted() {
@@ -861,7 +853,7 @@ extension azooKeyMacInputController {
         self.syncConverterServerSessionConfig()
         let activationGeneration = self.activationGeneration
         self.converterServerClient.sendIfSessionOpen(
-            { _ in .replaceSuggestion(.request(context: self.currentConverterTextContext())) },
+            { .replaceSuggestion(.request(context: self.currentConverterTextContext())) },
             completion: { [weak self] response in
                 guard let self, self.activationGeneration == activationGeneration else {
                     return
@@ -890,7 +882,7 @@ extension azooKeyMacInputController {
     }
 
     @MainActor func submitSelectedSuggestionCandidate() {
-        self.sendAndApply { _ in .replaceSuggestion(.submitSelectedReplaceSuggestion) }
+        self.sendAndApply { .replaceSuggestion(.submitSelectedReplaceSuggestion) }
     }
 
     @MainActor private func finishReplaceSuggestionComposition() {

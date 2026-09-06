@@ -140,11 +140,11 @@ final class ThinClientInputPipelineTests: XCTestCase {
         defer { service.stop() }
         let client = makeClient(service)
         var completions: [String] = []
-        client.send({ _ in .lifecycle(.synchronizeInputLanguage(.japanese)) }) { _ in
+        client.send({ .lifecycle(.synchronizeInputLanguage(.japanese)) }) { _ in
             completions.append("language")
         }
 
-        let response = client.sendSynchronously { _ in
+        let response = client.sendSynchronously {
             XCTAssertEqual(completions, ["language"])
             return .composition(.snapshot)
         }
@@ -171,9 +171,9 @@ final class ThinClientInputPipelineTests: XCTestCase {
         var resets = 0
         client.onSessionReset = { resets += 1 }
 
-        XCTAssertNil(client.sendSynchronously { _ in .composition(.snapshot) })
+        XCTAssertNil(client.sendSynchronously { .composition(.snapshot) })
         XCTAssertEqual(resets, 1)
-        let response = client.sendSynchronously { _ in .composition(.snapshot) }
+        let response = client.sendSynchronously { .composition(.snapshot) }
         XCTAssertEqual(response?.inputState, ConverterInputState.none)
         XCTAssertEqual(service.commands.count, 2)
         guard case .openSession(let firstID, _) = service.commands[0],
@@ -191,11 +191,11 @@ final class ThinClientInputPipelineTests: XCTestCase {
         defer { service.stop() }
         let client = makeClient(service)
         var completions = 0
-        client.send({ _ in .composition(.snapshot) }) { response in
+        client.send({ .composition(.snapshot) }) { response in
             XCTAssertNil(response)
             completions += 1
         }
-        client.send({ _ in .composition(.commit) }) { response in
+        client.send({ .composition(.commit) }) { response in
             XCTAssertNil(response)
             completions += 1
         }
@@ -213,9 +213,9 @@ final class ThinClientInputPipelineTests: XCTestCase {
         ])
         defer { service.stop() }
         let client = makeClient(service)
-        client.send({ _ in .composition(.snapshot) }, completion: { _ in })
+        client.send({ .composition(.snapshot) }, completion: { _ in })
         var deactivated = false
-        client.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { response in
+        client.sendIfSessionOpen({ .lifecycle(.deactivate) }, completion: { response in
             deactivated = response != nil
         })
         client.flushPendingCommands()
@@ -230,7 +230,7 @@ final class ThinClientInputPipelineTests: XCTestCase {
         let service = TestConverterService(responses: [.init(data: try encodedResponse())])
         defer { service.stop() }
         var client: ConverterServerClient? = makeClient(service)
-        XCTAssertNotNil(client?.sendSynchronously { _ in .composition(.snapshot) })
+        XCTAssertNotNil(client?.sendSynchronously { .composition(.snapshot) })
         guard case .openSession(let id, _) = service.commands.first else {
             return XCTFail("Expected a session")
         }

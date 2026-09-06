@@ -32,7 +32,8 @@ private final class ConverterConnectionLifetime: @unchecked Sendable {
 @MainActor
 final class ConverterServerClient {
     private enum Command {
-        case session((String) -> ConverterSessionCommand)
+        // 文脈の取得などは、先行コマンドの応答を反映してから行う。
+        case session(() -> ConverterSessionCommand)
         case global(ConverterServerCommand)
     }
 
@@ -84,11 +85,11 @@ final class ConverterServerClient {
         capabilities: ConverterSettingClientCapabilities,
         completion: @escaping ([ConverterSettingDescriptor]?) -> Void
     ) {
-        send({ _ in .settings(.list(capabilities: capabilities)) }, completion: { completion($0?.settings) })
+        send({ .settings(.list(capabilities: capabilities)) }, completion: { completion($0?.settings) })
     }
 
     func updateSetting(key: String, value: ConverterSettingValue, completion: @escaping (Bool) -> Void) {
-        send({ _ in .settings(.update(key: key, value: value)) }, completion: { completion($0 != nil) })
+        send({ .settings(.update(key: key, value: value)) }, completion: { completion($0 != nil) })
     }
 
     func restartServer(completion: @escaping (Bool) -> Void) {
@@ -109,14 +110,14 @@ final class ConverterServerClient {
     }
 
     func send(
-        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
+        _ commandBuilder: @escaping () -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
         enqueue(.session(commandBuilder), timeout: commandTimeout, completion: completion)
     }
 
     func sendIfSessionOpen(
-        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
+        _ commandBuilder: @escaping () -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
         // session 作成中の deactivate 等を落とすと、Client だけ composition が
@@ -131,7 +132,7 @@ final class ConverterServerClient {
     /// 応答を受け取る XPC キューはブロックしない。呼び出し元だけが期限付きで待つ。
     func sendKeyEvent(_ request: ConverterKeyEventRequest) -> ConverterServerResponse? {
         let started = Date()
-        let response = sendSynchronously { _ in .handleKeyEvent(request) }
+        let response = sendSynchronously { .handleKeyEvent(request) }
         let duration = Date().timeIntervalSince(started)
         if response == nil || duration > 0.2 {
             // 入力文字・前後文脈は記録しない。
@@ -141,7 +142,7 @@ final class ConverterServerClient {
     }
 
     func sendSynchronously(
-        _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
+        _ commandBuilder: @escaping () -> ConverterSessionCommand,
         onlyIfSessionOpen: Bool = false
     ) -> ConverterServerResponse? {
         flushPendingCommands()
@@ -180,11 +181,11 @@ final class ConverterServerClient {
         switch pending.command {
         case .session(let builder):
             if let sessionID {
-                command = .session(sessionID: sessionID, command: builder(sessionID))
+                command = .session(sessionID: sessionID, command: builder())
             } else {
                 let newID = UUID().uuidString
                 openingSessionID = newID
-                command = .openSession(sessionID: newID, command: builder(newID))
+                command = .openSession(sessionID: newID, command: builder())
             }
         case .global(let global):
             command = global

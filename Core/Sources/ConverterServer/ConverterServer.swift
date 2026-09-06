@@ -39,17 +39,22 @@ final class ConverterServer: @unchecked Sendable {
 
     @MainActor
     func execute(_ command: ConverterServerCommand, owner: UUID) async throws -> ConverterServerResponse {
-        switch command {
-        case .openSession(let id, _):
-            sessionOwners[id] = owner
-        case .session(let id, _):
-            _ = try getSession(id)
-            sessionOwners[id] = owner
-        case .shutdown, .maintenance:
-            break
-        }
         defer { learningDataCommitScheduler.postponeIfScheduled(after: Self.learningDataCommitDelay) }
-        return try await handle(command)
+        switch command {
+        case .shutdown:
+            Self.scheduleShutdown()
+            return ConverterServerResponse(snapshot: .empty)
+        case .maintenance(let command):
+            return try handle(command)
+        case .openSession(let sessionID, let command):
+            createSessionIfNeeded(sessionID)
+            sessionOwners[sessionID] = owner
+            return try await handle(command, sessionID: sessionID)
+        case .session(let sessionID, let command):
+            _ = try getSession(sessionID)
+            sessionOwners[sessionID] = owner
+            return try await handle(command, sessionID: sessionID)
+        }
     }
 
     @MainActor
@@ -69,22 +74,6 @@ final class ConverterServer: @unchecked Sendable {
         kanaKanjiConverter.removeSession(session.conversionSessionID)
         scheduleLearningDataCommit()
         return true
-    }
-
-    @MainActor
-    private func handle(_ command: ConverterServerCommand) async throws -> ConverterServerResponse {
-        switch command {
-        case .shutdown:
-            Self.scheduleShutdown()
-            return ConverterServerResponse(snapshot: .empty)
-        case .maintenance(let command):
-            return try handle(command)
-        case .openSession(let sessionID, let command):
-            createSessionIfNeeded(sessionID)
-            return try await handle(command, sessionID: sessionID)
-        case .session(let sessionID, let command):
-            return try await handle(command, sessionID: sessionID)
-        }
     }
 
     @MainActor
