@@ -16,6 +16,7 @@ private final class TestConverterService: NSObject, NSXPCListenerDelegate, Conve
     private let lock = NSLock()
     private var connections: [NSXPCConnection] = []
     private var receivedCommands: [ConverterServerCommand] = []
+    private var closedSessionIDs: [String] = []
     private let responses: [Response]
 
     init(responses: [Response]) {
@@ -41,6 +42,12 @@ private final class TestConverterService: NSObject, NSXPCListenerDelegate, Conve
         return receivedCommands
     }
 
+    var closedSessions: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return closedSessionIDs
+    }
+
     func stop() {
         lock.lock()
         let connections = self.connections
@@ -51,7 +58,12 @@ private final class TestConverterService: NSObject, NSXPCListenerDelegate, Conve
     }
 
     func openSession(with reply: @escaping @Sendable (String) -> Void) { reply(UUID().uuidString) }
-    func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void) { reply(true) }
+    func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void) {
+        lock.lock()
+        closedSessionIDs.append(sessionID)
+        lock.unlock()
+        reply(true)
+    }
     func ping(_ message: String, with reply: @escaping @Sendable (String) -> Void) { reply(message) }
 
     func handleCommand(_ data: Data, with reply: @escaping @Sendable (Data?, NSString?) -> Void) {
@@ -192,5 +204,43 @@ final class ThinClientInputPipelineTests: XCTestCase {
 
         XCTAssertEqual(completions, 2)
         XCTAssertEqual(service.commands.count, 1)
+    }
+
+    func testDeactivationIsQueuedEvenWhileSessionIsOpening() throws {
+        let service = TestConverterService(responses: [
+            .init(data: try encodedResponse(state: .composing), delay: 0.03),
+            .init(data: try encodedResponse())
+        ])
+        defer { service.stop() }
+        let client = makeClient(service)
+        client.send({ _ in .composition(.snapshot) }, completion: { _ in })
+        var deactivated = false
+        client.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { response in
+            deactivated = response != nil
+        })
+        client.flushPendingCommands()
+        XCTAssertTrue(deactivated)
+        XCTAssertEqual(service.commands.count, 2)
+        guard case .session(_, .lifecycle(.deactivate)) = service.commands.last else {
+            return XCTFail("deactivate must not be silently discarded while opening")
+        }
+    }
+
+    func testClientDestructionClosesSessionWithoutAnotherKey() async throws {
+        let service = TestConverterService(responses: [.init(data: try encodedResponse())])
+        defer { service.stop() }
+        var client: ConverterServerClient? = makeClient(service)
+        XCTAssertNotNil(client?.sendSynchronously { _ in .composition(.snapshot) })
+        guard case .openSession(let id, _) = service.commands.first else {
+            return XCTFail("Expected a session")
+        }
+        weak var weakClient = client
+        client = nil
+        XCTAssertNil(weakClient)
+        let deadline = Date().addingTimeInterval(2)
+        while service.closedSessions.isEmpty && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(service.closedSessions, [id])
     }
 }

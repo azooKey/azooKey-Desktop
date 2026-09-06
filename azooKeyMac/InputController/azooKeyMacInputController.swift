@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import Core
 import InputMethodKit
@@ -7,10 +8,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     let converterServerClient = ConverterServerClient()
     private var currentConverterView: ConverterSessionSnapshot?
     private(set) var inputState: InputState = .none
-    private var inputLanguage: InputLanguage = .japanese
+    private var converterSessionState = ConverterClientSessionState()
+    private var inputLanguage: InputLanguage {
+        get { self.converterSessionState.inputLanguage }
+        set { self.converterSessionState.inputLanguage = newValue }
+    }
     private var nextKeyEventID: UInt64 = 0
     private var activationGeneration: UInt64 = 0
-    private var pendingConverterServerActivation: ConverterSessionActivation?
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -153,10 +157,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.updateTransformSelectedTextMenuItemEnabledState()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
-        self.pendingConverterServerActivation = ConverterSessionActivation(
-            config: self.converterServerSessionConfig,
-            inputLanguage: self.inputLanguage
-        )
+        self.converterSessionState.activate()
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
@@ -177,7 +178,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     @MainActor
     override func deactivateServer(_ sender: Any!) {
         self.activationGeneration &+= 1
-        self.pendingConverterServerActivation = nil
+        self.converterSessionState.deactivate()
         self.converterServerClient.sendIfSessionOpen({ _ in .lifecycle(.deactivate) }, completion: { _ in })
         self.currentConverterView = nil
         self.inputState = .none
@@ -200,7 +201,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             super.setValue(value, forTag: tag, client: sender)
         }
 
-        if let value = value as? NSString {
+        if tag == kTextServiceInputModePropertyTag, let value = value as? NSString,
+           value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" {
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
 
@@ -210,10 +212,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 // composing中でも英数キーMarkedTextを保ったまま英語入力へ移る。
                 if self.inputLanguage == .japanese {
                     self.inputLanguage = .english
-                    self.converterServerClient.send(
-                        { _ in .lifecycle(.synchronizeInputLanguage(.english)) },
-                        completion: { _ in }
-                    )
+                    self.synchronizeConverterInputLanguage()
                     self.refreshCandidateWindow()
                     self.refreshPredictionWindow()
                 }
@@ -221,10 +220,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 // 日本語モードへの切り替え
                 if self.inputLanguage == .english {
                     self.inputLanguage = .japanese
-                    self.converterServerClient.send(
-                        { _ in .lifecycle(.synchronizeInputLanguage(.japanese)) },
-                        completion: { _ in }
-                    )
+                    self.synchronizeConverterInputLanguage()
                 }
             }
         }
@@ -232,6 +228,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     override func menu() -> NSMenu! {
         self.appMenu
+    }
+
+    @MainActor
+    private func synchronizeConverterInputLanguage() {
+        // 初回キー前は activation に最新モードを同梱する。設定通知だけで
+        // session を開かず、短い非同期タイムアウトにも依存させない。
+        guard !self.converterSessionState.needsActivation else {
+            return
+        }
+        let language = self.inputLanguage
+        self.sendAndApply { _ in .lifecycle(.synchronizeInputLanguage(language)) }
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -364,9 +371,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             typeBackSlash: Config.TypeBackSlash().value,
             optionDirectInputText: optionDirectInputText,
             context: self.currentConverterTextContext(),
-            activation: self.pendingConverterServerActivation
+            activation: self.converterSessionState.takeActivation(config: self.converterServerSessionConfig)
         )
-        self.pendingConverterServerActivation = nil
         guard let response = self.converterServerClient.sendKeyEvent(request) else {
             return false
         }
@@ -381,10 +387,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.currentConverterView = nil
         self.inputState = .none
         self.activationGeneration &+= 1
-        self.pendingConverterServerActivation = ConverterSessionActivation(
-            config: self.converterServerSessionConfig,
-            inputLanguage: self.inputLanguage
-        )
+        self.converterSessionState.connectionDidReset()
+        // 非アクティブな client に遅れて届いた切断で、別アプリへ文字を挿入しない。
+        guard self.converterSessionState.isActive else {
+            return
+        }
         if !text.isEmpty {
             self.client()?.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             self.refreshMarkedText()
@@ -409,13 +416,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     private func sendAndApply(_ command: @escaping (String) -> ConverterSessionCommand) {
-        if let response = self.converterServerClient.sendSynchronously(command, onlyIfSessionOpen: true) {
+        let generation = self.activationGeneration
+        if let response = self.converterServerClient.sendSynchronously(command, onlyIfSessionOpen: true),
+           self.activationGeneration == generation {
             self.apply(response)
         }
     }
 
     @MainActor
     private func apply(_ response: ConverterServerResponse) {
+        let hadMarkedText = !self.currentMarkedText().elements.isEmpty
         if let inputLanguage = response.inputLanguage {
             self.inputLanguage = inputLanguage
         }
@@ -426,7 +436,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 self.apply(effect, client: client)
             }
         }
-        self.refreshMarkedText()
+        // composition がないモード変更等で空の marked text を送ると、
+        // ホスト側の選択範囲まで置換してしまうことがある。
+        if hadMarkedText || !self.currentMarkedText().elements.isEmpty {
+            self.refreshMarkedText()
+        }
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
         self.refreshReplaceSuggestionWindow()

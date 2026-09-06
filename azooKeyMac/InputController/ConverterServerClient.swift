@@ -1,6 +1,27 @@
 import Core
 import Foundation
 
+/// MainActor の Client が破棄された場合も接続を終了させる。
+/// deinit から actor へ Task を投げて Client 自身を延命しない。
+private final class ConverterConnectionLifetime: @unchecked Sendable {
+    let connection: NSXPCConnection
+    var sessionID: String?
+
+    init(_ connection: NSXPCConnection) { self.connection = connection }
+
+    deinit {
+        let connection = connection
+        guard let sessionID else {
+            connection.invalidate()
+            return
+        }
+        // 接続単位の回収に未対応の旧Serverにも、可能なら明示的に解放を通知する。
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in connection.invalidate() }
+        (proxy as? ConverterServerXPCProtocol)?.closeSession(sessionID) { _ in connection.invalidate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { connection.invalidate() }
+    }
+}
+
 @objc protocol ConverterServerXPCProtocol {
     func openSession(with reply: @escaping @Sendable (String) -> Void)
     func closeSession(_ sessionID: String, with reply: @escaping @Sendable (Bool) -> Void)
@@ -37,7 +58,8 @@ final class ConverterServerClient {
     private let keyEventTimeout: TimeInterval
     private let commandTimeout: TimeInterval
     private let connectionFactory: @Sendable () -> NSXPCConnection
-    private var connection: NSXPCConnection?
+    private var connectionLifetime: ConverterConnectionLifetime?
+    private var connection: NSXPCConnection? { connectionLifetime?.connection }
     private var sessionID: String?
     private var abandonedSessionIDs: [String] = []
     private var pendingCommands: [PendingCommand] = []
@@ -97,7 +119,9 @@ final class ConverterServerClient {
         _ commandBuilder: @escaping (String) -> ConverterSessionCommand,
         completion: @escaping (ConverterServerResponse?) -> Void
     ) {
-        guard sessionID != nil else {
+        // session 作成中の deactivate 等を落とすと、Client だけ composition が
+        // 消え、次の activate で Server の古い入力が復活する。
+        guard sessionID != nil || activeCommand?.openingSessionID != nil else {
             completion(nil)
             return
         }
@@ -106,7 +130,14 @@ final class ConverterServerClient {
 
     /// 応答を受け取る XPC キューはブロックしない。呼び出し元だけが期限付きで待つ。
     func sendKeyEvent(_ request: ConverterKeyEventRequest) -> ConverterServerResponse? {
-        sendSynchronously { _ in .handleKeyEvent(request) }
+        let started = Date()
+        let response = sendSynchronously { _ in .handleKeyEvent(request) }
+        let duration = Date().timeIntervalSince(started)
+        if response == nil || duration > 0.2 {
+            // 入力文字・前後文脈は記録しない。
+            onLog?("ConverterServer key \(request.eventID): success=\(response != nil), elapsed=\(duration)s")
+        }
+        return response
     }
 
     func sendSynchronously(
@@ -170,6 +201,7 @@ final class ConverterServerClient {
         do {
             let data = try ConverterServerCodec.encode(command)
             let connection = ensureConnection()
+            connectionLifetime?.sessionID = sessionID ?? openingSessionID
             if let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
                 complete(.failure(error.localizedDescription))
             }) as? ConverterServerXPCProtocol {
@@ -216,6 +248,7 @@ final class ConverterServerClient {
         if response != nil {
             if let openingSessionID = active.openingSessionID {
                 sessionID = openingSessionID
+                connectionLifetime?.sessionID = openingSessionID
             }
             pending.completion(response)
             startNextCommand()
@@ -238,7 +271,7 @@ final class ConverterServerClient {
         let connection = connectionFactory()
         connection.remoteObjectInterface = NSXPCInterface(with: ConverterServerXPCProtocol.self)
         connection.resume()
-        self.connection = connection
+        self.connectionLifetime = ConverterConnectionLifetime(connection)
         // 切断前の計算は継続している場合がある。新しい接続で旧 session を回収する。
         if !abandonedSessionIDs.isEmpty,
            let proxy = connection.remoteObjectProxyWithErrorHandler({ _ in }) as? ConverterServerXPCProtocol {
@@ -258,7 +291,8 @@ final class ConverterServerClient {
         }
         sessionID = nil
         connection?.invalidate()
-        connection = nil
+        connectionLifetime?.sessionID = nil
+        connectionLifetime = nil
         onSessionReset?()
     }
 }
