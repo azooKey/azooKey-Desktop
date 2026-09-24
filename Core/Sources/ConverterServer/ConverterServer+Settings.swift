@@ -109,7 +109,9 @@ extension ConverterServer {
                     .init(title: "British", value: .string(Config.KeyboardLayout.Value.british.rawValue)),
                     .init(title: "Colemak", value: .string(Config.KeyboardLayout.Value.colemak.rawValue)),
                     .init(title: "Dvorak", value: .string(Config.KeyboardLayout.Value.dvorak.rawValue)),
-                    .init(title: "Dvorak - QWERTY Command", value: .string(Config.KeyboardLayout.Value.dvorakQwertyCommand.rawValue))
+                    .init(title: "Dvorak - QWERTY Command", value: .string(Config.KeyboardLayout.Value.dvorakQwertyCommand.rawValue)),
+                    .init(title: "ProgrammerDvorak_JIS - QWERTY Command", value: .string(Config.KeyboardLayout.Value.programmerDvorakJIS.rawValue)),
+                    .init(title: "ProgrammerDvorak_US - QWERTY Command", value: .string(Config.KeyboardLayout.Value.programmerDvorakUS.rawValue))
                 ]),
                 value: .string(Config.KeyboardLayout().value.rawValue)
             ),

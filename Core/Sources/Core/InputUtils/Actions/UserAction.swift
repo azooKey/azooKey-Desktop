@@ -47,35 +47,68 @@ public enum UserAction {
             }
         }
 
+        private var currentLayout: Config.KeyboardLayout.Value {
+            return Config.KeyboardLayout().value
+        }
+
         public var inputPiece: InputPiece {
-            switch self {
-            case .one: .character("1")
-            case .two: .character("2")
-            case .three: .character("3")
-            case .four: .character("4")
-            case .five: .character("5")
-            case .six: .character("6")
-            case .seven: .character("7")
-            case .eight: .character("8")
-            case .nine: .character("9")
-            case .zero: .character("0")
-            case .shiftZero: .key(intention: "0", input: "0", modifiers: [.shift])
+            switch currentLayout {
+            case .programmerDvorakJIS, .programmerDvorakUS:
+                switch self {
+                case .one: return .character("&")
+                case .two: return .character("[")
+                case .three: return .character("{")
+                case .four: return .character("}")
+                case .five: return .character("(")
+                case .six: return .character("=")
+                case .seven: return .character("*")
+                case .eight: return .character(")")
+                case .nine: return .character("+")
+                case .zero: return .character("]")
+                case .shiftZero: return .key(intention: "6", input: "6", modifiers: [.shift])
+                }
+            default:
+                switch self {
+                case .one: return .character("1"); case .two: return .character("2")
+                case .three: return .character("3"); case .four: return .character("4")
+                case .five: return .character("5"); case .six: return .character("6")
+                case .seven: return .character("7"); case .eight: return .character("8")
+                case .nine: return .character("9"); case .zero: return .character("0")
+                case .shiftZero: return .key(intention: "0", input: "0", modifiers: [.shift])
+                }
             }
         }
 
         public var inputString: String {
-            switch self {
-            case .one: "1"
-            case .two: "2"
-            case .three: "3"
-            case .four: "4"
-            case .five: "5"
-            case .six: "6"
-            case .seven: "7"
-            case .eight: "8"
-            case .nine: "9"
-            case .zero: "0"
-            case .shiftZero: "0"
+            switch currentLayout {
+            case .programmerDvorakJIS, .programmerDvorakUS:
+                switch self {
+                case .one: "&"
+                case .two: "["
+                case .three: "{"
+                case .four: "}"
+                case .five: "("
+                case .six: "="
+                case .seven: "*"
+                case .eight: ")"
+                case .nine: "+"
+                case .zero: "]"
+                case .shiftZero: "6"
+           }
+            default:
+                switch self {
+                case .one: "1"
+                case .two: "2"
+                case .three: "3"
+                case .four: "4"
+                case .five: "5"
+                case .six: "6"
+                case .seven: "7"
+                case .eight: "8"
+                case .nine: "9"
+                case .zero: "0"
+                case .shiftZero: "0"
+                }
             }
         }
     }
@@ -104,7 +137,6 @@ public enum UserAction {
             return KeyMap.h2zMap(c)
         }
     }
-
     // この種のコードは複雑にしかならないので、lintを無効にする
     // swiftlint:disable:next cyclomatic_complexity
     public static func getUserAction(
@@ -114,6 +146,7 @@ public enum UserAction {
     ) -> UserAction {
         let typeBackSlash = typeBackSlash ?? Config.TypeBackSlash().value
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
+        let currentLayout = Config.KeyboardLayout().value
         func keyMap(_ string: String, invertPunctuation: Bool = false) -> [InputPiece] {
             switch inputLanguage {
             case .english:
@@ -126,10 +159,16 @@ public enum UserAction {
         }
 
         // Resolve action based on logical key character (ignoring modifiers)
-        if let logicalKey = eventCore.charactersIgnoringModifiers?.lowercased() {
+        if let originalLogicalKey = eventCore.charactersIgnoringModifiers?.lowercased() {
+            let logicalKey: String
+            if let firstChar = originalLogicalKey.first, let mappedChar = currentLayout.keyRemapTable?[firstChar] {
+                logicalKey = String(mappedChar).lowercased()
+            } else {
+                logicalKey = originalLogicalKey
+            }
             switch (logicalKey, eventCore.modifierFlags) {
             case (let key, [.option])
-                    where DiacriticAttacher.deadKeyList.contains(key) && inputLanguage == .english:
+                where DiacriticAttacher.deadKeyList.contains(key) && inputLanguage == .english:
                 return .deadKey(key)
 
             case ("h", [.control]): // Control + h
@@ -164,18 +203,28 @@ public enum UserAction {
                 return .startUnicodeInput
 
             case ("¥", [.shift, .option]), ("¥", [.shift]), ("\\", [.shift, .option]), ("\\", [.shift]):
+                if currentLayout.keyRemapTable != nil { break }
                 return .input(keyMap("|"))
             case ("¥", []), ("\\", []):
-                return if typeBackSlash {
-                    .input(keyMap("\\"))
+                if currentLayout.hasDistinctBackSlashAndYen {
+                    // 「¥」と「\」が両方存在する場合は、
+                    // typeBackSlash設定がONの時のみ「¥」「\」のキーを入れ替える
+                    let isYen = (logicalKey == "¥")
+                    return typeBackSlash ? .input(keyMap(isYen ? "\\" : "¥")) : .input(keyMap(isYen ? "¥" : "\\"))
                 } else {
-                    .input(keyMap("¥"))
+                    // typeBackSlash設定がONの場合は「\」 OFFの場合は「¥」
+                    return typeBackSlash ? .input(keyMap("\\")) : .input(keyMap("¥"))
                 }
+
             case ("¥", [.option]), ("\\", [.option]):
-                return if typeBackSlash {
-                    .input(keyMap("¥"))
+                if currentLayout.hasDistinctBackSlashAndYen {
+                    // Option押下時は標準の挙動に合わせてUnshifted時と出力を逆転させる。
+                    // typeBackSlash設定がOFFの時のみ「¥」「\」のキーを入れ替える
+                    let isYen = (logicalKey == "¥")
+                    return typeBackSlash ? .input(keyMap(isYen ? "¥" : "\\")) : .input(keyMap(isYen ? "\\" : "¥"))
                 } else {
-                    .input(keyMap("\\"))
+                    // typeBackSlash設定がONの場合は「¥」 OFFの場合は「\」
+                    return typeBackSlash ? .input(keyMap("¥")) : .input(keyMap("\\"))
                 }
 
             case ("/", [.shift, .option]) where inputLanguage == .japanese:
@@ -206,6 +255,26 @@ public enum UserAction {
             // 後続の物理キー処理をする前に未定義のControl系をホストアプリへ渡す
             // Ctrl+Delete(keyCode 51)だけは.forgetとして下のDelete分岐で扱う
             return .unknown
+        }
+
+        if eventCore.keyCode == 29, let text = currentLayout.jisZeroKeyOutput(isShiftPressed:eventCore.modifierFlags.contains(.shift)) {
+            // 29番キー(JIS ゼロ)のオーバーライド処理
+            // OS仕様(シフト有無によらず常に「0」)を回避し、対象配列のみ出力を上書きする。
+            // switch内の fallthrough (case 18...29) との干渉を避け、
+            // 対象外の配列を安全にdefaultへ流すためswitch手前でフックする。
+            return .input(keyMap(text))
+        }
+
+        if eventCore.keyCode == 94, let text = currentLayout.jisUnderscoreKeyOutput(
+            isShiftPressed: eventCore.modifierFlags.contains(.shift),
+            isOptionPressed: eventCore.modifierFlags.contains(.option),
+            typeBackSlash: typeBackSlash
+        ) {
+            // 94番キー(JIS アンダースコア)のオーバーライド処理
+            // OS仕様(シフト有無によらず常に「_」)を回避し、対象配列のみ出力を上書きする。
+            // switch内の fallthrough (case 18...29) との干渉を避け、
+            // 対象外の配列を安全にdefaultへ流すためswitch手前でフックする。
+            return .input(keyMap(text))
         }
 
         // Resolve action based on physical key code
@@ -287,7 +356,13 @@ public enum UserAction {
             }
         default:
             if let text = eventCore.characters, isPrintable(text) {
-                return .input(keyMap(text))
+                let mappedText: String
+                if let remapTable = currentLayout.keyRemapTable {
+                    mappedText = String(text.map { remapTable[$0] ?? $0 })
+                } else {
+                    mappedText = text
+                }
+                return .input(keyMap(mappedText))
             } else {
                 return .unknown
             }

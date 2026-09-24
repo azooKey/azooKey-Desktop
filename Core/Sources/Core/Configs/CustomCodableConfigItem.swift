@@ -182,8 +182,22 @@ extension Config {
             case colemak
             case dvorak
             case dvorakQwertyCommand
+            case programmerDvorakJIS
+            case programmerDvorakUS
 
             public var layoutIdentifier: String {
+                /// 【独自の keyRemapTable を持つ配列を追加する際の注意】
+                /// 1. 対象キーボードに応じた識別子を返却し、それを基準に辞書を作成すること
+                ///    OSはここで指定された識別子に従って論理キーを生成し、azooKeyに渡します。
+                ///    JISキーボード用として追加する場合は「com.apple.keylayout.Romaji」を、
+                ///    USキーボード用として追加する場合は「com.apple.keylayout.US」を必ず返却してください。
+                ///    その上で、追加する配列の変換辞書（keyRemapTable）は、
+                ///    この戻り値によってOSから送られてくる論理文字を前提として記述する必要があります。
+                /// 2. 必ずJIS用とUS用の2つの独立した case を用意し、1つに統合しないこと
+                ///    独自の変換マップ（keyRemapTable）を持つ配列は、記号出力をOSに委ねる標準配列とは異なり、
+                ///    ベースとなるJIS/USの前提が一致しないと出力が完全に破綻します。
+                ///    OSによるキーボードのJIS/US誤認識が発生した際、ユーザーが手動で正しい配列を
+                ///    選択して回避できる手段を残しておく必要があるため、内部での自動判定は避けてください。
                 switch self {
                 case .qwerty:
                     return "com.apple.keylayout.US"
@@ -197,6 +211,114 @@ extension Config {
                     return "com.apple.keylayout.Dvorak"
                 case .dvorakQwertyCommand:
                     return "com.apple.keylayout.DVORAK-QWERTYCMD"
+                case .programmerDvorakJIS:
+                    return "com.apple.keylayout.Romaji"
+                case .programmerDvorakUS:
+                    return "com.apple.keylayout.US"
+                }
+            }
+
+            public var hasDistinctBackSlashAndYen: Bool {
+                /// 【独自の keyRemapTable を追加した配列専用の設定】
+                ///　「¥」と「\」が両方存在する場合にtrueを返却する処理を追加すること
+                switch self {
+                case .programmerDvorakJIS:
+                    return true
+                default:
+                    return false
+                }
+            }
+
+            public func jisZeroKeyOutput(isShiftPressed: Bool) -> String? {
+                /// 【独自の keyRemapTable を追加した配列専用の設定】
+                /// JISに於いて「0」はShift押下有無にかかわらず常に "0" が送られる。
+                /// Shiftの有無を区別して変換できないため、isShiftPressedに応じた文字返却をして下さい。
+                switch self {
+                case .programmerDvorakJIS:
+                    if isShiftPressed {
+                        return "6"
+                    } else {
+                        return "]"
+                    }
+                default:
+                    // QWERTYなど対象外の配列は nil を返し、元の処理（default: での辞書翻訳など）へ流す
+                    return nil
+                }
+            }
+
+            public func jisUnderscoreKeyOutput(isShiftPressed: Bool, isOptionPressed: Bool, typeBackSlash: Bool) -> String? {
+                /// 【独自の keyRemapTable を追加した配列専用の設定】
+                /// JISに於いて「_」はShift押下有無にかかわらず常に "_" が送られる。
+                /// Shiftの有無を区別して変換できないため、isShiftPressedに応じた文字返却をして下さい。
+                switch self {
+                case .programmerDvorakJIS:
+                    if isShiftPressed {
+                        return "|"
+                    } else if isOptionPressed {
+                        // Option押下時は標準仕様との整合性を取るため、通常時と出力を逆転させる
+                        if typeBackSlash {
+                            // 設定ONの時、通常時は「¥」だが、Option時は本来の「\」を出力
+                            return "\\"
+                        } else {
+                            // 設定OFFの時、通常時は「\」だが、Option時は「¥」を出力
+                            return "¥"
+                        }
+                    } else {
+                        // 通常時 (Unshifted)
+                        if typeBackSlash {
+                            // 「¥」と「\」の専用キーが両方存在するため、
+                            // 設定がONの場合は、本来の文字「\」ではなく「¥」を出力
+                            return "¥"
+                        } else {
+                            // 設定がOFFの場合は、本来の文字「\」を出力
+                            return "\\"
+                        }
+                    }
+                default:
+                    // QWERTYなど対象外の配列は nil を返し、元の処理（default: での辞書翻訳など）へ流す
+                    return nil
+                }
+            }
+
+            public var keyRemapTable: [Character: Character]? {
+                /// 【独自配列用の論理キー変換辞書】
+                /// 論理キーを別の文字に変換するマッピング辞書です。
+                /// OSから送られてくる論理文字をキー(Key)とし、配列特有の変換後の文字を値(Value)として定義してください。
+                /// ※ JISの「_」や「0」など、OS仕様でShiftの区別ができないキーはここでは変換できません。専用関数で処理してください。
+                switch self {
+                case .programmerDvorakJIS:
+                    return [
+                        // JIS配列 Unshifted
+                        "1":"&", "2":"[", "3":"{", "4":"}", "5":"(", "6":"=", "7":"*", "8":")", "9":"+", "0":"]",
+                        "q":";", "w":",", "e":".", "r":"p", "t":"y", "y":"f", "u":"g", "i":"c", "o":"r", "p":"l", "@":"/", "[":"@",
+                        "a":"a", "s":"o", "d":"e", "f":"u", "g":"i", "h":"d", "j":"h", "k":"t", "l":"n", ";":"s", ":":"-", "]":"$",
+                        "z":"'", "x":"q", "c":"j", "v":"k", "b":"x", "n":"b", "m":"m", ",":"w", ".":"v", "/":"z", "\\":"\\",
+                        "-":"!", "^":"#", "¥":"¥",
+
+                        // JIS配列 Shifted
+                        "!":"%", "\"":"7", "#":"5", "$":"3", "%":"1", "&":"9", "'":"0", "(":"2", ")":"4", "=":"8", "~":"`", "|":"|",
+                        "Q":":", "W":"<", "E":">", "R":"P", "T":"Y", "Y":"F", "U":"G", "I":"C", "O":"R", "P":"L", "`":"?", "{":"^",
+                        "A":"A", "S":"O", "D":"E", "F":"U", "G":"I", "H":"D", "J":"H", "K":"T", "L":"N", "+":"S", "*":"_", "}":"~",
+                        "Z":"\"", "X":"Q", "C":"J", "V":"K", "B":"X", "N":"B", "M":"M", "<":"W", ">":"V", "?":"Z"
+                    ]
+                case .programmerDvorakUS:
+                    return [
+                        // US配列 Unshifted
+                        "1":"&", "2":"[", "3":"{", "4":"}", "5":"(", "6":"=", "7":"*", "8":")", "9":"+", "0":"]",
+                        "q":";", "w":",", "e":".", "r":"p", "t":"y", "y":"f", "u":"g", "i":"c", "o":"r", "p":"l", "[":"/", "]":"@",
+                        "a":"a", "s":"o", "d":"e", "f":"u", "g":"i", "h":"d", "j":"h", "k":"t", "l":"n", ";":"s", "'":"-",
+                        "z":"'", "x":"q", "c":"j", "v":"k", "b":"x", "n":"b", "m":"m", ",":"w", ".":"v", "/":"z", "\\":"\\",
+                        "-":"!", "=":"#",
+
+                        // US配列 Shifted
+                        "!":"%", "@":"7", "#":"5", "$":"3", "%":"1", "^":"9", "&":"0", "*":"2", "(":"4", ")":"6", "_":"8", "+":"`",
+                        "Q":":", "W":"<", "E":">", "R":"P", "T":"Y", "Y":"F", "U":"G", "I":"C", "O":"R", "P":"L", "{":"?", "}":"^",
+                        "A":"A", "S":"O", "D":"E", "F":"U", "G":"I", "H":"D", "J":"H", "K":"T", "L":"N", ":":"S", "\"":"_",
+                        "Z":"\"", "X":"Q", "C":"J", "V":"K", "B":"X", "N":"B", "M":"M", "<":"W", ">":"V", "?":"Z", "|":"|"
+                    ]
+                default:
+                    // QWERTYなどの標準配列
+                    return nil
                 }
             }
         }
