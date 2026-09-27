@@ -64,6 +64,26 @@ private func makeEvent(
         eventCore: makeEvent(logicalKey: ".", characters: "≥", modifiers: option),
         inputLanguage: .japanese
     )) == "。")
+    for (style, normal, inverted): (Config.PunctuationStyle.Value, String, String) in [
+        (.kutenAndToten, "。", "．"),
+        (.kutenAndComma, "。", "．"),
+        (.periodAndToten, "．", "。"),
+        (.periodAndComma, "．", "。")
+    ] {
+        Config.PunctuationStyle().value = style
+        for isNumericInput in [false, true] {
+            #expect(inputString(from: UserAction.getUserAction(
+                eventCore: makeEvent(logicalKey: ".", characters: ".", modifiers: []),
+                inputLanguage: .japanese,
+                isNumericInput: isNumericInput
+            )) == (isNumericInput ? "." : normal))
+            #expect(inputString(from: UserAction.getUserAction(
+                eventCore: makeEvent(logicalKey: ".", characters: "≥", modifiers: option),
+                inputLanguage: .japanese,
+                isNumericInput: isNumericInput
+            )) == inverted)
+        }
+    }
 
     #expect(inputString(from: UserAction.getUserAction(
         eventCore: makeEvent(logicalKey: "[", characters: "[", modifiers: option),

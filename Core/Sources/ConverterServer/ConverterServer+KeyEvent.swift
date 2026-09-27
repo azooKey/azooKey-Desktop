@@ -54,7 +54,8 @@ extension ConverterServer {
         let userAction = UserAction.getUserAction(
             eventCore: request.event,
             inputLanguage: session.inputLanguage,
-            typeBackSlash: request.typeBackSlash
+            typeBackSlash: request.typeBackSlash,
+            isNumericInput: session.manager.convertTarget.last?.isNumber == true
         )
         let (clientAction, clientActionCallback) = session.inputState.event(
             eventCore: request.event,
