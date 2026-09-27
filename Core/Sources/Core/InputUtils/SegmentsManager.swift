@@ -2,6 +2,8 @@ import Foundation
 import KanaKanjiConverterModuleWithDefaultDictionary
 
 public final class SegmentsManager {
+    private static let textReplacer = TextReplacer.withDefaultEmojiDictionary()
+
     public init(
         kanaKanjiConverter: KanaKanjiConverter,
         applicationDirectoryURL: URL,
@@ -198,7 +200,7 @@ public final class SegmentsManager {
             learningType: Config.Learning().value.learningType,
             memoryDirectoryURL: self.azooKeyMemoryDir,
             sharedContainerURL: CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
-            textReplacer: .withDefaultEmojiDictionary(),
+            textReplacer: Self.textReplacer,
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             zenzaiMode: self.zenzaiMode(
                 leftSideContext: leftSideContext,
