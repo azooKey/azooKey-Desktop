@@ -83,3 +83,68 @@ private func disposition(
     #expect(disposition(event: event) == .fallthroughToApplication)
     #expect(disposition(event: event, state: .composing) == .sendToServer)
 }
+
+private func provisionalMarkedText(
+    event: KeyEventCore,
+    state: ConverterInputState = .none,
+    language: InputLanguage = .japanese,
+    hasPendingKeyEvents: Bool = false
+) -> String? {
+    ConverterClientEventRouter.provisionalMarkedText(
+        event: event,
+        context: .init(
+            acknowledgedInputState: state,
+            acknowledgedInputLanguage: language,
+            hasPendingKeyEvents: hasPendingKeyEvents
+        )
+    )
+}
+
+private let letterB = KeyEventCore(
+    modifierFlags: [],
+    characters: "b",
+    charactersIgnoringModifiers: "b",
+    keyCode: 11
+)
+
+@Test func firstCharacterIsPlacedAsProvisionalMarkedText() {
+    #expect(provisionalMarkedText(event: letterB) == "b")
+    #expect(provisionalMarkedText(event: letterB, language: .english) == "b")
+}
+
+@Test func provisionalMarkedTextKeepsRawKeyForKanaInput() {
+    // かな入力の変換は Server の入力テーブルが行うため、Client は生のキーを置く
+    let event = KeyEventCore(
+        modifierFlags: [],
+        characters: "r",
+        charactersIgnoringModifiers: "r",
+        keyCode: 15
+    )
+    #expect(provisionalMarkedText(event: event) == "r")
+}
+
+@Test func provisionalMarkedTextIsAccumulatedWhileEarlierKeyEventIsPending() {
+    // acknowledged state が古くても文字は返す。積み上げは Client が行う
+    #expect(provisionalMarkedText(event: letterB, hasPendingKeyEvents: true) == "b")
+}
+
+@Test func provisionalMarkedTextIsNotPlacedDuringComposition() {
+    #expect(provisionalMarkedText(event: letterB, state: .composing) == nil)
+}
+
+@Test func provisionalMarkedTextIsNotPlacedForNonInputKeys() {
+    let backspace = KeyEventCore(
+        modifierFlags: [],
+        characters: nil,
+        charactersIgnoringModifiers: nil,
+        keyCode: 51
+    )
+    let commandShortcut = KeyEventCore(
+        modifierFlags: [.command],
+        characters: "c",
+        charactersIgnoringModifiers: "c",
+        keyCode: 8
+    )
+    #expect(provisionalMarkedText(event: backspace) == nil)
+    #expect(provisionalMarkedText(event: commandShortcut) == nil)
+}
