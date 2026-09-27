@@ -29,8 +29,7 @@ extension ConverterServer {
             session.manager.activate()
         }
         session.setContext(request.context)
-        Config.DebugPredictiveTyping().value = request.enablePredictiveTyping
-        Config.DebugTypoCorrection().value = request.enableTypoCorrection
+        applyRequestSettings(request)
 
         if request.enableOptionDirectFullWidthInput,
            let text = OptionDirectInputResolver.resolve(

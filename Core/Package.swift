@@ -61,6 +61,13 @@ targets.append(
         swiftSettings: [.interoperabilityMode(.Cxx)]
     )
 )
+targets.append(
+    .testTarget(
+        name: "ConverterServerTests",
+        dependencies: ["ConverterServer"],
+        swiftSettings: [.interoperabilityMode(.Cxx)]
+    )
+)
 #endif
 
 let package = Package(
