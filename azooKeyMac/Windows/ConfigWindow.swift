@@ -752,6 +752,7 @@ struct ConfigWindow: View {
                 keys: [
                     Config.TypeBackSlash.key,
                     Config.TypeHalfSpace.key,
+                    Config.DateFormatPreference.key,
                     Config.OptionDirectFullWidthInput.key,
                     Config.PunctuationStyle.key
                 ]
