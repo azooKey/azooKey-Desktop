@@ -12,12 +12,29 @@ public enum CustomInputTableStore {
     private static let fileName = "custom_input_table.tsv"
 
     static var directoryURL: URL {
+        #if os(macOS)
+        return AppGroup.applicationSupportDirectoryURL()
+            .appendingPathComponent(directoryName, isDirectory: true)
+        #else
+        return legacyDirectoryURL
+        #endif
+    }
+
+    private static var legacyDirectoryURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return base.appendingPathComponent(appSupportSubdir, isDirectory: true)
             .appendingPathComponent(directoryName, isDirectory: true)
     }
 
-    static var fileURL: URL {
+    public static var fileURL: URL {
+        fileURL(in: directoryURL)
+    }
+
+    public static var legacyFileURL: URL {
+        fileURL(in: legacyDirectoryURL)
+    }
+
+    private static func fileURL(in directoryURL: URL) -> URL {
         #if canImport(UniformTypeIdentifiers) && !os(Linux)
         return directoryURL.appendingPathComponent(fileName, conformingTo: .text)
         #else
