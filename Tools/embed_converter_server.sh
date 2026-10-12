@@ -6,7 +6,9 @@ if [ "${CONFIGURATION}" = "Release" ]; then
     swift_configuration=release
 fi
 
-swift build --package-path "${SRCROOT}/Core" --product ConverterServer -c "${swift_configuration}"
+swift build --package-path "${SRCROOT}/Core" --product ConverterServer -c "${swift_configuration}" \
+    -Xlinker -platform_version -Xlinker macos \
+    -Xlinker "${MACOSX_DEPLOYMENT_TARGET}" -Xlinker "${SDK_VERSION}"
 
 server_source="${SRCROOT}/Core/.build/${swift_configuration}/ConverterServer"
 server_directory="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/ConverterServer"
@@ -24,9 +26,13 @@ for resource_bundle in "${server_build_directory}"/*.bundle; do
         resource_bundle_name="$(basename "${resource_bundle}")"
         embedded_resource_bundle="${server_directory}/${resource_bundle_name}"
         ditto "${resource_bundle}" "${embedded_resource_bundle}"
-        # command-line SwiftPM buildが生成するbundleはInfo.plistを持たないため、
-        # archiveのcodesignが正規のresource bundleとして検証できるよう補う。
-        cp "${SRCROOT}/Tools/ConverterServerResourceBundleInfo.plist" "${embedded_resource_bundle}/Info.plist"
+        # swiftbuildが生成するContents/Info.plistに加えてbundle直下にも置くと署名に失敗するため、Info.plistがない場合だけ補う。
+        if [ ! -f "${embedded_resource_bundle}/Contents/Info.plist" ] && \
+            [ ! -f "${embedded_resource_bundle}/Info.plist" ]; then
+            # command-line SwiftPM buildが生成するbundleはInfo.plistを持たないため、
+            # archiveのcodesignが正規のresource bundleとして検証できるよう補う。
+            cp "${SRCROOT}/Tools/ConverterServerResourceBundleInfo.plist" "${embedded_resource_bundle}/Info.plist"
+        fi
     fi
 done
 
