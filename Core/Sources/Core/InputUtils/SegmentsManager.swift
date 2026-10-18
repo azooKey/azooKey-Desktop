@@ -11,6 +11,7 @@ public final class SegmentsManager {
         context: Context = Context()
     ) {
         self.kanaKanjiConverter = kanaKanjiConverter
+        self.conversionSessionID = kanaKanjiConverter.createSession()
         self.applicationDirectoryURL = applicationDirectoryURL
         self.containerURL = containerURL
         self.context = context
@@ -29,7 +30,25 @@ public final class SegmentsManager {
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
-    private var kanaKanjiConverter: KanaKanjiConverter
+    private let kanaKanjiConverter: KanaKanjiConverter
+    private let conversionSessionID: KanaKanjiConverter.ConversionSessionID
+
+    deinit {
+        self.kanaKanjiConverter.removeSession(self.conversionSessionID)
+    }
+
+    /// 辞書・モデルは共有し、変換中の状態は入力セッションごとに分離する。
+    @MainActor
+    private func withConverter<Result>(_ operation: (KanaKanjiConverter) -> Result) -> Result {
+        do {
+            return try self.kanaKanjiConverter.withSession(self.conversionSessionID) {
+                operation(self.kanaKanjiConverter)
+            }
+        } catch {
+            // このセッションを破棄するのは自分自身のdeinitだけ。
+            preconditionFailure("SegmentsManager lost its conversion session: \(error)")
+        }
+    }
     private let applicationDirectoryURL: URL
     private let containerURL: URL?
     private let context: Context
@@ -238,22 +257,24 @@ public final class SegmentsManager {
 
     @MainActor
     public func reloadUserDictionary() {
-        self.kanaKanjiConverter.updateUserDictionaryURL(
-            CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
-            forceReload: true
-        )
+        self.withConverter { converter in
+            converter.updateUserDictionaryURL(
+                CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
+                forceReload: true
+            )
+        }
     }
 
     @MainActor
     public func resetLearningData() {
-        self.kanaKanjiConverter.resetMemory()
+        self.withConverter { $0.resetMemory() }
     }
 
     @MainActor
     public func deactivate(flushLearningData: Bool = true) {
-        self.kanaKanjiConverter.stopComposition()
+        self.withConverter { $0.stopComposition() }
         if flushLearningData {
-            self.kanaKanjiConverter.commitUpdateLearningData()
+            self.withConverter { $0.commitUpdateLearningData() }
         }
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
@@ -271,7 +292,7 @@ public final class SegmentsManager {
     /// この入力を打ち切る
     public func stopComposition() {
         self.composingText.stopComposition()
-        self.kanaKanjiConverter.stopComposition()
+        self.withConverter { $0.stopComposition() }
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
@@ -289,7 +310,7 @@ public final class SegmentsManager {
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
-        self.kanaKanjiConverter.commitUpdateLearningData()
+        self.withConverter { $0.commitUpdateLearningData() }
         self.shouldShowCandidateWindow = false
         self.selectionIndex = nil
         self.resetAdditionalCandidates()
@@ -416,7 +437,7 @@ public final class SegmentsManager {
     @MainActor
     public func forgetMemory() {
         if let selectedCandidate {
-            self.kanaKanjiConverter.forgetMemory(selectedCandidate)
+            self.withConverter { $0.forgetMemory(selectedCandidate) }
             self.appendDebugMessage("\(#function): forget \(selectedCandidate.data.map {$0.word})")
         }
     }
@@ -525,7 +546,7 @@ public final class SegmentsManager {
         // 不要
         if composingText.isEmpty {
             self.rawCandidates = nil
-            self.kanaKanjiConverter.stopComposition()
+            self.withConverter { $0.stopComposition() }
             return
         }
         /// 日付・時刻変換を事前に入れておく
@@ -558,20 +579,22 @@ public final class SegmentsManager {
                 .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
             ]
 
-        self.kanaKanjiConverter.importDynamicUserDictionary([], shortcuts: dynamicShortcuts)
+        self.withConverter { $0.importDynamicUserDictionary([], shortcuts: dynamicShortcuts) }
 
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: ContextLength.conversion)
         let rightSideContext = forcedRightSideContext ?? self.getCleanRightSideContext(maxCount: ContextLength.conversion)
-        let result = self.kanaKanjiConverter.requestCandidates(
-            self.composingText,
-            options: options(
-                leftSideContext: leftSideContext,
-                rightSideContext: rightSideContext,
-                requestRichCandidates: requestRichCandidates,
-                requireJapanesePrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled,
-                requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
+        let result = self.withConverter { converter in
+            converter.requestCandidates(
+                self.composingText,
+                options: options(
+                    leftSideContext: leftSideContext,
+                    rightSideContext: rightSideContext,
+                    requestRichCandidates: requestRichCandidates,
+                    requireJapanesePrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled,
+                    requireEnglishPrediction: Config.DebugPredictiveTyping().value ? .manualMix : .disabled
+                )
             )
-        )
+        }
         self.rawCandidates = result
     }
 
@@ -582,8 +605,8 @@ public final class SegmentsManager {
 
     /// - note: 画面更新との整合性を保つため、この関数の実行前に左文脈を取得し、これを引数として与える
     @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
-        self.kanaKanjiConverter.setCompletedData(candidate)
-        self.kanaKanjiConverter.updateLearningData(candidate)
+        self.withConverter { $0.setCompletedData(candidate) }
+        self.withConverter { $0.updateLearningData(candidate) }
         self.composingText.prefixComplete(composingCount: candidate.composingCount)
 
         if !self.composingText.isEmpty {
@@ -947,7 +970,7 @@ public final class SegmentsManager {
 
     @MainActor
     func acceptPredictionCandidate(_ candidate: Candidate) {
-        guard self.kanaKanjiConverter.acceptPredictionCandidate(candidate, composingText: &self.composingText) else {
+        guard self.withConverter({ $0.acceptPredictionCandidate(candidate, composingText: &self.composingText) }) else {
             return
         }
         self.lastInputStyle = .direct
@@ -966,6 +989,7 @@ public final class SegmentsManager {
         }
     }
 
+    @MainActor
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
         guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
             return []
@@ -975,24 +999,26 @@ public final class SegmentsManager {
         }
 
         let leftSideContext = self.getCleanLeftSideContext(maxCount: ContextLength.conversion) ?? ""
-        let typoCandidates = self.kanaKanjiConverter.experimentalRequestTypoCorrection(
-            leftSideContext: leftSideContext,
-            composingText: targetComposingText,
-            options: options(
+        let typoCandidates = self.withConverter { converter in
+            converter.experimentalRequestTypoCorrection(
                 leftSideContext: leftSideContext,
-                rightSideContext: nil,
-                requestRichCandidates: false,
-                requireJapanesePrediction: .disabled,
-                requireEnglishPrediction: .disabled
-            ),
-            inputStyle: inputStyle,
-            config: .init(
-                languageModel: .ngram(.init(prefix: self.downloadedInputN5LMDir.path + "/lm_", n: 5, d: 0.75)),
-                beamSize: 16,
-                topK: 32,
-                nBest: 3
+                composingText: targetComposingText,
+                options: options(
+                    leftSideContext: leftSideContext,
+                    rightSideContext: nil,
+                    requestRichCandidates: false,
+                    requireJapanesePrediction: .disabled,
+                    requireEnglishPrediction: .disabled
+                ),
+                inputStyle: inputStyle,
+                config: .init(
+                    languageModel: .ngram(.init(prefix: self.downloadedInputN5LMDir.path + "/lm_", n: 5, d: 0.75)),
+                    beamSize: 16,
+                    topK: 32,
+                    nBest: 3
+                )
             )
-        )
+        }
 
         var seen: Set<String> = []
         return typoCandidates.compactMap { candidate in
@@ -1007,20 +1033,23 @@ public final class SegmentsManager {
         }
     }
 
+    @MainActor
     private func convertedText(reading: String, leftSideContext: String?) -> String? {
         var composingText = ComposingText()
         composingText.insertAtCursorPosition(reading, inputStyle: .direct)
 
-        let result = self.kanaKanjiConverter.requestCandidates(
-            composingText,
-            options: options(
-                leftSideContext: leftSideContext,
-                rightSideContext: nil,
-                requestRichCandidates: false,
-                requireJapanesePrediction: .disabled,
-                requireEnglishPrediction: .disabled
+        let result = self.withConverter { converter in
+            converter.requestCandidates(
+                composingText,
+                options: options(
+                    leftSideContext: leftSideContext,
+                    rightSideContext: nil,
+                    requestRichCandidates: false,
+                    requireJapanesePrediction: .disabled,
+                    requireEnglishPrediction: .disabled
+                )
             )
-        )
+        }
         return result.mainResults.first?.text
     }
 

@@ -9,11 +9,7 @@ public enum AppGroup {
             ?? Self.containerURL(homeDirectoryURL: fileManager.homeDirectoryForCurrentUser)
     }
 
-    /// App Group entitlementを持たない同一ユーザーのHelperから共有コンテナを参照するためのURL。
-    ///
-    /// ConverterServerはsandboxed appではなくLaunchAgentなので、FileManagerのApp Group APIは
-    /// `nil`を返す。その場合もクライアントと同じデータを使えるよう、macOSで定義された
-    /// ユーザー単位のGroup Containers配下を明示的に解決する。
+    /// 既存バージョンと同じ共有コンテナを、App Group APIが利用できない環境でも参照する。
     public static func containerURL(homeDirectoryURL: URL) -> URL {
         homeDirectoryURL
             .appendingPathComponent("Library", isDirectory: true)

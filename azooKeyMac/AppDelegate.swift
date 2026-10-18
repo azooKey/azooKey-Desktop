@@ -8,6 +8,7 @@
 import Cocoa
 import Core
 import InputMethodKit
+import KanaKanjiConverterModuleWithDefaultDictionary
 import SwiftUI
 
 // Necessary to launch this app
@@ -32,27 +33,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     weak var userDictionaryEditorWindow: NSWindow?
     var configWindowController: NSWindowController?
     var userDictionaryEditorWindowController: NSWindowController?
-    private let converterServerClient = ConverterServerClient()
+    let kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
+    private let learningDataCommitScheduler = DebouncedActionScheduler()
+    private static let learningDataCommitDelay: TimeInterval = 2
 
-    private func exportInitialUserDictionaryIfNeeded() {
-        Task { @MainActor in
-            self.synchronizeUserDictionaryOnServer(forceExport: false)
-        }
-    }
-
-    func exportUserDictionaryAndReloadConverter() {
-        Task { @MainActor in
-            self.synchronizeUserDictionaryOnServer(forceExport: true)
+    @MainActor
+    func scheduleLearningDataCommit() {
+        learningDataCommitScheduler.schedule(after: Self.learningDataCommitDelay) { [weak self] in
+            self?.kanaKanjiConverter.commitUpdateLearningData()
         }
     }
 
     @MainActor
-    private func synchronizeUserDictionaryOnServer(forceExport: Bool) {
-        self.converterServerClient.synchronizeUserDictionary(forceExport: forceExport) { success in
-            if !success {
-                print("Failed to synchronize user dictionary on ConverterServer")
+    func postponeLearningDataCommit() {
+        learningDataCommitScheduler.postponeIfScheduled(after: Self.learningDataCommitDelay)
+    }
+
+    private var userDictionaryMemoryDirectoryURL: URL {
+        AppGroup.memoryDirectoryURL()
+    }
+
+    private func exportInitialUserDictionaryIfNeeded() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                if !CompiledUserDictionaryStore.hasExportedDictionary(memoryDirectoryURL: memoryDirectoryURL) {
+                    try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                }
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
             }
         }
+    }
+
+    func exportUserDictionaryAndReloadConverter() {
+        let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
+        Task.detached(priority: .utility) {
+            do {
+                try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
+                await MainActor.run {
+                    self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
+                }
+            } catch {
+                print("Failed to export compiled user dictionary: \(error)")
+            }
+        }
+    }
+
+    private func reloadUserDictionary(memoryDirectoryURL: URL) {
+        self.kanaKanjiConverter.updateUserDictionaryURL(
+            CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: memoryDirectoryURL),
+            forceReload: true
+        )
     }
 
     private static func buildSwiftUIWindow(
@@ -133,6 +168,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Insert code here to tear down your application
+        learningDataCommitScheduler.cancel()
+        kanaKanjiConverter.commitUpdateLearningData()
     }
 }

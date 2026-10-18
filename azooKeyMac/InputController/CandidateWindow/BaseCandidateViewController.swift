@@ -1,5 +1,6 @@
 import Cocoa
 import Core
+import KanaKanjiConverterModule
 
 class NonClickableTableView: NSTableView {
     override func rightMouseDown(with event: NSEvent) {}
@@ -90,7 +91,7 @@ class CandidateTableCellView: NSTableCellView {
 }
 
 class BaseCandidateViewController: NSViewController {
-    internal var candidates: [ConverterCandidatePresentation] = []
+    internal var candidates: [CandidatePresentation] = []
     internal var tableView: NSTableView!
     internal var currentSelectedRow: Int = -1
 
@@ -178,18 +179,12 @@ class BaseCandidateViewController: NSViewController {
         window.isOpaque = false
     }
 
-    func updateCandidatePresentations(
-        _ candidates: [ConverterCandidatePresentation],
-        selectionIndex: Int?,
-        cursorLocation: CGPoint
-    ) {
+    func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
         self.candidates = candidates
         self.currentSelectedRow = selectionIndex ?? -1
         self.tableView.reloadData()
         self.resizeWindowToFitContent(cursorLocation: cursorLocation)
-        // ConverterServerのsnapshotを描画するだけなので、選択変更をServerへ送り返さない。
-        // ここでdelegateへ通知すると、非同期応答のたびに新しい選択commandが生成され、
-        // 古いselectionIndexと新しいselectionIndexが交互に適用され続ける。
+        // 描画による選択更新をユーザー操作として通知しない。
         self.updateSelection(to: selectionIndex ?? -1, notifySelectionChange: false)
     }
 
@@ -252,7 +247,7 @@ class BaseCandidateViewController: NSViewController {
         let rowHeight = self.tableView.rowHeight
         let tableViewHeight = CGFloat(self.numberOfVisibleRows) * rowHeight
 
-        let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map(\.text))
+        let maxWidth = self.getMaxTextWidth(candidates: self.candidates.lazy.map { $0.candidate.text })
         let windowWidth = self.getWindowWidth(maxContentWidth: maxWidth)
         let newWindowFrame = WindowPositioning.frameNearCursor(
             currentFrame: .init(window.frame),
@@ -263,6 +258,13 @@ class BaseCandidateViewController: NSViewController {
         if newWindowFrame != window.frame {
             window.setFrame(newWindowFrame, display: true, animate: false)
         }
+    }
+
+    func getSelectedCandidate() -> Candidate? {
+        guard currentSelectedRow >= 0 && currentSelectedRow < candidates.count else {
+            return nil
+        }
+        return candidates[currentSelectedRow].candidate
     }
 
     func selectNextCandidate() {
@@ -282,7 +284,7 @@ class BaseCandidateViewController: NSViewController {
     }
 
     internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
-        cell.candidateTextField.stringValue = candidates[row].text
+        cell.candidateTextField.stringValue = candidates[row].candidate.text
         cell.showCandidateAnnotationTextField(false)
         cell.candidateAnnotationTextField.stringValue = ""
     }

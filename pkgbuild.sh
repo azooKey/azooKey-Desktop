@@ -56,8 +56,8 @@ rm ${EXPORT_PATH}/ExportOptions.plist
 
 mkdir -p "${PKG_SCRIPTS_PATH}"
 cp "${PKG_SCRIPTS_SOURCE_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/postinstall"
-cp "./Tools/write_converter_server_launch_agent.sh" "${PKG_SCRIPTS_PATH}/write_converter_server_launch_agent.sh"
-chmod +x "${PKG_SCRIPTS_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/write_converter_server_launch_agent.sh"
+cp "./Tools/remove_converter_server_launch_agent.sh" "${PKG_SCRIPTS_PATH}/remove_converter_server_launch_agent.sh"
+chmod +x "${PKG_SCRIPTS_PATH}/postinstall" "${PKG_SCRIPTS_PATH}/remove_converter_server_launch_agent.sh"
 
 # Suppose we have build/azooKeyMac.app
 # Use this script to create a plist package for distribution

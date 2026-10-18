@@ -2,7 +2,7 @@ import Foundation
 
 /// MainActor 上の処理を、最後の操作から一定時間後まで遅延するためのスケジューラ。
 ///
-/// ConverterServer のように入力処理と低優先度の同期処理が同じactorを使う場合に、
+/// 入力処理と学習データの保存が同じactorを使う場合に、
 /// 入力が続いている間は同期処理をクリティカルパスへ入れないために使う。
 public final class DebouncedActionScheduler {
     public typealias Action = @MainActor @Sendable () -> Void

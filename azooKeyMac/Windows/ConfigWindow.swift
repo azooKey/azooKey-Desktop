@@ -5,6 +5,10 @@ import SwiftUI
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var inputStyle = Config.InputStyle()
+    @ConfigState private var typeBackSlash = Config.TypeBackSlash()
+    @ConfigState private var punctuationStyle = Config.PunctuationStyle()
+    @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
+    @ConfigState private var optionDirectFullWidthInput = Config.OptionDirectFullWidthInput()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
@@ -17,12 +21,9 @@ struct ConfigWindow: View {
     @ConfigState private var debugTypoCorrection = Config.DebugTypoCorrection()
     @ConfigState private var userDictionary = Config.UserDictionary()
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
+    @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
 
-    @State private var converterServerClient = ConverterServerClient()
-    @State private var converterSettingDescriptors: [String: ConverterSettingDescriptor] = [:]
-    @State private var converterSettingsLoading = false
-    @State private var converterSettingsErrorMessage: String?
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
     @State private var zenzaiInferenceLimitHelpPopover = false
@@ -38,8 +39,6 @@ struct ConfigWindow: View {
     @State private var debugTypoCorrectionState: DebugTypoCorrectionState = .notDownloaded
     @State private var debugTypoCorrectionDownloadInProgress = false
     @State private var debugTypoCorrectionErrorMessage: String?
-    @State private var converterProcessRestartInProgress = false
-    @State private var converterProcessRestartMessage: String?
 
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
@@ -102,71 +101,6 @@ struct ConfigWindow: View {
             return "重み: ダウンロード失敗"
         case .notDownloaded:
             return "重み: ダウンロード未実施"
-        }
-    }
-
-    private var converterSettingClientCapabilities: ConverterSettingClientCapabilities {
-        ConverterSettingClientCapabilities(
-            supportedKinds: [.toggle, .selector, .textField, .number],
-            supportedActions: [],
-            supportedCustomSurfaces: []
-        )
-    }
-
-    @MainActor
-    private func loadConverterSettingsIfNeeded() {
-        guard self.converterSettingDescriptors.isEmpty, !self.converterSettingsLoading else {
-            return
-        }
-        self.reloadConverterSettings()
-    }
-
-    @MainActor
-    private func reloadConverterSettings() {
-        self.converterSettingsLoading = true
-        self.converterSettingsErrorMessage = nil
-        self.converterServerClient.listSettings(capabilities: self.converterSettingClientCapabilities) { settings in
-            DispatchQueue.main.async {
-                guard let settings else {
-                    self.converterSettingsLoading = false
-                    self.converterSettingsErrorMessage = "Converter Processから設定を取得できませんでした"
-                    return
-                }
-                self.converterSettingDescriptors = Dictionary(uniqueKeysWithValues: settings.map { ($0.key, $0) })
-                self.converterSettingsLoading = false
-            }
-        }
-    }
-
-    @MainActor
-    private func updateConverterSetting(key: String, value: ConverterSettingValue) {
-        self.converterServerClient.updateSetting(key: key, value: value) { success in
-            DispatchQueue.main.async {
-                guard success else {
-                    self.converterSettingsErrorMessage = "Converter Processに設定を保存できませんでした"
-                    self.reloadConverterSettings()
-                    return
-                }
-                if var descriptor = self.converterSettingDescriptors[key] {
-                    descriptor.value = value
-                    self.converterSettingDescriptors[key] = descriptor
-                }
-            }
-        }
-    }
-
-    private func converterSettingValueID(_ value: ConverterSettingValue?) -> String {
-        switch value {
-        case .bool(let value):
-            "bool:\(value)"
-        case .string(let value):
-            "string:\(value)"
-        case .int(let value):
-            "int:\(value)"
-        case .double(let value):
-            "double:\(value)"
-        case .none:
-            ""
         }
     }
 
@@ -237,21 +171,6 @@ struct ConfigWindow: View {
             try fileManager.copyItem(at: sourceURL, to: targetURL)
         } catch {
             // The status check below will surface a notDownloaded/failed state.
-        }
-    }
-
-    @MainActor
-    private func restartConverterProcess() {
-        guard !self.converterProcessRestartInProgress else {
-            return
-        }
-        self.converterProcessRestartInProgress = true
-        self.converterProcessRestartMessage = nil
-        self.converterServerClient.restartServer { success in
-            DispatchQueue.main.async {
-                self.converterProcessRestartMessage = success ? "再起動しました" : "Converter Processに再起動を依頼できませんでした"
-                self.converterProcessRestartInProgress = false
-            }
         }
     }
 
@@ -333,11 +252,19 @@ struct ConfigWindow: View {
 
     @MainActor
     private func resetLearningData() {
-        self.converterServerClient.resetLearningData { success in
-            self.learningResetMessage = success
-                ? .success
-                : .error("学習データのリセットに失敗しました")
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+            learningResetMessage = .error("学習データのリセットに失敗しました")
+            Task {
+                try? await Task.sleep(for: .seconds(30))
+                if case .error = learningResetMessage {
+                    learningResetMessage = nil
+                }
+            }
+            return
         }
+
+        appDelegate.kanaKanjiConverter.resetMemory()
+        learningResetMessage = .success
 
         // 10秒後にメッセージを消す
         Task {
@@ -360,157 +287,6 @@ struct ConfigWindow: View {
                 Text(helpContent).padding()
             }
         }
-    }
-
-    @ViewBuilder
-    private func converterSettingSection(title: String, systemImage: String, keys: [String]) -> some View {
-        Section {
-            if self.converterSettingsLoading && self.converterSettingDescriptors.isEmpty {
-                ProgressView()
-                    .controlSize(.small)
-            }
-            if let converterSettingsErrorMessage {
-                Text(converterSettingsErrorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(keys, id: \.self) { key in
-                if let setting = self.converterSettingDescriptors[key] {
-                    converterSettingRow(setting)
-                }
-            }
-        } header: {
-            Label(title, systemImage: systemImage)
-        }
-    }
-
-    @ViewBuilder
-    private func converterSettingRow(_ setting: ConverterSettingDescriptor) -> some View {
-        let isDisabled = !setting.isEnabled || setting.requiresClientUpdate
-        switch setting.kind {
-        case .toggle:
-            converterToggleSettingRow(setting, isDisabled: isDisabled)
-        case .selector(let options):
-            converterSelectorSettingRow(setting, options: options, isDisabled: isDisabled)
-        case .textField(let secure):
-            converterTextSettingRow(setting, secure: secure, isDisabled: isDisabled)
-        case .number(let min, let max, let step):
-            converterNumberSettingRow(setting, min: min, max: max, step: step, isDisabled: isDisabled)
-        case .button, .custom:
-            EmptyView()
-        }
-    }
-
-    private func converterToggleSettingRow(_ setting: ConverterSettingDescriptor, isDisabled: Bool) -> some View {
-        Toggle(
-            setting.title,
-            isOn: Binding(
-                get: {
-                    if case .bool(let value) = self.converterSettingDescriptors[setting.key]?.value {
-                        return value
-                    }
-                    return false
-                },
-                set: {
-                    self.updateConverterSetting(key: setting.key, value: .bool($0))
-                }
-            )
-        )
-        .disabled(isDisabled)
-    }
-
-    private func converterSelectorSettingRow(
-        _ setting: ConverterSettingDescriptor,
-        options: [ConverterSettingOption],
-        isDisabled: Bool
-    ) -> some View {
-        Picker(
-            setting.title,
-            selection: Binding(
-                get: {
-                    self.converterSettingValueID(self.converterSettingDescriptors[setting.key]?.value)
-                },
-                set: { selectedID in
-                    guard let option = options.first(where: { self.converterSettingValueID($0.value) == selectedID }) else {
-                        return
-                    }
-                    self.updateConverterSetting(key: setting.key, value: option.value)
-                }
-            )
-        ) {
-            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
-                Text(option.title)
-                    .tag(self.converterSettingValueID(option.value))
-            }
-        }
-        .disabled(isDisabled)
-    }
-
-    @ViewBuilder
-    private func converterTextSettingRow(
-        _ setting: ConverterSettingDescriptor,
-        secure: Bool,
-        isDisabled: Bool
-    ) -> some View {
-        let binding = Binding(
-            get: {
-                if case .string(let value) = self.converterSettingDescriptors[setting.key]?.value {
-                    return value
-                }
-                return ""
-            },
-            set: {
-                self.updateConverterSetting(key: setting.key, value: .string($0))
-            }
-        )
-        if secure {
-            SecureField(setting.title, text: binding)
-                .disabled(isDisabled)
-        } else {
-            TextField(setting.title, text: binding)
-                .disabled(isDisabled)
-        }
-    }
-
-    private func converterNumberSettingRow(
-        _ setting: ConverterSettingDescriptor,
-        min: Double?,
-        max: Double?,
-        step: Double?,
-        isDisabled: Bool
-    ) -> some View {
-        let range = (min ?? 0) ... (max ?? 100)
-        return LabeledContent(setting.title) {
-            Stepper(
-                value: Binding(
-                    get: {
-                        if case .int(let value) = self.converterSettingDescriptors[setting.key]?.value {
-                            return Double(value)
-                        }
-                        if case .double(let value) = self.converterSettingDescriptors[setting.key]?.value {
-                            return value
-                        }
-                        return min ?? 0
-                    },
-                    set: { value in
-                        if case .int = setting.value {
-                            self.updateConverterSetting(key: setting.key, value: .int(Int(value)))
-                        } else {
-                            self.updateConverterSetting(key: setting.key, value: .double(value))
-                        }
-                    }
-                ),
-                in: range,
-                step: step ?? 1
-            ) {
-                Text(self.converterSettingDisplayValue(for: setting.key))
-            }
-            .disabled(isDisabled)
-        }
-    }
-
-    private func converterSettingDisplayValue(for key: String) -> String {
-        self.converterSettingValueID(self.converterSettingDescriptors[key]?.value).split(separator: ":").last.map(String.init) ?? ""
     }
 
     var body: some View {
@@ -582,11 +358,6 @@ struct ConfigWindow: View {
                 }
             }
         }
-        .task {
-            await MainActor.run {
-                self.loadConverterSettingsIfNeeded()
-            }
-        }
     }
 
     // MARK: - 基本タブ
@@ -609,13 +380,13 @@ struct ConfigWindow: View {
                             foundationModelsAvailability = FoundationModelsClientCompat.checkAvailability()
                             availabilityCheckDone = true
 
-                            let hasSetAIBackend = Config.object(forKey: "hasSetAIBackendManually") as? Bool ?? false
+                            let hasSetAIBackend = UserDefaults.standard.bool(forKey: "hasSetAIBackendManually")
                             if !hasSetAIBackend,
                                aiBackend.value == .off,
                                let availability = foundationModelsAvailability,
                                availability.isAvailable {
                                 aiBackend.value = .foundationModels
-                                Config.set(true, forKey: "hasSetAIBackendManually")
+                                UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                             }
 
                             if aiBackend.value == .foundationModels,
@@ -626,7 +397,7 @@ struct ConfigWindow: View {
                         }
                     }
                     .onChange(of: aiBackend.value) { _ in
-                        Config.set(true, forKey: "hasSetAIBackendManually")
+                        UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                     }
                 }
 
@@ -746,16 +517,19 @@ struct ConfigWindow: View {
     @ViewBuilder
     private var customizeTabView: some View {
         Form {
-            converterSettingSection(
-                title: "入力オプション",
-                systemImage: "character.cursor.ibeam",
-                keys: [
-                    Config.TypeBackSlash.key,
-                    Config.TypeHalfSpace.key,
-                    Config.OptionDirectFullWidthInput.key,
-                    Config.PunctuationStyle.key
-                ]
-            )
+            Section {
+                Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
+                Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Toggle("Optionキーで直接全角英数を入力", isOn: $optionDirectFullWidthInput)
+                Picker("句読点の種類", selection: $punctuationStyle) {
+                    Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
+                    Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)
+                    Text("，と。").tag(Config.PunctuationStyle.Value.kutenAndComma)
+                    Text("，と．").tag(Config.PunctuationStyle.Value.periodAndComma)
+                }
+            } header: {
+                Label("入力オプション", systemImage: "character.cursor.ibeam")
+            }
 
             Section {
                 Picker("履歴学習", selection: $learning) {
@@ -818,11 +592,18 @@ struct ConfigWindow: View {
                 Label("入力方式", systemImage: "keyboard")
             }
 
-            converterSettingSection(
-                title: "キーボード配列",
-                systemImage: "keyboard.badge.ellipsis",
-                keys: [Config.KeyboardLayout.key]
-            )
+            Section {
+                Picker("キーボード配列", selection: $keyboardLayout) {
+                    Text("QWERTY").tag(Config.KeyboardLayout.Value.qwerty)
+                    Text("Australian").tag(Config.KeyboardLayout.Value.australian)
+                    Text("British").tag(Config.KeyboardLayout.Value.british)
+                    Text("Colemak").tag(Config.KeyboardLayout.Value.colemak)
+                    Text("Dvorak").tag(Config.KeyboardLayout.Value.dvorak)
+                    Text("Dvorak - QWERTY ⌘").tag(Config.KeyboardLayout.Value.dvorakQwertyCommand)
+                }
+            } header: {
+                Label("キーボード配列", systemImage: "keyboard.badge.ellipsis")
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
@@ -934,24 +715,6 @@ struct ConfigWindow: View {
                     HStack {
                         Button("Finderで開く") {
                             self.openAzooKeyDataDirectoryInFinder()
-                        }
-                    }
-                }
-                LabeledContent("Converter Process") {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Button("再起動") {
-                            self.restartConverterProcess()
-                        }
-                        .disabled(self.converterProcessRestartInProgress)
-                        if self.converterProcessRestartInProgress {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        if let converterProcessRestartMessage {
-                            Text(converterProcessRestartMessage)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
