@@ -1,4 +1,5 @@
 import Cocoa
+import KanaKanjiConverterModule
 
 @MainActor protocol ReplaceSuggestionsViewControllerDelegate: AnyObject {
     func replaceSuggestionSelectionChanged(_ row: Int)

@@ -5,7 +5,6 @@ IGNORE_LINT=false
 DRY_RUN=false
 NO_PKILL=false
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_APP_PATH="/Library/Input Methods/azooKeyMac.app"
 
 # Parse command-line options
 while [[ "$#" -gt 0 ]]; do
@@ -47,17 +46,17 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: Would execute the following commands:"
+    echo "  sudo ${REPO_ROOT}/Tools/remove_converter_server_launch_agent.sh"
     echo "  sudo rm -rf /Library/Input\ Methods/azooKeyMac.app"
     echo "  sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/"
-    echo "  ${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh \"${INSTALL_APP_PATH}\""
     if [ "$NO_PKILL" = false ]; then
         echo "  pkill azooKeyMac || true"
     fi
     echo "Build completed successfully. Use without --dry-run to actually install."
 else
+    sudo "${REPO_ROOT}/Tools/remove_converter_server_launch_agent.sh"
     sudo rm -rf /Library/Input\ Methods/azooKeyMac.app
     sudo cp -r build/archive.xcarchive/Products/Applications/azooKeyMac.app /Library/Input\ Methods/
-    "${REPO_ROOT}/Tools/install_converter_server_launch_agent.sh" "${INSTALL_APP_PATH}"
     if [ "$NO_PKILL" = false ]; then
         pkill azooKeyMac || true
     fi

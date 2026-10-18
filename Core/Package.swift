@@ -10,7 +10,7 @@ let kanaKanjiConverterTraits: Set<Package.Dependency.Trait> = ["Zenzai"]
 let kanaKanjiConverterTraits: Set<Package.Dependency.Trait> = []
 #endif
 
-var products: [Product] = [
+let products: [Product] = [
     // Products define the executables and libraries a package produces, making them visible to other packages.
     .library(
         name: "Core",
@@ -18,7 +18,7 @@ var products: [Product] = [
     )
 ]
 
-var targets: [Target] = [
+let targets: [Target] = [
     .executableTarget(
         name: "git-info-generator"
     ),
@@ -46,22 +46,6 @@ var targets: [Target] = [
         swiftSettings: [.interoperabilityMode(.Cxx)]
     )
 ]
-
-#if os(macOS)
-products.append(
-    .executable(
-        name: "ConverterServer",
-        targets: ["ConverterServer"]
-    )
-)
-targets.append(
-    .executableTarget(
-        name: "ConverterServer",
-        dependencies: ["Core"],
-        swiftSettings: [.interoperabilityMode(.Cxx)]
-    )
-)
-#endif
 
 let package = Package(
     name: "Core",

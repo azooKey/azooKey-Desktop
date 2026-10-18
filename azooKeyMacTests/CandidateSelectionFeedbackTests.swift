@@ -1,4 +1,5 @@
 import Core
+import KanaKanjiConverterModuleWithDefaultDictionary
 import XCTest
 
 @testable import azooKeyMac
@@ -15,7 +16,7 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
         }
     }
 
-    func testServerSnapshotSelectionDoesNotNotifySelectionDelegate() {
+    func testRenderingSelectionDoesNotNotifySelectionDelegate() {
         let controller = CandidatesViewController()
         let delegate = DelegateSpy()
         controller.delegate = delegate
@@ -23,15 +24,15 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
 
         controller.updateCandidatePresentations(
             [
-                ConverterCandidatePresentation(text: "候補1"),
-                ConverterCandidatePresentation(text: "候補2")
+                CandidatePresentation(candidate: Candidate(text: "候補1", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: [])),
+                CandidatePresentation(candidate: Candidate(text: "候補2", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: []))
             ],
             selectionIndex: 1,
             cursorLocation: .zero
         )
 
         XCTAssertEqual(controller.currentSelectedRow, 1)
-        XCTAssertEqual(delegate.selectedRows, [], "Server状態の描画を新しい選択commandとして送り返してはいけない")
+        XCTAssertEqual(delegate.selectedRows, [], "描画による選択更新をユーザー操作として通知してはいけない")
     }
 
     func testUserDrivenSelectionNotifiesSelectionDelegateOnce() {
@@ -41,8 +42,8 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
         _ = controller.view
         controller.updateCandidatePresentations(
             [
-                ConverterCandidatePresentation(text: "候補1"),
-                ConverterCandidatePresentation(text: "候補2")
+                CandidatePresentation(candidate: Candidate(text: "候補1", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: [])),
+                CandidatePresentation(candidate: Candidate(text: "候補2", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: []))
             ],
             selectionIndex: 0,
             cursorLocation: .zero

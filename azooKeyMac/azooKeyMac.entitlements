@@ -12,9 +12,5 @@
 	<true/>
 	<key>com.apple.security.temporary-exception.mach-register.global-name</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)_Connection</string>
-	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-	<array>
-		<string>dev.ensan.inputmethod.azooKeyMac.ConverterServer</string>
-	</array>
 </dict>
 </plist>
