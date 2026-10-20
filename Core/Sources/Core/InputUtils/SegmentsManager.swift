@@ -135,6 +135,7 @@ public final class SegmentsManager {
     private enum Operation: Sendable {
         case insert
         case delete
+        case moveCursor
         case editSegment
         case other
     }
@@ -322,8 +323,14 @@ public final class SegmentsManager {
     /// 変換キーを押したタイミングで入力の区切りを示す
     @MainActor
     public func insertCompositionSeparator(inputStyle: InputStyle, skipUpdate: Bool = false) {
+        if !self.didExperienceSegmentEdition {
+            _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
+        }
         guard self.composingText.input.last?.piece != .compositionSeparator else {
-            // すでに末尾がcompositionSeparatorの場合は何もしない
+            // すでに末尾にあるcompositionSeparatorは重ねて挿入しない
+            if !skipUpdate {
+                self.updateRawCandidate()
+            }
             return
         }
         self.lastInputStyle = inputStyle
@@ -352,6 +359,20 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
+    }
+
+    @MainActor
+    public func moveCursor(count: Int) {
+        guard self.composingText.moveCursorFromCursorPosition(count: count) != 0 else {
+            return
+        }
+        self.didExperienceSegmentEdition = false
+        self.lastOperation = .moveCursor
+        self.rawCandidates = nil
+        self.shouldShowCandidateWindow = false
+        self.requestResettingSelection()
+        self.backspaceAdjustedPredictionCandidate = nil
+        self.backspaceTypoCorrectionLock = nil
     }
 
     @MainActor
@@ -388,7 +409,7 @@ public final class SegmentsManager {
     @MainActor
     public func deleteBackwardFromCursorPosition(count: Int = 1) {
         var previousComposingText = self.composingText.prefixToCursorPosition()
-        if !self.composingText.isAtEndIndex {
+        if self.didExperienceSegmentEdition && !self.composingText.isAtEndIndex {
             // 右端に持っていく
             _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
             // 一度segmentの編集状態もリセットにする
@@ -400,7 +421,8 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
-        guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
+        guard self.composingText.isAtEndIndex,
+              Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
             self.backspaceAdjustedPredictionCandidate = nil
             self.backspaceTypoCorrectionLock = nil
             return
@@ -544,7 +566,7 @@ public final class SegmentsManager {
         }
         self.resetAdditionalCandidates()
         // 不要
-        if composingText.isEmpty {
+        if composingText.isEmpty || (!self.didExperienceSegmentEdition && !self.composingText.isAtEndIndex) {
             self.rawCandidates = nil
             self.withConverter { $0.stopComposition() }
             return
@@ -1110,6 +1132,13 @@ public final class SegmentsManager {
         case .none, .attachDiacritic:
             return MarkedText(text: [], selectionRange: .notFound)
         case .composing:
+            if self.lastOperation == .moveCursor || !self.composingText.isAtEndIndex {
+                let cursorPosition = self.composingText.convertTarget.prefix(self.composingText.convertTargetCursorPosition).utf16.count
+                return MarkedText(
+                    text: [.init(content: self.composingText.convertTarget, focus: .none)],
+                    selectionRange: NSRange(location: cursorPosition, length: 0)
+                )
+            }
             let text = if self.lastOperation == .delete {
                 // 削除のあとは常にひらがなを示す
                 self.composingText.convertTarget
