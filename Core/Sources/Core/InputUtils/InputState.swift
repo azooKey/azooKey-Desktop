@@ -23,6 +23,11 @@ public enum InputState: Sendable, Hashable {
         if event.modifierFlags.contains(.command) {
             return (.fallthrough, .fallthrough)
         }
+        // 未確定文字列の編集中はFn+Deleteを入力先アプリに渡さない。
+        if event.keyCode == 0x75,
+           self == .composing || self == .previewing || self == .selecting || self == .replaceSuggestion {
+            return (.consume, .fallthrough)
+        }
         if event.modifierFlags.contains(.option) {
             switch userAction {
             case .input, .deadKey, .backspace:
@@ -187,6 +192,10 @@ public enum InputState: Sendable, Hashable {
                     return (.editSegment(1), .transition(.selecting))
                 } else if direction == .left && event.modifierFlags.contains(.shift) {
                     return (.editSegment(-1), .transition(.selecting))
+                } else if direction == .left {
+                    return (.moveCursor(-1), .fallthrough)
+                } else if direction == .right {
+                    return (.moveCursor(1), .fallthrough)
                 } else {
                     // ナビゲーションはハンドルしてしまう
                     return (.consume, .fallthrough)
@@ -248,6 +257,10 @@ public enum InputState: Sendable, Hashable {
                     return (.editSegment(1), .transition(.selecting))
                 } else if direction == .left && event.modifierFlags.contains(.shift) {
                     return (.editSegment(-1), .transition(.selecting))
+                } else if direction == .left {
+                    return (.moveCursor(-1), .transition(.composing))
+                } else if direction == .right {
+                    return (.moveCursor(1), .transition(.composing))
                 } else {
                     // ナビゲーションはハンドルしてしまう
                     return (.consume, .fallthrough)

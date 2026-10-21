@@ -412,6 +412,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .editSegment(let count):
             self.segmentsManager.editSegment(count: count)
+        case .moveCursor(let count):
+            self.segmentsManager.moveCursor(count: count)
         case .commitMarkedText:
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
