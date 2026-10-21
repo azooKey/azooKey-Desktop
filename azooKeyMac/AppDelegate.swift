@@ -28,7 +28,7 @@ class NSManualApplication: NSApplication {
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var server = IMKServer()
+    var server: IMKServer?
     weak var configWindow: NSWindow?
     weak var userDictionaryEditorWindow: NSWindow?
     var configWindowController: NSWindowController?
