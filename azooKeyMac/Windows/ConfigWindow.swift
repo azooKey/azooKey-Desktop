@@ -550,6 +550,9 @@ struct ConfigWindow: View {
                                 .foregroundColor(.red)
                         }
                         Spacer()
+                        Button("編集") {
+                            (NSApplication.shared.delegate as? AppDelegate)!.openLearningMemoryEditorWindow()
+                        }
                         Button("リセット") {
                             showingLearningResetConfirmation = true
                         }
@@ -558,7 +561,7 @@ struct ConfigWindow: View {
                             isPresented: $showingLearningResetConfirmation,
                             titleVisibility: .visible
                         ) {
-                            Button("リセット", role: .destructive) {
+                            Button("リセット") {
                                 resetLearningData()
                             }
                             Button("キャンセル", role: .cancel) {}

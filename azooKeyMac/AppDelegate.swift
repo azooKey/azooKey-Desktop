@@ -31,8 +31,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var server: IMKServer?
     weak var configWindow: NSWindow?
     weak var userDictionaryEditorWindow: NSWindow?
+    weak var learningMemoryEditorWindow: NSWindow?
     var configWindowController: NSWindowController?
     var userDictionaryEditorWindowController: NSWindowController?
+    var learningMemoryEditorWindowController: NSWindowController?
     let kanaKanjiConverter = KanaKanjiConverter.withDefaultDictionary()
     private let learningDataCommitScheduler = DebouncedActionScheduler()
     private static let learningDataCommitDelay: TimeInterval = 2
@@ -132,6 +134,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             userDictionaryEditorWindow.makeKeyAndOrderFront(nil)
         } else {
             (self.userDictionaryEditorWindow, self.userDictionaryEditorWindowController) = Self.buildSwiftUIWindow(UserDictionaryEditorWindow(), title: "設定")
+        }
+    }
+
+    func openLearningMemoryEditorWindow() {
+        if let learningMemoryEditorWindow {
+            learningMemoryEditorWindow.level = .modalPanel
+            learningMemoryEditorWindow.makeKeyAndOrderFront(nil)
+        } else {
+            (self.learningMemoryEditorWindow, self.learningMemoryEditorWindowController) = Self.buildSwiftUIWindow(LearningMemoryEditorWindow(converter: kanaKanjiConverter), title: "履歴学習データ")
         }
     }
 
