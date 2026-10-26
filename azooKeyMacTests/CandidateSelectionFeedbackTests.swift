@@ -16,6 +16,48 @@ final class CandidateSelectionFeedbackTests: XCTestCase {
         }
     }
 
+    func testPageNavigationMovesNineCandidatesAndUpdatesNumberShortcuts() {
+        let controller = CandidatesViewController()
+        _ = controller.view
+        controller.updateCandidatePresentations(
+            (1...21).map {
+                CandidatePresentation(candidate: Candidate(text: "候補\($0)", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: []))
+            },
+            selectionIndex: 2,
+            cursorLocation: .zero
+        )
+
+        XCTAssertEqual(controller.selectCandidatePage(1), 11)
+        XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補12")
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 9)
+        XCTAssertEqual(controller.getNumberCandidate(num: 9), 17)
+
+        XCTAssertEqual(controller.selectCandidatePage(-1), 2)
+        XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補3")
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 0)
+    }
+
+    func testPageNavigationStopsAtTheFirstAndLastCandidates() {
+        let controller = CandidatesViewController()
+        _ = controller.view
+        controller.updateCandidatePresentations(
+            (1...12).map {
+                CandidatePresentation(candidate: Candidate(text: "候補\($0)", value: 0, composingCount: .surfaceCount(0), lastMid: 0, data: []))
+            },
+            selectionIndex: 0,
+            cursorLocation: .zero
+        )
+
+        XCTAssertEqual(controller.selectCandidatePage(-1), 0)
+        XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補1")
+        XCTAssertEqual(controller.selectCandidatePage(1), 9)
+        XCTAssertEqual(controller.selectCandidatePage(1), 11)
+        XCTAssertEqual(controller.selectCandidatePage(1), 11)
+        XCTAssertEqual(controller.getSelectedCandidate()?.text, "候補12")
+        XCTAssertEqual(controller.getNumberCandidate(num: 1), 3)
+        XCTAssertEqual(controller.getNumberCandidate(num: 9), 11)
+    }
+
     func testRenderingSelectionDoesNotNotifySelectionDelegate() {
         let controller = CandidatesViewController()
         let delegate = DelegateSpy()

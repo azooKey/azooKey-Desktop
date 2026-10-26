@@ -258,8 +258,10 @@ public enum UserAction {
             return .input([.character(",")])
         case 0x41: // Numpad Period
             return .input([.character(".")])
-        case 0x73, 0x77, 0x74, 0x79, 0x75, 0x47:
-            // Numpadでそれぞれ「入力先頭にカーソルを移動」「入力末尾にカーソルを移動」「変換候補欄を1ページ戻る」「変換候補欄を1ページ進む」「順方向削除」「入力全消し（より強いエスケープ）」に対応するが、サポート外の動作として明示的に無効化
+        case 0x74, 0x79: // Page Up / Page Downは候補選択中のInputStateで処理する
+            return .unknown
+        case 0x73, 0x77, 0x75, 0x47:
+            // Numpadでそれぞれ「入力先頭にカーソルを移動」「入力末尾にカーソルを移動」「順方向削除」「入力全消し（より強いエスケープ）」に対応するが、サポート外の動作として明示的に無効化
             return .unknown
         case 18, 19, 20, 21, 23, 22, 26, 28, 25, 29:
             // Control+数字はアプリやOS側のショートカットとして使われるため、数字入力としない

@@ -436,6 +436,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.segmentsManager.requestSelectingPrevCandidate()
         case .selectNextCandidate:
             self.segmentsManager.requestSelectingNextCandidate()
+        case .selectCandidatePage(let count):
+            if count < 0, self.candidatesViewController.getNumberCandidate(num: 1) == 0 {
+                self.segmentsManager.requestSelectingAdditionalCandidates()
+            } else if let row = self.candidatesViewController.selectCandidatePage(count) {
+                self.segmentsManager.requestSelectingRow(row)
+            }
         case .selectNumberCandidate(let num):
             self.segmentsManager.requestSelectingRow(self.candidatesViewController.getNumberCandidate(num: num))
             self.submitSelectedCandidate()

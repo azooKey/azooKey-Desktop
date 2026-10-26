@@ -341,7 +341,16 @@ public enum InputState: Sendable, Hashable {
                 return (.consume, .fallthrough)
             case .startUnicodeInput:
                 return (.submitSelectedCandidateAndEnterUnicodeInputMode, .transition(.unicodeInput("")))
-            case .unknown, .suggest, .transformSelectedText, .deadKey:
+            case .unknown:
+                switch event.keyCode {
+                case 0x74:
+                    return (.selectCandidatePage(-1), .fallthrough)
+                case 0x79:
+                    return (.selectCandidatePage(1), .fallthrough)
+                default:
+                    return (.fallthrough, .fallthrough)
+                }
+            case .suggest, .transformSelectedText, .deadKey:
                 return (.fallthrough, .fallthrough)
             }
         case .replaceSuggestion:
