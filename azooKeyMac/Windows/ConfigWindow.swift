@@ -561,7 +561,7 @@ struct ConfigWindow: View {
                             isPresented: $showingLearningResetConfirmation,
                             titleVisibility: .visible
                         ) {
-                            Button("リセット") {
+                            Button("リセット", role: .destructive) {
                                 resetLearningData()
                             }
                             Button("キャンセル", role: .cancel) {}
