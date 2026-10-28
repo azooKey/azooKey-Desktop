@@ -669,6 +669,17 @@ public final class SegmentsManager {
         self.selectionIndex = max(0, selectionIndex - 1)
     }
 
+    @MainActor
+    public func requestSelectingAdditionalCandidates() {
+        self.showAdditionalCandidatesIfNeeded()
+        guard self.isShowingAdditionalCandidates else {
+            return
+        }
+        self.showingAdditionalCandidateCount = self.additionalCandidates.count
+        self.isFixingAdditionalCandidateTop = true
+        self.selectionIndex = 0
+    }
+
     public func requestSelectingRow(_ index: Int) {
         if self.isFixingAdditionalCandidateTop, index != 0 {
             self.isFixingAdditionalCandidateTop = false

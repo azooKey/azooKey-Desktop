@@ -82,6 +82,23 @@ class CandidatesViewController: BaseCandidateViewController {
         }
     }
 
+    func selectCandidatePage(_ count: Int) -> Int? {
+        guard !self.candidates.isEmpty else {
+            return nil
+        }
+        let pageSize = self.numberOfVisibleRows
+        let row = min(max(0, self.currentSelectedRow + count * pageSize), self.candidates.count - 1)
+        guard row != self.currentSelectedRow else {
+            return row
+        }
+        let firstRow = min(max(0, self.showedRows.lowerBound + count * pageSize), self.candidates.count - pageSize)
+        self.showedRows = firstRow...(firstRow + pageSize - 1)
+        self.tableView.scrollRowToVisible(self.showedRows.upperBound)
+        self.tableView.scrollRowToVisible(self.showedRows.lowerBound)
+        self.updateSelection(to: row, notifySelectionChange: false)
+        return row
+    }
+
     func getNumberCandidate(num: Int) -> Int {
         let nextRow = self.showedRows.lowerBound + num - 1
         return nextRow
