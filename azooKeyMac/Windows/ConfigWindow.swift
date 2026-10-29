@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
+    @ConfigState private var predictionCandidateSelectionKeys = Config.PredictionCandidateSelectionKeys()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
@@ -650,6 +651,14 @@ struct ConfigWindow: View {
             Section {
                 Toggle("デバッグウィンドウを有効化", isOn: $debugWindow)
                 Toggle("開発中の予測入力を有効化", isOn: $debugPredictiveTyping)
+                if debugPredictiveTyping.value {
+                    Picker("予測候補の選択キー", selection: $predictionCandidateSelectionKeys) {
+                        ForEach(Config.PredictionCandidateSelectionKeys.Value.allCases, id: \.self) { value in
+                            let modifierLabel = KeyboardShortcut(key: "", modifiers: value.modifiers).displayString
+                            Text(modifierLabel.isEmpty ? "↑↓" : "\(modifierLabel) + ↑↓").tag(value)
+                        }
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("開発中の入力訂正を有効化", isOn: $debugTypoCorrection)
                     if self.debugTypoCorrection.value {
