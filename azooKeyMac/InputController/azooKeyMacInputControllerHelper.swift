@@ -85,8 +85,11 @@ extension azooKeyMacInputController {
         guard let client else {
             return false
         }
-        let hasSelection = client.selectedRange().length > 0
-        return hasSelection || self.inputState == .composing || self.inputState == .replaceSuggestion || self.inputState == .none
+        // 入力状態だけで有効と分かる場合は、入力先アプリへの同期問い合わせを行わない。
+        return self.inputState == .composing
+            || self.inputState == .replaceSuggestion
+            || self.inputState == .none
+            || client.selectedRange().length > 0 // hasSelection
     }
 
     private func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool) {
