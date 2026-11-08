@@ -86,6 +86,7 @@ public final class SegmentsManager {
         public var displayText: String
         public var appendText: String
         public var deleteCount: Int = 0
+        var sourceCandidate: Candidate?
     }
 
     struct BackspaceTypoCorrectionLock: Sendable {
@@ -912,11 +913,12 @@ public final class SegmentsManager {
     }
 
     public func requestPredictionCandidates() -> [PredictionCandidate] {
-        guard let candidate = self.firstPredictionCandidate(),
-              let prediction = Self.makePredictionCandidate(currentTarget: self.composingText.convertTarget, candidate: candidate) else {
+        guard Config.DebugPredictiveTyping().value, let rawCandidates else {
             return []
         }
-        return [prediction]
+        return rawCandidates.predictionResults.compactMap {
+            Self.makePredictionCandidate(currentTarget: self.composingText.convertTarget, candidate: $0)
+        }
     }
 
     private func firstPredictionCandidate() -> Candidate? {
@@ -967,7 +969,7 @@ public final class SegmentsManager {
             return nil
         }
 
-        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount)
+        return .init(displayText: candidate.text, appendText: appendText, deleteCount: deleteCount, sourceCandidate: candidate)
     }
 
     @MainActor
@@ -976,6 +978,15 @@ public final class SegmentsManager {
             self.acceptTypoCorrectionPredictionCandidate(prediction)
         } else if let candidate = self.firstPredictionCandidate() {
             self.acceptPredictionCandidate(candidate)
+        }
+    }
+
+    @MainActor
+    public func acceptPredictionCandidate(_ prediction: PredictionCandidate) {
+        if let candidate = prediction.sourceCandidate {
+            self.acceptPredictionCandidate(candidate)
+        } else if self.requestTypoCorrectionPredictionCandidates().contains(prediction) {
+            self.acceptTypoCorrectionPredictionCandidate(prediction)
         }
     }
 
