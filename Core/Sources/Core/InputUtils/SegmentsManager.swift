@@ -619,6 +619,21 @@ public final class SegmentsManager {
         }
     }
 
+    /// 候補一覧で明示的に選び直した候補を、確定で状態を変更する前に記録する。
+    @MainActor public func recordSelectedCandidateCorrection(_ candidate: Candidate) {
+        guard self.context.useZenzai, self.zenzaiPersonalizationMode == nil,
+              !self.shouldShowDebugCandidateWindow,
+              let candidates = self.rawCandidatesList, candidates.contains(candidate) else {
+            return
+        }
+        let reading = candidate.data.map(\.ruby).joined()
+        // 文節候補と全文候補が混在するため、同じ範囲の先頭候補と比較する。
+        guard !reading.isEmpty, self.composingText.convertTarget.toKatakana().hasPrefix(reading),
+              let original = candidates.first(where: { $0.data.map(\.ruby).joined() == reading }),
+              original.text != candidate.text else { return }
+        self.withConverter { $0.recordZenzaiCorrection(from: original, to: candidate) }
+    }
+
     public enum CandidateWindow: Sendable {
         case hidden
         case composing([Candidate], selectionIndex: Int?)
@@ -862,9 +877,12 @@ public final class SegmentsManager {
     }
 
     @MainActor
-    public func commitMarkedText(inputState: InputState) -> String {
+    public func commitMarkedText(inputState: InputState, isUserInitiated: Bool = false) -> String {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}
+        if isUserInitiated, inputState == .selecting, let selectedCandidate {
+            self.recordSelectedCandidateCorrection(selectedCandidate)
+        }
         if let candidate = self.candidates?.first(where: {$0.text == text}) {
             self.prefixCandidateCommited(candidate, leftSideContext: "")
         }
