@@ -413,16 +413,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .editSegment(let count):
             self.segmentsManager.editSegment(count: count)
         case .commitMarkedText:
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState, isUserInitiated: true)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
         case .commitMarkedTextAndAppendToMarkedText(let string):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState, isUserInitiated: true)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             // 英語モードの場合は.directでローマ字変換せずそのまま入力
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
             self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState, isUserInitiated: true)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             // 英語モードの場合は.directでローマ字変換せずそのまま入力
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
@@ -477,7 +477,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .selectInputLanguage(let language):
             self.switchInputLanguage(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
+            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState, isUserInitiated: true)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             self.switchInputLanguage(language, client: client)
         // PredictiveSuggestion
@@ -783,20 +783,27 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     @MainActor
-    func submitCandidate(_ candidate: Candidate) {
+    func submitCandidate(_ candidate: Candidate, isExplicitSelection: Bool = false) {
         if let client = self.client() {
             // インサートを行う前にコンテキストを取得する
             let cleanLeftSideContext = self.segmentsManager.getCleanLeftSideContext(maxCount: 30)
+            if isExplicitSelection {
+                self.segmentsManager.recordSelectedCandidateCorrection(candidate)
+            }
             client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
             // アプリケーションサポートのディレクトリを準備しておく
-            self.segmentsManager.prefixCandidateCommited(candidate, leftSideContext: cleanLeftSideContext ?? "")
+            self.segmentsManager.prefixCandidateCommited(
+                candidate,
+                leftSideContext: cleanLeftSideContext ?? "",
+                isUserInitiated: isExplicitSelection
+            )
         }
     }
 
     @MainActor
     func submitSelectedCandidate() {
         if let candidate = self.segmentsManager.selectedCandidate {
-            self.submitCandidate(candidate)
+            self.submitCandidate(candidate, isExplicitSelection: self.inputState == .selecting)
             self.segmentsManager.requestResettingSelection()
         }
     }

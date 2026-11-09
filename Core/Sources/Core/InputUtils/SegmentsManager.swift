@@ -33,6 +33,16 @@ public final class SegmentsManager {
     private let kanaKanjiConverter: KanaKanjiConverter
     private let conversionSessionID: KanaKanjiConverter.ConversionSessionID
 
+    private struct PendingZenzaiCorrection {
+        let original: Candidate
+        let prefixAlternatives: [Candidate]
+        var remainingReading: String
+        var selected: Candidate?
+        var selectedAnotherPart = false
+    }
+
+    private var pendingZenzaiCorrection: PendingZenzaiCorrection?
+
     deinit {
         self.kanaKanjiConverter.removeSession(self.conversionSessionID)
     }
@@ -267,11 +277,13 @@ public final class SegmentsManager {
 
     @MainActor
     public func resetLearningData() {
+        self.pendingZenzaiCorrection = nil
         self.withConverter { $0.resetMemory() }
     }
 
     @MainActor
     public func deactivate(flushLearningData: Bool = true) {
+        self.pendingZenzaiCorrection = nil
         self.withConverter { $0.stopComposition() }
         if flushLearningData {
             self.withConverter { $0.commitUpdateLearningData() }
@@ -291,6 +303,7 @@ public final class SegmentsManager {
     @MainActor
     /// この入力を打ち切る
     public func stopComposition() {
+        self.pendingZenzaiCorrection = nil
         self.composingText.stopComposition()
         self.withConverter { $0.stopComposition() }
         self.rawCandidates = nil
@@ -307,6 +320,7 @@ public final class SegmentsManager {
     @MainActor
     /// 日本語入力自体をやめる
     public func stopJapaneseInput() {
+        self.pendingZenzaiCorrection = nil
         self.rawCandidates = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
@@ -336,6 +350,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func insertAtCursorPosition(_ string: String, inputStyle: InputStyle) {
+        self.pendingZenzaiCorrection = nil
         self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(string, inputStyle: inputStyle)
         self.lastOperation = .insert
@@ -346,6 +361,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func insertAtCursorPosition(pieces: [InputPiece], inputStyle: InputStyle) {
+        self.pendingZenzaiCorrection = nil
         self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(pieces.map { .init(piece: $0, inputStyle: inputStyle) })
         self.lastOperation = .insert
@@ -387,6 +403,7 @@ public final class SegmentsManager {
 
     @MainActor
     public func deleteBackwardFromCursorPosition(count: Int = 1) {
+        self.pendingZenzaiCorrection = nil
         var previousComposingText = self.composingText.prefixToCursorPosition()
         if !self.composingText.isAtEndIndex {
             // 右端に持っていく
@@ -604,10 +621,11 @@ public final class SegmentsManager {
     }
 
     /// - note: 画面更新との整合性を保つため、この関数の実行前に左文脈を取得し、これを引数として与える
-    @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
+    @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String, isUserInitiated: Bool = false) {
         self.withConverter { $0.setCompletedData(candidate) }
         self.withConverter { $0.updateLearningData(candidate) }
         self.composingText.prefixComplete(composingCount: candidate.composingCount)
+        self.advancePendingZenzaiCorrection(with: candidate, isUserInitiated: isUserInitiated)
 
         if !self.composingText.isEmpty {
             // カーソルを右端に移動する
@@ -616,6 +634,82 @@ public final class SegmentsManager {
             self.shouldShowCandidateWindow = true
             self.selectionIndex = nil
             self.updateRawCandidate(requestRichCandidates: true, forcedLeftSideContext: leftSideContext + candidate.text)
+        }
+    }
+
+    /// 候補一覧で明示的に選び直した候補を、確定で状態を変更する前に記録する。
+    @MainActor public func recordSelectedCandidateCorrection(_ candidate: Candidate) {
+        guard self.context.useZenzai, self.zenzaiPersonalizationMode == nil,
+              !self.shouldShowDebugCandidateWindow,
+              let candidates = self.rawCandidatesList, candidates.contains(candidate) else {
+            return
+        }
+        if self.pendingZenzaiCorrection != nil {
+            self.pendingZenzaiCorrection?.selectedAnotherPart = true
+            return
+        }
+        let reading = candidate.data.map(\.ruby).joined()
+        let fullReading = self.composingText.convertTarget.toKatakana()
+        guard !reading.isEmpty, fullReading.hasPrefix(reading),
+              let mainResults = self.rawCandidates?.mainResults,
+              let original = mainResults.first(where: { $0.data.map(\.ruby).joined() == fullReading }) ?? mainResults.first else {
+            return
+        }
+        let originalReading = original.data.map(\.ruby).joined()
+        if originalReading != reading, originalReading.hasPrefix(reading) {
+            var consumed = 0
+            let hasBoundary = original.data.contains { element in
+                consumed += element.ruby.count
+                return consumed == reading.count
+            }
+            // 残りの選び方が分かるまで、部分候補の学習は保留する。
+            let alternatives = hasBoundary ? [original] + candidates.prefix { $0 != candidate }.filter {
+                $0 != original && $0.data.map(\.ruby).joined() == originalReading
+            } : []
+            if originalReading == fullReading {
+                self.pendingZenzaiCorrection = .init(
+                    original: original,
+                    prefixAlternatives: alternatives,
+                    remainingReading: fullReading
+                )
+            } else if hasBoundary {
+                self.withConverter { $0.recordZenzaiCorrection(from: alternatives, to: candidate) }
+            }
+        } else if let original = candidates.first(where: { $0.data.map(\.ruby).joined() == reading }),
+                  original.text != candidate.text {
+            self.withConverter { $0.recordZenzaiCorrection(from: original, to: candidate) }
+        }
+    }
+
+    @MainActor private func advancePendingZenzaiCorrection(with candidate: Candidate, isUserInitiated: Bool) {
+        guard var correction = self.pendingZenzaiCorrection else {
+            return
+        }
+        self.pendingZenzaiCorrection = nil
+        guard isUserInitiated, candidate.isLearningTarget, candidate.actions.isEmpty,
+              candidate.data.map(\.word).joined() == candidate.text else {
+            return
+        }
+
+        let reading = candidate.data.map(\.ruby).joined()
+        guard !reading.isEmpty, correction.remainingReading.hasPrefix(reading) else {
+            return
+        }
+        correction.remainingReading.removeFirst(reading.count)
+        guard self.composingText.convertTarget.toKatakana() == correction.remainingReading else {
+            return
+        }
+        self.withConverter { converter in
+            let selected = correction.selected.map { converter.mergeCandidates($0, candidate) } ?? candidate
+            if self.composingText.isEmpty {
+                let prefix = correction.selectedAnotherPart ? nil : correction.selected.map {
+                    (originals: correction.prefixAlternatives, selected: $0)
+                }
+                converter.recordZenzaiWholeInputCorrection(from: correction.original, to: selected, prefix: prefix)
+            } else {
+                correction.selected = selected
+                self.pendingZenzaiCorrection = correction
+            }
         }
     }
 
@@ -862,11 +956,14 @@ public final class SegmentsManager {
     }
 
     @MainActor
-    public func commitMarkedText(inputState: InputState) -> String {
+    public func commitMarkedText(inputState: InputState, isUserInitiated: Bool = false) -> String {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}
+        if isUserInitiated, inputState == .selecting, let selectedCandidate {
+            self.recordSelectedCandidateCorrection(selectedCandidate)
+        }
         if let candidate = self.candidates?.first(where: {$0.text == text}) {
-            self.prefixCandidateCommited(candidate, leftSideContext: "")
+            self.prefixCandidateCommited(candidate, leftSideContext: "", isUserInitiated: isUserInitiated)
         }
         self.stopComposition()
         return text
@@ -984,6 +1081,7 @@ public final class SegmentsManager {
         guard self.withConverter({ $0.acceptPredictionCandidate(candidate, composingText: &self.composingText) }) else {
             return
         }
+        self.pendingZenzaiCorrection = nil
         self.lastInputStyle = .direct
         self.lastOperation = .insert
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
