@@ -673,15 +673,23 @@ public final class SegmentsManager {
     }
 
     @MainActor private func advancePendingZenzaiCorrection(with candidate: Candidate, isUserInitiated: Bool) {
-        guard var correction = self.pendingZenzaiCorrection else { return }
+        guard var correction = self.pendingZenzaiCorrection else {
+            return
+        }
         self.pendingZenzaiCorrection = nil
         guard isUserInitiated, candidate.isLearningTarget, candidate.actions.isEmpty,
-              candidate.data.map(\.word).joined() == candidate.text else { return }
+              candidate.data.map(\.word).joined() == candidate.text else {
+            return
+        }
 
         let reading = candidate.data.map(\.ruby).joined()
-        guard !reading.isEmpty, correction.remainingReading.hasPrefix(reading) else { return }
+        guard !reading.isEmpty, correction.remainingReading.hasPrefix(reading) else {
+            return
+        }
         correction.remainingReading.removeFirst(reading.count)
-        guard self.composingText.convertTarget.toKatakana() == correction.remainingReading else { return }
+        guard self.composingText.convertTarget.toKatakana() == correction.remainingReading else {
+            return
+        }
         self.withConverter { converter in
             let selected = correction.selected.map { converter.mergeCandidates($0, candidate) } ?? candidate
             if self.composingText.isEmpty {
