@@ -627,11 +627,20 @@ public final class SegmentsManager {
             return
         }
         let reading = candidate.data.map(\.ruby).joined()
-        // 文節候補と全文候補が混在するため、同じ範囲の先頭候補と比較する。
         guard !reading.isEmpty, self.composingText.convertTarget.toKatakana().hasPrefix(reading),
-              let original = candidates.first(where: { $0.data.map(\.ruby).joined() == reading }),
-              original.text != candidate.text else { return }
-        self.withConverter { $0.recordZenzaiCorrection(from: original, to: candidate) }
+              let original = self.rawCandidates?.mainResults.first else { return }
+        let originalReading = original.data.map(\.ruby).joined()
+        if originalReading != reading, originalReading.hasPrefix(reading) {
+            // 部分候補は全文変換の同じ読み区間と比較する。
+            // 先頭に加え、選んだ候補より上に表示された全文候補も対象にする。
+            let alternatives = candidates.prefix { $0 != candidate }.filter {
+                $0 != original && $0.data.map(\.ruby).joined() == originalReading
+            }
+            self.withConverter { $0.recordZenzaiCorrection(from: [original] + alternatives, to: candidate) }
+        } else if let original = candidates.first(where: { $0.data.map(\.ruby).joined() == reading }),
+                  original.text != candidate.text {
+            self.withConverter { $0.recordZenzaiCorrection(from: original, to: candidate) }
+        }
     }
 
     public enum CandidateWindow: Sendable {
