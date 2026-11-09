@@ -792,7 +792,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             }
             client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
             // アプリケーションサポートのディレクトリを準備しておく
-            self.segmentsManager.prefixCandidateCommited(candidate, leftSideContext: cleanLeftSideContext ?? "")
+            self.segmentsManager.prefixCandidateCommited(
+                candidate,
+                leftSideContext: cleanLeftSideContext ?? "",
+                isUserInitiated: isExplicitSelection
+            )
         }
     }
 
