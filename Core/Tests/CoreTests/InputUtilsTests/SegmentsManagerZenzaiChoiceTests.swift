@@ -54,5 +54,13 @@ func learnsFromSelectingAPrefixCandidateInFullConversion() throws {
         #expect(manager.commitMarkedText(inputState: .previewing) == "さん")
     }
     #expect(try currentCandidates().first?.text == "荒居さん")
+    manager.stopComposition()
+    let reading = "せんたくきでふくをあらいます"
+    for kana in reading {
+        manager.insertAtCursorPosition(String(kana), inputStyle: .direct)
+    }
+    manager.update(requestRichCandidates: true)
+    let firstFullCandidate = try currentCandidates().first { $0.data.map(\.ruby).joined() == reading.toKatakana() }
+    #expect(firstFullCandidate?.text == "洗濯機で服を洗います")
 }
 #endif
