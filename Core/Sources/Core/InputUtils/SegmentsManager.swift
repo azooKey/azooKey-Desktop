@@ -35,8 +35,10 @@ public final class SegmentsManager {
 
     private struct PendingZenzaiCorrection {
         let original: Candidate
+        let prefixAlternatives: [Candidate]
         var remainingReading: String
         var selected: Candidate?
+        var selectedAnotherPart = false
     }
 
     private var pendingZenzaiCorrection: PendingZenzaiCorrection?
@@ -638,14 +640,21 @@ public final class SegmentsManager {
     /// 候補一覧で明示的に選び直した候補を、確定で状態を変更する前に記録する。
     @MainActor public func recordSelectedCandidateCorrection(_ candidate: Candidate) {
         guard self.context.useZenzai, self.zenzaiPersonalizationMode == nil,
-              self.pendingZenzaiCorrection == nil, !self.shouldShowDebugCandidateWindow,
+              !self.shouldShowDebugCandidateWindow,
               let candidates = self.rawCandidatesList, candidates.contains(candidate) else {
+            return
+        }
+        if self.pendingZenzaiCorrection != nil {
+            self.pendingZenzaiCorrection?.selectedAnotherPart = true
             return
         }
         let reading = candidate.data.map(\.ruby).joined()
         let fullReading = self.composingText.convertTarget.toKatakana()
         guard !reading.isEmpty, fullReading.hasPrefix(reading),
-              let original = self.rawCandidates?.mainResults.first else { return }
+              let mainResults = self.rawCandidates?.mainResults,
+              let original = mainResults.first(where: { $0.data.map(\.ruby).joined() == fullReading }) ?? mainResults.first else {
+            return
+        }
         let originalReading = original.data.map(\.ruby).joined()
         if originalReading != reading, originalReading.hasPrefix(reading) {
             var consumed = 0
@@ -653,19 +662,19 @@ public final class SegmentsManager {
                 consumed += element.ruby.count
                 return consumed == reading.count
             }
-            if !hasBoundary {
-                // 選んだ部分が全文候補の語をまたぐ場合、残りも確定してから比較する。
-                if originalReading == fullReading {
-                    self.pendingZenzaiCorrection = .init(original: original, remainingReading: fullReading)
-                }
-                return
-            }
-            // 部分候補は全文変換の同じ読み区間と比較する。
-            // 先頭に加え、選んだ候補より上に表示された全文候補も対象にする。
-            let alternatives = candidates.prefix { $0 != candidate }.filter {
+            // 残りの選び方が分かるまで、部分候補の学習は保留する。
+            let alternatives = hasBoundary ? [original] + candidates.prefix { $0 != candidate }.filter {
                 $0 != original && $0.data.map(\.ruby).joined() == originalReading
+            } : []
+            if originalReading == fullReading {
+                self.pendingZenzaiCorrection = .init(
+                    original: original,
+                    prefixAlternatives: alternatives,
+                    remainingReading: fullReading
+                )
+            } else if hasBoundary {
+                self.withConverter { $0.recordZenzaiCorrection(from: alternatives, to: candidate) }
             }
-            self.withConverter { $0.recordZenzaiCorrection(from: [original] + alternatives, to: candidate) }
         } else if let original = candidates.first(where: { $0.data.map(\.ruby).joined() == reading }),
                   original.text != candidate.text {
             self.withConverter { $0.recordZenzaiCorrection(from: original, to: candidate) }
@@ -693,7 +702,10 @@ public final class SegmentsManager {
         self.withConverter { converter in
             let selected = correction.selected.map { converter.mergeCandidates($0, candidate) } ?? candidate
             if self.composingText.isEmpty {
-                converter.recordZenzaiCorrection(from: correction.original, to: selected)
+                let prefix = correction.selectedAnotherPart ? nil : correction.selected.map {
+                    (originals: correction.prefixAlternatives, selected: $0)
+                }
+                converter.recordZenzaiWholeInputCorrection(from: correction.original, to: selected, prefix: prefix)
             } else {
                 correction.selected = selected
                 self.pendingZenzaiCorrection = correction

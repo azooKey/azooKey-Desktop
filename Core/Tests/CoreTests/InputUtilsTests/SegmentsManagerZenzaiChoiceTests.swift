@@ -115,4 +115,39 @@ func learnsFromCommittingBothSidesOfADifferentWordBoundary() throws {
         #expect(first == "指示追従")
     }
 }
+@MainActor
+@Test(.enabled(if: FileManager.default.fileExists(
+    atPath: zenzaiChoiceModelDirectory.appendingPathComponent("ggml-model-Q5_K_M.gguf").path
+)))
+func learnsAWholePhraseWhenBothPartsAreSelected() throws {
+    try withZenzaiLearningManager { manager in
+        let reading = "あらいひかく"
+        @MainActor
+        func select(_ text: String, from candidates: [Candidate], leftSideContext: String) throws {
+            let row = try #require(candidates.firstIndex { $0.text == text })
+            manager.requestSelectingRow(row)
+            let selected = try #require(manager.selectedCandidate)
+            manager.recordSelectedCandidateCorrection(selected)
+            manager.prefixCandidateCommited(selected, leftSideContext: leftSideContext, isUserInitiated: true)
+        }
+
+        var first: String?
+        for _ in 0..<8 {
+            manager.insertAtCursorPosition(reading, inputStyle: .direct)
+            manager.update(requestRichCandidates: true)
+            let candidates = try selectionCandidates(manager)
+            first = candidates.first { $0.data.map(\.ruby).joined() == reading.toKatakana() }?.text
+            if first == "粗い比較" { break }
+            try select("粗い", from: candidates, leftSideContext: "")
+            try select("比較", from: selectionCandidates(manager), leftSideContext: "粗い")
+            #expect(manager.isEmpty)
+            manager.stopComposition()
+        }
+        #expect(first == "粗い比較")
+        manager.stopComposition()
+        manager.insertAtCursorPosition("あらいさん", inputStyle: .direct)
+        manager.update(requestRichCandidates: true)
+        #expect(try selectionCandidates(manager).first?.text != "粗いさん")
+    }
+}
 #endif
