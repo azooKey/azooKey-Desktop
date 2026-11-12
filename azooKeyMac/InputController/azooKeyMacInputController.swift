@@ -293,7 +293,23 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return true
         }
 
-        let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
+        if Config.TypeHalfWidthSlash().value,
+           let text = SlashDirectInputResolver.resolve(
+            characters: event.characters,
+            modifierFlags: eventModifiers,
+            inputLanguage: inputLanguage,
+            inputState: inputState,
+            inputStyle: Config.InputStyle().value
+           ) {
+            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            return true
+        }
+
+        let userAction = UserAction.getUserAction(
+            eventCore: event.keyEventCore,
+            inputLanguage: inputLanguage,
+            precedingCharacter: self.segmentsManager.characterBeforeCursor
+        )
 
         // 英数キー（keyCode 102）の処理
         if event.keyCode == 102 {

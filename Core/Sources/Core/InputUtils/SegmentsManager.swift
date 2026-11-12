@@ -499,6 +499,11 @@ public final class SegmentsManager {
         self.composingText.isEmpty
     }
 
+    /// 入力中の文字列で、カーソルの直前にある文字
+    public var characterBeforeCursor: Character? {
+        self.composingText.convertTargetBeforeCursor.last
+    }
+
     public func getCleanLeftSideContext(maxCount: Int) -> String? {
         self.delegate?.getLeftSideContext(maxCount: maxCount).map {
             var last = $0.split(separator: "\n", omittingEmptySubsequences: false).last ?? $0[...]

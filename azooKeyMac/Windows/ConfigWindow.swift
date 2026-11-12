@@ -8,6 +8,10 @@ struct ConfigWindow: View {
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
+    @ConfigState private var typeHalfWidthSymbolAfterNumber = Config.TypeHalfWidthSymbolAfterNumber()
+    @ConfigState private var typeHalfWidthSlash = Config.TypeHalfWidthSlash()
+    @ConfigState private var halfWidthRomanWithControlL = Config.HalfWidthRomanWithControlL()
+    @ConfigState private var typeHalfWidthSymbol = Config.TypeHalfWidthSymbol()
     @ConfigState private var optionDirectFullWidthInput = Config.OptionDirectFullWidthInput()
     @ConfigState private var zenzaiProfile = Config.ZenzaiProfile()
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
@@ -520,7 +524,23 @@ struct ConfigWindow: View {
             Section {
                 Toggle("円記号の代わりにバックスラッシュを入力", isOn: $typeBackSlash)
                 Toggle("スペースは常に半角を入力", isOn: $typeHalfSpace)
+                Toggle(isOn: $typeHalfWidthSymbolAfterNumber) {
+                    Text("数字の後の記号は半角を入力")
+                    Text("例: 3.14、1,000、12:30、11/12、03-1234")
+                }
+                Toggle(isOn: $typeHalfWidthSymbol) {
+                    Text("記号は半角を入力")
+                    Text("ー「」と句読点以外の記号（！？（）＠・〜『』など）を半角で入力します。かな入力とカスタムの入力方式では使えません。")
+                }
+                Toggle(isOn: $typeHalfWidthSlash) {
+                    Text("/ で・ではなく / を入力")
+                    Text("変換中の文字がないときは / をすぐ入力するので、日本語モードのままでもClaude Codeなどで / からコマンドを入力できます。かな入力では使えません。")
+                }
                 Toggle("Optionキーで直接全角英数を入力", isOn: $optionDirectFullWidthInput)
+                Toggle(isOn: $halfWidthRomanWithControlL) {
+                    Text("Control+Lで半角英数に変換")
+                    Text("オフのときは全角英数に変換します。Control+:とF10でも半角英数に変換できます。")
+                }
                 Picker("句読点の種類", selection: $punctuationStyle) {
                     Text("、と。").tag(Config.PunctuationStyle.Value.`kutenAndToten`)
                     Text("、と．").tag(Config.PunctuationStyle.Value.periodAndToten)

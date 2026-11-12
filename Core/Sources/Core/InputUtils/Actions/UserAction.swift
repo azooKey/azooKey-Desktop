@@ -80,7 +80,112 @@ public enum UserAction {
         }
     }
 
-    private static func intention(_ c: Character, invertPunctuation: Bool) -> Character? {
+    /// 日本語入力で記号キーを押したときに、全角と半角のどちらを入力するかを決める設定
+    public struct SymbolWidthOptions: Sendable, Equatable {
+        public init(
+            typeHalfWidthSymbol: Bool,
+            typeHalfWidthSymbolAfterNumber: Bool,
+            typeHalfWidthSlash: Bool,
+            inputStyle: Config.InputStyle.Value
+        ) {
+            self.typeHalfWidthSymbol = typeHalfWidthSymbol
+            self.typeHalfWidthSymbolAfterNumber = typeHalfWidthSymbolAfterNumber
+            self.typeHalfWidthSlash = typeHalfWidthSlash
+            self.inputStyle = inputStyle
+        }
+
+        /// 「！」「（」などの全角記号の代わりに半角記号を入力する
+        public var typeHalfWidthSymbol: Bool
+        /// 数字の直後の「.」「,」「:」「/」「-」を半角で入力する
+        public var typeHalfWidthSymbolAfterNumber: Bool
+        /// 「/」で「・」ではなく「/」を入力する
+        public var typeHalfWidthSlash: Bool
+        /// 入力方式。入力表が全角記号をキーに使う入力方式では、その記号を半角にしない
+        public var inputStyle: Config.InputStyle.Value
+
+        static var current: Self {
+            .init(
+                typeHalfWidthSymbol: Config.TypeHalfWidthSymbol().value,
+                typeHalfWidthSymbolAfterNumber: Config.TypeHalfWidthSymbolAfterNumber().value,
+                typeHalfWidthSlash: Config.TypeHalfWidthSlash().value,
+                inputStyle: Config.InputStyle().value
+            )
+        }
+
+        /// 半角記号の設定でも全角のまま入力する、日本語の入力に使う記号（句読点は句読点の種類の設定に従う）
+        private static let japanesePunctuation: Set<Character> = ["「", "」", "ー"]
+
+        /// 数字の直後で半角にする記号（3.14、1,000、12:30、11/12、03-1234）
+        private static let symbolsAfterNumber: Set<Character> = [".", ",", ":", "/", "-"]
+
+        /// キー `c` で、全角記号 `fullWidth` の代わりに半角記号を入力するかどうか
+        func typesHalfWidth(_ c: Character, fullWidth: Character) -> Bool {
+            if c == "/" && self.typeHalfWidthSlash {
+                return switch self.inputStyle {
+                case .default, .defaultAZIK, .custom:
+                    true
+                case .defaultKanaJIS, .defaultKanaUS:
+                    // かな入力では「/」のキーで「め」を入力する
+                    false
+                }
+            }
+            guard self.typeHalfWidthSymbol, !Self.japanesePunctuation.contains(fullWidth) else {
+                return false
+            }
+            return switch self.inputStyle {
+            case .default:
+                true
+            case .defaultAZIK:
+                // AZIKでは「;」で「っ」、「:」で「ー」を入力する
+                fullWidth != "；" && fullWidth != "："
+            case .defaultKanaJIS, .defaultKanaUS, .custom:
+                // かな入力では記号キーでかなを入力する。カスタムの入力表も全角記号をキーに使うことがある
+                false
+            }
+        }
+
+        /// 直前の文字 `precedingCharacter` に続く記号 `c` を半角で入力するかどうか
+        func typesHalfWidth(_ c: Character, after precedingCharacter: Character?) -> Bool {
+            guard self.typeHalfWidthSymbolAfterNumber,
+                  Self.symbolsAfterNumber.contains(c),
+                  let precedingCharacter,
+                  precedingCharacter.isASCII,
+                  precedingCharacter.isNumber else {
+                return false
+            }
+            return switch self.inputStyle {
+            case .default, .defaultAZIK, .custom:
+                true
+            case .defaultKanaJIS, .defaultKanaUS:
+                // かな入力では「,」「.」「:」「/」「-」のキーでかなを入力する
+                false
+            }
+        }
+    }
+
+    private static func intention(
+        _ c: Character,
+        invertPunctuation: Bool,
+        symbolWidth: SymbolWidthOptions,
+        precedingCharacter: Character?
+    ) -> Character? {
+        // Optionキーで句読点を切り替えたときは、その指定を優先する
+        if !invertPunctuation && symbolWidth.typesHalfWidth(c, after: precedingCharacter) {
+            return c
+        }
+        switch c {
+        case ",", ".":
+            return punctuationIntention(c, invertPunctuation: invertPunctuation)
+        default:
+            guard let fullWidth = KeyMap.h2zMap(c) else {
+                return nil
+            }
+            return symbolWidth.typesHalfWidth(c, fullWidth: fullWidth) ? c : fullWidth
+        }
+    }
+
+    /// 句読点の種類の設定に合わせて、「,」「.」で入力する全角の句読点を返す
+    private static func punctuationIntention(_ c: Character, invertPunctuation: Bool) -> Character? {
         switch c {
         case ",":
             let normal: Character = switch Config.PunctuationStyle().value {
@@ -110,7 +215,10 @@ public enum UserAction {
     public static func getUserAction(
         eventCore: KeyEventCore,
         inputLanguage: InputLanguage,
-        typeBackSlash: Bool? = nil
+        typeBackSlash: Bool? = nil,
+        symbolWidth: SymbolWidthOptions? = nil,
+        precedingCharacter: Character? = nil,
+        halfWidthRomanWithControlL: Bool? = nil
     ) -> UserAction {
         let typeBackSlash = typeBackSlash ?? Config.TypeBackSlash().value
         // see: https://developer.mozilla.org/ja/docs/Web/API/UI_Events/Keyboard_event_code_values#mac_%E3%81%A7%E3%81%AE%E3%82%B3%E3%83%BC%E3%83%89%E5%80%A4
@@ -119,9 +227,20 @@ public enum UserAction {
             case .english:
                 return string.map { .character($0) }
             case .japanese:
-                return string.map {
-                    .key(intention: intention($0, invertPunctuation: invertPunctuation), input: $0, modifiers: [])
+                let symbolWidth = symbolWidth ?? .current
+                var precedingCharacter = precedingCharacter
+                var pieces: [InputPiece] = []
+                for c in string {
+                    let resolved = intention(
+                        c,
+                        invertPunctuation: invertPunctuation,
+                        symbolWidth: symbolWidth,
+                        precedingCharacter: precedingCharacter
+                    )
+                    pieces.append(.key(intention: resolved, input: c, modifiers: []))
+                    precedingCharacter = resolved ?? c
                 }
+                return pieces
             }
         }
 
@@ -147,7 +266,11 @@ public enum UserAction {
             case ("o", [.control]): // Control + o
                 return .editSegment(1)  // Shift segment cursor right
             case ("l", [.control]): // Control + l
-                return .function(.nine)
+                return if halfWidthRomanWithControlL ?? Config.HalfWidthRomanWithControlL().value {
+                    .function(.ten)
+                } else {
+                    .function(.nine)
+                }
             case ("j", [.control]): // Control + j
                 return .function(.six)
             case ("k", [.control]): // Control + k

@@ -56,6 +56,31 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfSpace"
     }
+    /// 数字の直後の「.」「,」「:」「/」「-」を半角で入力する設定
+    public struct TypeHalfWidthSymbolAfterNumber: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfWidthSymbolAfterNumber"
+    }
+    /// 「/」で「・」ではなく「/」を入力する設定
+    /// 日本語モードで変換中の文字がないときは、変換を待たずにすぐ入力する
+    public struct TypeHalfWidthSlash: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfWidthSlash"
+    }
+    /// Control+Lで全角英数ではなく半角英数に変換する設定
+    public struct HalfWidthRomanWithControlL: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.halfWidthRomanWithControlL"
+    }
+    /// 「！」「（」などの全角記号の代わりに半角記号を入力する設定
+    public struct TypeHalfWidthSymbol: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.typeHalfWidthSymbol"
+    }
     /// Optionキー押下時に直接全角英数を入力する設定
     public struct OptionDirectFullWidthInput: BoolConfigItem {
         public init() {}
