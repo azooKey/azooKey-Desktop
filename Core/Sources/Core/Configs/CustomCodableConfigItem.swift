@@ -157,6 +157,37 @@ extension Config {
 }
 
 extension Config {
+    /// 日本語入力ソース内でCaps Lockの状態をどう解釈するか。
+    public struct CapsLockBehavior: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
+            case capsLock
+            case englishWhenOn
+            case englishWhenOff
+        }
+
+        public init() {}
+        // Why: 既存ユーザーのCaps Lock操作をアップデートで変えない。
+        public static let `default`: Value = .capsLock
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.capsLockBehavior"
+
+        public var value: Value {
+            get {
+                // Why not: 汎用のCustomCodableConfigItemは未設定時にprintする。
+                // 入力イベント毎のログ出力は避けたいので、既定値へ静かに戻す。
+                guard let data = Config.data(forKey: Self.key),
+                      let value = try? JSONDecoder().decode(Value.self, from: data) else {
+                    return Self.default
+                }
+                return value
+            }
+            nonmutating set {
+                Config.set(try? JSONEncoder().encode(newValue), forKey: Self.key)
+            }
+        }
+    }
+}
+
+extension Config {
     public struct InputStyle: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case `default`
