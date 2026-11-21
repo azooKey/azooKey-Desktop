@@ -128,8 +128,33 @@ class PredictionCandidatesViewController: BaseCandidateViewController {
     private let prefixSymbolName = "arrow.forward.to.line.compact"
     private let prefixFontSize: CGFloat = 12
 
+    override func updateCandidatePresentations(_ candidates: [CandidatePresentation], selectionIndex: Int?, cursorLocation: CGPoint) {
+        let selectedText = self.getSelectedCandidate()?.text
+        let retainedIndex = selectedText.flatMap { text in candidates.firstIndex { $0.candidate.text == text } }
+        super.updateCandidatePresentations(
+            candidates,
+            selectionIndex: selectionIndex ?? retainedIndex ?? (candidates.isEmpty ? nil : 0),
+            cursorLocation: cursorLocation
+        )
+    }
+
+    func handleNavigation(_ event: KeyEventCore, selectionKeys: Config.PredictionCandidateSelectionKeys.Value) -> Bool {
+        guard event.modifierFlags == selectionKeys.modifiers, !self.candidates.isEmpty else {
+            return false
+        }
+        switch event.keyCode {
+        case 126:
+            self.selectPrevCandidate()
+        case 125:
+            self.selectNextCandidate()
+        default:
+            return false
+        }
+        return true
+    }
+
     override var numberOfVisibleRows: Int {
-        min(3, self.tableView.numberOfRows)
+        min(9, self.tableView.numberOfRows)
     }
 
     override internal func configureCellView(_ cell: CandidateTableCellView, forRow row: Int) {
