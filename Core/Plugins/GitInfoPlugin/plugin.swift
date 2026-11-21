@@ -12,7 +12,7 @@ struct GitInfoPlugin: BuildToolPlugin {
             .buildCommand(
                 displayName: "Generate Git Info",
                 executable: tool.url,
-                arguments: [outputFile.path()],
+                arguments: [outputFile.path(percentEncoded: false)],
                 outputFiles: [outputFile]
             )
         ]
