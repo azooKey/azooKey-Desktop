@@ -2,10 +2,29 @@ import Cocoa
 import Core
 import KanaKanjiConverterModule
 
-class NonClickableTableView: NSTableView {
+class CandidateWindow: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+class CandidateTableView: NSTableView {
+    final var candidateClicked: (@MainActor (Int) -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
+    override var needsPanelToBecomeKey: Bool { false }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func rightMouseDown(with event: NSEvent) {}
-    override func mouseDown(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) {}
+
+    override func mouseDown(with event: NSEvent) {
+        let row = self.row(at: self.convert(event.locationInWindow, from: nil))
+        guard row >= 0 else {
+            return
+        }
+        self.candidateClicked?(row)
+    }
 }
 
 class CandidateTableCellView: NSTableCellView {
@@ -91,6 +110,7 @@ class CandidateTableCellView: NSTableCellView {
 }
 
 class BaseCandidateViewController: NSViewController {
+    final var candidateClicked: (@MainActor (Int) -> Void)?
     internal var candidates: [CandidatePresentation] = []
     internal var tableView: NSTableView!
     internal var currentSelectedRow: Int = -1
@@ -109,7 +129,23 @@ class BaseCandidateViewController: NSViewController {
 
         // Scroll View（前面）
         let scrollView = NSScrollView()
-        self.tableView = NonClickableTableView()
+        let tableView = CandidateTableView()
+        tableView.candidateClicked = { @MainActor [weak self] row in
+            guard let self, let candidateClicked = self.candidateClicked, self.candidates.indices.contains(row) else {
+                return
+            }
+            self.updateSelection(to: row, notifySelectionChange: false)
+            let candidate = self.candidates[row].candidate
+            // マウスイベントを返してから入力先へ確定・未確定文字列を送る。
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let row = self.candidates.firstIndex(where: { $0.candidate == candidate }) else {
+                    return
+                }
+                self.updateSelection(to: row, notifySelectionChange: false)
+                candidateClicked(row)
+            }
+        }
+        self.tableView = tableView
         self.tableView.style = .plain
         scrollView.documentView = self.tableView
         scrollView.hasVerticalScroller = true
@@ -168,7 +204,7 @@ class BaseCandidateViewController: NSViewController {
         window.contentView?.wantsLayer = true
         window.contentView?.layer?.masksToBounds = true
 
-        window.styleMask = [.borderless, .resizable]
+        window.styleMask.insert(.resizable)
         window.isMovable = true
         window.hasShadow = true
         window.titlebarAppearsTransparent = true
