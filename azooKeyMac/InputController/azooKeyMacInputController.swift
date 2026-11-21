@@ -151,7 +151,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // Register custom input table (if available) for `.tableName` usage
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
-        self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateTransformSelectedTextMenuItemTitle()
         self.updateTransformSelectedTextMenuItemShortcut()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
@@ -483,10 +483,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             self.switchInputLanguage(language, client: client)
         // PredictiveSuggestion
-        case .requestPredictiveSuggestion:
-            // 「つづき」を直接入力し、コンテキストを渡す
-            self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: self.inputStyle)
-            self.requestReplaceSuggestion()
         case .acceptPredictionCandidate:
             self.acceptPredictionCandidate()
         // ReplaceSuggestion
@@ -896,6 +892,9 @@ extension azooKeyMacInputController {
         }
 
         let composingText = self.segmentsManager.convertTarget
+        guard !composingText.isEmpty else {
+            return
+        }
 
         // プロンプトを取得
         let leftContext = self.getLeftSideContext(maxCount: 100) ?? ""

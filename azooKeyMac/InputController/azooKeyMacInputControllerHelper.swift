@@ -16,7 +16,7 @@ extension azooKeyMacInputController {
         self.appMenu.addItem(NSMenuItem.separator())
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub…", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
-        self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateTransformSelectedTextMenuItemTitle()
     }
 
     func updateTransformSelectedTextMenuItemShortcut() {
@@ -67,8 +67,6 @@ extension azooKeyMacInputController {
         switch self.inputState {
         case .composing, .replaceSuggestion:
             _ = self.handleClientAction(.requestReplaceSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
-        case .none:
-            _ = self.handleClientAction(.requestPredictiveSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
         default:
             break
         }
@@ -78,32 +76,20 @@ extension azooKeyMacInputController {
         guard menuItem == self.transformSelectedTextMenuItem else {
             return true
         }
-        let aiBackendEnabled = Config.AIBackendPreference().value != .off
-        self.updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: aiBackendEnabled)
-        return self.canPerformTransformSelectedText(client: self.client())
-    }
-
-    func updateTransformSelectedTextMenuItemEnabledState() {
-        let aiBackendEnabled = Config.AIBackendPreference().value != .off
-        self.updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: aiBackendEnabled)
-        self.transformSelectedTextMenuItem.isEnabled = self.canPerformTransformSelectedText(client: self.client())
-    }
-
-    private func canPerformTransformSelectedText(client: IMKTextInput?) -> Bool {
+        self.updateTransformSelectedTextMenuItemTitle()
         guard !self.isPromptWindowVisible else {
             return false
         }
-        guard let client else {
+        guard let client = self.client() else {
             return false
         }
-        // 入力状態だけで有効と分かる場合は、入力先アプリへの同期問い合わせを行わない。
+        // 選択範囲はメニューの検証時に取得し、入力開始時の同期問い合わせを避ける。
         return self.inputState == .composing
             || self.inputState == .replaceSuggestion
-            || self.inputState == .none
-            || client.selectedRange().length > 0 // hasSelection
+            || client.selectedRange().length > 0
     }
 
-    private func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool) {
+    func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool = Config.AIBackendPreference().value != .off) {
         self.transformSelectedTextMenuItem.title = aiBackendEnabled ? TransformMenuTitle.normal : TransformMenuTitle.noBackend
     }
 

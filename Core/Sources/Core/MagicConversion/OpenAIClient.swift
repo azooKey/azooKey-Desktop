@@ -5,16 +5,6 @@ import FoundationNetworking
 
 struct Prompt {
     static let dictionary: [String: String] = [
-        // 文章補完プロンプト（デフォルト）
-        "": """
-        Generate 3-5 natural sentence completions for the given fragment.
-        Return them as a simple array of strings.
-
-        Example:
-        Input: "りんごは"
-        Output: ["赤いです。", "甘いです。", "美味しいです。", "1個200円です。", "果物です。"]
-        """,
-
         // 絵文字変換プロンプト
         "えもじ": """
         Generate 3-5 emoji options that best represent the meaning of the text.
@@ -85,24 +75,6 @@ struct Prompt {
         "せつめい": """
         Provide 3-5 explanation to represent the given context.
         Return them as a simple array of Japanese strings.
-        """,
-
-        // つづきプロンプト
-        "つづき": """
-        Generate 2-5 short continuation options for the given context.
-        Return them as a simple array of strings.
-
-        Example:
-        Input: "吾輩は猫である。<つづき>"
-        Output: ["名前はまだない。", "名前はまだ無い。"]
-
-        Example:
-        Input: "10個の飴を5人に配る場合を考えます。<つづき>"
-        Output: ["一人あたり10÷5=2個の飴を貰えます。", "1人2個の飴を貰えます。", "計算してみましょう"]
-
-        Example:
-        Input: "<つづき>"
-        Output: ["👍"]
         """
     ]
 
@@ -213,7 +185,7 @@ public struct OpenAIRequest {
         var body: [String: Any] = [
             "model": modelName,
             "messages": [
-                ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
+                ["role": "system", "content": "Generate text conversion candidates according to the user's instructions."],
                 ["role": "user", "content": """
                     \(Prompt.getPromptText(for: target))
 
