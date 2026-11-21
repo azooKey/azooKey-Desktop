@@ -152,6 +152,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateTransformSelectedTextMenuItemShortcut()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()

@@ -9,14 +9,25 @@ extension azooKeyMacInputController {
         self.appMenu.autoenablesItems = true
         self.liveConversionToggleMenuItem = NSMenuItem(title: "ライブ変換", action: #selector(self.toggleLiveConversion(_:)), keyEquivalent: "")
         self.appMenu.addItem(self.liveConversionToggleMenuItem)
-        self.transformSelectedTextMenuItem = NSMenuItem(title: TransformMenuTitle.normal, action: #selector(self.performTransformSelectedText(_:)), keyEquivalent: "s")
-        self.transformSelectedTextMenuItem.keyEquivalentModifierMask = [.control]
+        self.transformSelectedTextMenuItem = NSMenuItem(title: TransformMenuTitle.normal, action: #selector(self.performTransformSelectedText(_:)), keyEquivalent: "")
+        self.updateTransformSelectedTextMenuItemShortcut()
         self.transformSelectedTextMenuItem.target = self
         self.appMenu.addItem(self.transformSelectedTextMenuItem)
         self.appMenu.addItem(NSMenuItem.separator())
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub…", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
         self.updateTransformSelectedTextMenuItemEnabledState()
+    }
+
+    func updateTransformSelectedTextMenuItemShortcut() {
+        let shortcut = Config.TransformShortcut().value
+        var mask: NSEvent.ModifierFlags = []
+        if shortcut.modifiers.contains(.control) { mask.insert(.control) }
+        if shortcut.modifiers.contains(.option) { mask.insert(.option) }
+        if shortcut.modifiers.contains(.shift) { mask.insert(.shift) }
+        if shortcut.modifiers.contains(.command) { mask.insert(.command) }
+        self.transformSelectedTextMenuItem.keyEquivalent = shortcut.key
+        self.transformSelectedTextMenuItem.keyEquivalentModifierMask = mask
     }
 
     @objc func toggleLiveConversion(_ sender: Any) {
