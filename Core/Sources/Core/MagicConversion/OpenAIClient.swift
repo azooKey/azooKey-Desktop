@@ -176,6 +176,16 @@ struct Prompt {
     }
 }
 
+public enum OpenAIReasoningEffort: String, CaseIterable, Codable, Sendable {
+    case disabled = "none"
+    case minimal
+    case low
+    case medium
+    case high
+    case xhigh
+    case max
+}
+
 // OpenAI APIに送信するリクエスト構造体。
 //
 // - properties:
@@ -186,19 +196,21 @@ struct Prompt {
 // - methods:
 //    - toJSON(): リクエストをOpenAI APIに適したJSON形式に変換する。
 public struct OpenAIRequest {
-    public init(prompt: String, target: String, modelName: String) {
+    public init(prompt: String, target: String, modelName: String, reasoningEffort: OpenAIReasoningEffort? = nil) {
         self.prompt = prompt
         self.target = target
         self.modelName = modelName
+        self.reasoningEffort = reasoningEffort
     }
 
     let prompt: String
     let target: String
     let modelName: String
+    let reasoningEffort: OpenAIReasoningEffort?
 
     // リクエストをJSON形式に変換する関数
     func toJSON() -> [String: Any] {
-        [
+        var body: [String: Any] = [
             "model": modelName,
             "messages": [
                 ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
@@ -230,6 +242,10 @@ public struct OpenAIRequest {
                 ] as [String: Any]
             ] as [String: Any]
         ]
+        if let reasoningEffort {
+            body["reasoning_effort"] = reasoningEffort.rawValue
+        }
+        return body
     }
 }
 
@@ -349,7 +365,13 @@ public enum OpenAIClient {
     }
 
     // Simple text transformation method for AI Transform feature
-    public static func sendTextTransformRequest(prompt: String, modelName: String, apiKey: String, apiEndpoint: String) async throws -> String {
+    public static func sendTextTransformRequest(
+        prompt: String,
+        modelName: String,
+        apiKey: String,
+        apiEndpoint: String,
+        reasoningEffort: OpenAIReasoningEffort? = nil
+    ) async throws -> String {
         guard let url = URL(string: apiEndpoint) else {
             throw OpenAIError.invalidURL
         }
@@ -359,7 +381,7 @@ public enum OpenAIClient {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": modelName,
             "messages": [
                 ["role": "system", "content": "You are a helpful assistant that transforms text according to user instructions. Return only the transformed text as a JSON object with a 'result' field."],
@@ -384,6 +406,9 @@ public enum OpenAIClient {
                 ] as [String: Any]
             ] as [String: Any]
         ]
+        if let reasoningEffort {
+            body["reasoning_effort"] = reasoningEffort.rawValue
+        }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

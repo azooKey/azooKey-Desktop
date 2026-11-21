@@ -37,6 +37,22 @@ extension Config {
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiModelName"
     }
 
+    /// OpenAI APIの推論の強さ。nilの場合はモデルの既定値に従う。
+    public struct OpenAiReasoningEffort: ConfigItem {
+        public init() {}
+
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.OpenAiReasoningEffort"
+
+        public var value: OpenAIReasoningEffort? {
+            get {
+                Config.string(forKey: Self.key).flatMap(OpenAIReasoningEffort.init(rawValue:))
+            }
+            nonmutating set {
+                Config.set(newValue?.rawValue, forKey: Self.key)
+            }
+        }
+    }
+
     /// OpenAI API エンドポイント
     public struct OpenAiApiEndpoint: StringConfigItem {
         public init() {}
