@@ -232,8 +232,8 @@ struct ConfigWindow: View {
 
         do {
             let testRequest = OpenAIRequest(
-                prompt: "テスト",
-                target: "",
+                prompt: "Text before: おはようございます。今日も",
+                target: "てんき",
                 modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value,
                 reasoningEffort: openAiReasoningEffort.value
             )

@@ -892,6 +892,9 @@ extension azooKeyMacInputController {
         }
 
         let composingText = self.segmentsManager.convertTarget
+        guard !composingText.isEmpty else {
+            return
+        }
 
         // プロンプトを取得
         let leftContext = self.getLeftSideContext(maxCount: 100) ?? ""

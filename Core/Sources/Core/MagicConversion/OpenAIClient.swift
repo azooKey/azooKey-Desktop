@@ -5,16 +5,6 @@ import FoundationNetworking
 
 struct Prompt {
     static let dictionary: [String: String] = [
-        // 文章補完プロンプト（デフォルト）
-        "": """
-        Generate 3-5 natural sentence completions for the given fragment.
-        Return them as a simple array of strings.
-
-        Example:
-        Input: "りんごは"
-        Output: ["赤いです。", "甘いです。", "美味しいです。", "1個200円です。", "果物です。"]
-        """,
-
         // 絵文字変換プロンプト
         "えもじ": """
         Generate 3-5 emoji options that best represent the meaning of the text.
@@ -195,7 +185,7 @@ public struct OpenAIRequest {
         var body: [String: Any] = [
             "model": modelName,
             "messages": [
-                ["role": "system", "content": "You are an assistant that predicts the continuation of short text."],
+                ["role": "system", "content": "Generate text conversion candidates according to the user's instructions."],
                 ["role": "user", "content": """
                     \(Prompt.getPromptText(for: target))
 
