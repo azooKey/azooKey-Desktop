@@ -20,7 +20,7 @@ public enum LegacyDataMigration {
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
             return nil
         }
-        guard let preferences = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
+        guard let preferences = try PropertyListSerialization.propertyList(from: data, options: 0, format: nil) as? [String: Any] else {
             throw CocoaError(.fileReadCorruptFile)
         }
         guard let value = preferences[Config.UserDictionary.key] else {

@@ -69,16 +69,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func exportUserDictionaryAndReloadConverter() {
+    @discardableResult
+    func exportUserDictionaryAndReloadConverter() -> Task<Bool, Never> {
         let memoryDirectoryURL = self.userDictionaryMemoryDirectoryURL
-        Task.detached(priority: .utility) {
+        return Task.detached(priority: .utility) {
             do {
                 try CompiledUserDictionaryStore.exportCurrentDictionaries(memoryDirectoryURL: memoryDirectoryURL)
                 await MainActor.run {
                     self.reloadUserDictionary(memoryDirectoryURL: memoryDirectoryURL)
                 }
+                return true
             } catch {
                 print("Failed to export compiled user dictionary: \(error)")
+                return false
             }
         }
     }

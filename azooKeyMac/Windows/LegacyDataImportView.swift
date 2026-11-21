@@ -8,6 +8,7 @@ struct LegacyDataImportView: View {
 
     @State private var showingResult = false
     @State private var result = ""
+    @State private var importing = false
 
     var body: some View {
         LabeledContent("旧データ") {
@@ -32,6 +33,7 @@ struct LegacyDataImportView: View {
                     }
                 }
             }
+            .disabled(self.importing)
         }
         .alert("旧データの読み込み", isPresented: $showingResult) {
             Button("OK", role: .cancel) {}
@@ -84,6 +86,7 @@ struct LegacyDataImportView: View {
             return
         }
         var messages: [String] = []
+        var dictionaryExport: Task<Bool, Never>?
         do {
             if let legacy = try readDictionary() {
                 let dictionary = Config.UserDictionary()
@@ -96,13 +99,31 @@ struct LegacyDataImportView: View {
                 } else {
                     messages.append("ユーザ辞書に追加できる単語はありませんでした。")
                 }
-                appDelegate.exportUserDictionaryAndReloadConverter()
+                dictionaryExport = appDelegate.exportUserDictionaryAndReloadConverter()
             }
         } catch {
             messages.append("ユーザ辞書を読み込めませんでした。\(error.localizedDescription)")
         }
 
         appDelegate.kanaKanjiConverter.commitUpdateLearningData()
+        if let learningMessage = self.importLearning(from: memoryDirectory) {
+            messages.append(learningMessage)
+        }
+        if let dictionaryExport {
+            self.importing = true
+            Task {
+                if !(await dictionaryExport.value) {
+                    messages.append("変換用のユーザ辞書を作成できませんでした。再度読み込んでください。")
+                }
+                self.importing = false
+                self.showResult(messages)
+            }
+        } else {
+            self.showResult(messages)
+        }
+    }
+
+    private func importLearning(from memoryDirectory: URL) -> String? {
         do {
             let destination = AppGroup.memoryDirectoryURL()
             var learning = try LegacyDataMigration.stageLearning(from: memoryDirectory, for: destination)
@@ -111,15 +132,18 @@ struct LegacyDataImportView: View {
             }
             switch learning {
             case .missing:
-                break
+                return nil
             case .keptCurrent:
-                messages.append("新しい保存先に履歴学習データがあるため、現在の学習を保持しました。")
+                return "新しい保存先に履歴学習データがあるため、現在の学習を保持しました。"
             case .staged:
-                messages.append("履歴学習データを読み込むにはIMEを再起動してください。")
+                return "履歴学習データを読み込むにはIMEを再起動してください。"
             }
         } catch {
-            messages.append("履歴学習データを読み込めませんでした。\(error.localizedDescription)")
+            return "履歴学習データを読み込めませんでした。\(error.localizedDescription)"
         }
+    }
+
+    private func showResult(_ messages: [String]) {
         self.result = messages.isEmpty ? "読み込めるユーザ辞書や履歴学習データが見つかりませんでした。" : messages.joined(separator: "\n")
         self.showingResult = true
     }
@@ -128,8 +152,8 @@ struct LegacyDataImportView: View {
         let alert = NSAlert()
         alert.messageText = "履歴学習データを旧データに置き換えますか？"
         alert.informativeText = "現在の学習データは、アプリデータ内の memory-backup フォルダにバックアップします。"
-        alert.addButton(withTitle: "バックアップして置き換える")
         alert.addButton(withTitle: "現在の学習を保持する")
-        return alert.runModal() == .alertFirstButtonReturn
+        alert.addButton(withTitle: "バックアップして置き換える")
+        return alert.runModal() == .alertSecondButtonReturn
     }
 }
