@@ -18,11 +18,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController
+    private var candidateCursorLocation: CGPoint?
 
     private var predictionWindow: NSWindow
     private var predictionViewController: PredictionCandidatesViewController
     private var lastPredictionCandidates: [String] = []
     private var lastPredictionUpdateTime: TimeInterval = 0
+    private var predictionCursorLocation: CGPoint?
     private var predictionHideWorkItem: DispatchWorkItem?
 
     private var replaceSuggestionWindow: NSWindow
@@ -39,9 +41,18 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     // ピン留めプロンプトのキャッシュ（パフォーマンス向上のため）
     private var pinnedPromptsCache: [PromptHistoryItem] = []
 
-    private static func makeCandidateWindow(contentViewController: NSViewController) -> NSWindow {
-        let window = NSWindow(contentViewController: contentViewController)
-        window.styleMask = [.borderless]
+    private static func makeCandidateWindow(contentViewController: NSViewController, acceptsCandidateClicks: Bool) -> NSWindow {
+        let window: NSWindow
+        if acceptsCandidateClicks {
+            let panel = CandidateWindow(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.contentViewController = contentViewController
+            panel.becomesKeyOnlyIfNeeded = true
+            panel.hidesOnDeactivate = false
+            window = panel
+        } else {
+            window = NSWindow(contentViewController: contentViewController)
+            window.styleMask = [.borderless]
+        }
         window.level = .popUpMenu
 
         // Chromium 系アプリの deadlock 回避のため、初期化時に client への
@@ -127,9 +138,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionViewController = predictionViewController
         self.replaceSuggestionsViewController = replaceSuggestionsViewController
 
-        self.candidatesWindow = Self.makeCandidateWindow(contentViewController: candidatesViewController)
-        self.predictionWindow = Self.makeCandidateWindow(contentViewController: predictionViewController)
-        self.replaceSuggestionWindow = Self.makeCandidateWindow(contentViewController: replaceSuggestionsViewController)
+        self.candidatesWindow = Self.makeCandidateWindow(contentViewController: candidatesViewController, acceptsCandidateClicks: true)
+        self.predictionWindow = Self.makeCandidateWindow(contentViewController: predictionViewController, acceptsCandidateClicks: true)
+        self.replaceSuggestionWindow = Self.makeCandidateWindow(contentViewController: replaceSuggestionsViewController, acceptsCandidateClicks: false)
 
         // PromptInputWindowの初期化
         self.promptInputWindow = PromptInputWindow()
@@ -140,6 +151,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesViewController.delegate = self
         self.replaceSuggestionsViewController.delegate = self
         self.segmentsManager.delegate = self
+        self.candidatesViewController.candidateClicked = { @MainActor [weak self] _ in
+            self?.candidateSubmitted()
+        }
+        self.predictionViewController.candidateClicked = { @MainActor [weak self] _ in
+            self?.acceptClickedPrediction()
+        }
         self.setupMenu()
     }
 
@@ -576,38 +593,34 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
     }
 
-    func refreshCandidateWindow() {
+    func refreshCandidateWindow(at cursorLocation: CGPoint? = nil) {
         switch self.segmentsManager.getCurrentCandidateWindow(inputState: self.inputState) {
-        case .selecting(let candidates, let selectionIndex):
-            var rect: NSRect = .zero
-            self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            self.candidatesViewController.showCandidateIndex = true
+        case .selecting(let candidates, let selectionIndex), .composing(let candidates, let selectionIndex):
+            let position = cursorLocation ?? self.queryCursorLocation()
+            self.candidateCursorLocation = position
+            self.candidatesViewController.showCandidateIndex = self.inputState == .selecting
             let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
             self.candidatesViewController.updateCandidatePresentations(
                 candidatePresentations,
                 selectionIndex: selectionIndex,
-                cursorLocation: rect.origin
-            )
-            self.candidatesWindow.orderFront(nil)
-        case .composing(let candidates, let selectionIndex):
-            var rect: NSRect = .zero
-            self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            self.candidatesViewController.showCandidateIndex = false
-            let candidatePresentations = self.segmentsManager.makeCandidatePresentations(candidates)
-            self.candidatesViewController.updateCandidatePresentations(
-                candidatePresentations,
-                selectionIndex: selectionIndex,
-                cursorLocation: rect.origin
+                cursorLocation: position
             )
             self.candidatesWindow.orderFront(nil)
         case .hidden:
             self.candidatesWindow.setIsVisible(false)
             self.candidatesWindow.orderOut(nil)
             self.candidatesViewController.hide()
+            self.candidateCursorLocation = nil
         }
     }
 
-    func refreshPredictionWindow() {
+    private func queryCursorLocation() -> CGPoint {
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        return rect.origin
+    }
+
+    func refreshPredictionWindow(at cursorLocation: CGPoint? = nil) {
         guard self.inputState == .composing else {
             self.hidePredictionWindow()
             return
@@ -618,7 +631,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let now = Date().timeIntervalSince1970
             let elapsed = now - self.lastPredictionUpdateTime
             if elapsed < 1.0, !self.lastPredictionCandidates.isEmpty {
-                self.showCachedPredictionWindow()
+                self.showCachedPredictionWindow(at: cursorLocation)
                 self.schedulePredictionHide(after: max(0, 1.0 - elapsed))
                 return
             }
@@ -640,12 +653,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.lastPredictionCandidates = candidates.map(\.text)
         self.lastPredictionUpdateTime = Date().timeIntervalSince1970
 
-        var rect: NSRect = .zero
-        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        let position = cursorLocation ?? self.queryCursorLocation()
+        self.predictionCursorLocation = position
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
             selectionIndex: nil,
-            cursorLocation: rect.origin
+            cursorLocation: position
         )
 
         if Config.LiveConversion().value {
@@ -678,7 +691,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.setFrame(frame.cgRect, display: true)
     }
 
-    private func showCachedPredictionWindow() {
+    private func showCachedPredictionWindow(at cursorLocation: CGPoint?) {
         let candidates = self.lastPredictionCandidates.map { text in
             Candidate(
                 text: text,
@@ -691,12 +704,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         guard !candidates.isEmpty else {
             return
         }
-        var rect: NSRect = .zero
-        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        let position = cursorLocation ?? self.queryCursorLocation()
+        self.predictionCursorLocation = position
         self.predictionViewController.updateCandidatePresentations(
             candidates.map { .init(candidate: $0) },
             selectionIndex: nil,
-            cursorLocation: rect.origin
+            cursorLocation: position
         )
         self.predictionWindow.orderFront(nil)
     }
@@ -721,6 +734,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.predictionWindow.orderOut(nil)
         self.lastPredictionCandidates = []
         self.lastPredictionUpdateTime = 0
+        self.predictionCursorLocation = nil
         self.predictionHideWorkItem?.cancel()
         self.predictionHideWorkItem = nil
     }
@@ -728,6 +742,19 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     @MainActor
     private func acceptPredictionCandidate() {
         self.segmentsManager.acceptPredictionCandidate()
+    }
+
+    @MainActor
+    private func acceptClickedPrediction() {
+        guard self.inputState == .composing, self.predictionWindow.isVisible,
+              let candidate = self.predictionViewController.getSelectedCandidate(),
+              self.requestPreferredPredictionCandidates().first?.displayText == candidate.text else {
+            return
+        }
+        self.acceptPredictionCandidate()
+        self.refreshMarkedText()
+        self.refreshCandidateWindow(at: self.candidateCursorLocation ?? self.predictionCursorLocation)
+        self.refreshPredictionWindow(at: self.predictionCursorLocation)
     }
 
     private func requestPreferredPredictionCandidates() -> [SegmentsManager.PredictionCandidate] {
@@ -805,13 +832,15 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
 extension azooKeyMacInputController: CandidatesViewControllerDelegate {
     func candidateSubmitted() {
-        Task { @MainActor in
-            self.submitSelectedCandidate()
-            self.inputState = self.segmentsManager.isEmpty ? .none : .previewing
-            self.refreshMarkedText()
-            self.refreshCandidateWindow()
-            self.refreshPredictionWindow()
+        guard self.candidatesWindow.isVisible, let candidate = self.candidatesViewController.getSelectedCandidate() else {
+            return
         }
+        self.submitCandidate(candidate)
+        self.segmentsManager.requestResettingSelection()
+        self.inputState = self.segmentsManager.isEmpty ? .none : .selecting
+        self.refreshMarkedText()
+        self.refreshCandidateWindow(at: self.candidateCursorLocation)
+        self.refreshPredictionWindow()
     }
 
     func candidateSelectionChanged(_ row: Int) {

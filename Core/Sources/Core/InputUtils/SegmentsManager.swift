@@ -63,6 +63,7 @@ public final class SegmentsManager {
         Config.ZenzaiPersonalizationLevel().value
     }
     private var rawCandidates: ConversionResult?
+    private var candidateRightSideContext: String?
 
     private var selectionIndex: Int?
     private var didExperienceSegmentEdition = false
@@ -280,6 +281,7 @@ public final class SegmentsManager {
         self.composingText.stopComposition()
         self.withConverter { $0.stopComposition() }
         self.rawCandidates = nil
+        self.candidateRightSideContext = nil
         self.didExperienceSegmentEdition = false
         self.lastOperation = .other
         self.shouldShowCandidateWindow = false
@@ -569,6 +571,7 @@ public final class SegmentsManager {
 
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: ContextLength.conversion)
         let rightSideContext = forcedRightSideContext ?? self.getCleanRightSideContext(maxCount: ContextLength.conversion)
+        self.candidateRightSideContext = rightSideContext
         let result = self.withConverter { converter in
             converter.requestCandidates(
                 self.composingText,
@@ -593,15 +596,20 @@ public final class SegmentsManager {
     @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
         self.withConverter { $0.setCompletedData(candidate) }
         self.withConverter { $0.updateLearningData(candidate) }
+        // カーソルを右端に移動する
+        _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
         self.composingText.prefixComplete(composingCount: candidate.composingCount)
 
         if !self.composingText.isEmpty {
-            // カーソルを右端に移動する
-            _ = self.composingText.moveCursorFromCursorPosition(count: self.composingText.convertTarget.count - self.composingText.convertTargetCursorPosition)
             self.didExperienceSegmentEdition = false
             self.shouldShowCandidateWindow = true
             self.selectionIndex = nil
-            self.updateRawCandidate(requestRichCandidates: true, forcedLeftSideContext: leftSideContext + candidate.text)
+            // 部分確定では、確定前に取得した後方文脈を引き継ぐ。
+            self.updateRawCandidate(
+                requestRichCandidates: true,
+                forcedLeftSideContext: leftSideContext + candidate.text,
+                forcedRightSideContext: self.candidateRightSideContext ?? ""
+            )
         }
     }
 
