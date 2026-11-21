@@ -387,3 +387,37 @@ private func makeControlEvent(
         }
     }
 }
+
+private func isSuggest(_ action: UserAction) -> Bool {
+    if case .suggest = action {
+        return true
+    }
+    return false
+}
+
+@Test func testDefaultTransformShortcutIsControlS() {
+    let action = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "s", characters: "\u{13}", modifiers: [.control], keyCode: 1),
+        inputLanguage: .japanese,
+        transformShortcut: .defaultTransformShortcut
+    )
+    #expect(isSuggest(action))
+}
+
+@Test func testCustomTransformShortcutReplacesControlS() {
+    let custom = KeyboardShortcut(key: "g", modifiers: [.control, .shift])
+    let newKey = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "g", characters: "\u{7}", modifiers: [.control, .shift], keyCode: 5),
+        inputLanguage: .japanese,
+        transformShortcut: custom
+    )
+    #expect(isSuggest(newKey))
+
+    // 変更後は Ctrl+S では発動しない（ホストアプリへ渡す）
+    let oldKey = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "s", characters: "\u{13}", modifiers: [.control], keyCode: 1),
+        inputLanguage: .japanese,
+        transformShortcut: custom
+    )
+    #expect(!isSuggest(oldKey))
+}

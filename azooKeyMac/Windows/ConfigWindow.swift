@@ -24,6 +24,7 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var transformShortcut = Config.TransformShortcut()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -408,6 +409,14 @@ struct ConfigWindow: View {
                         UserDefaults.standard.set(true, forKey: "hasSetAIBackendManually")
                     }
                 }
+
+                HStack {
+                    Text("ショートカット")
+                    Spacer()
+                    KeyboardShortcutRecorder(shortcut: $transformShortcut)
+                        .frame(width: 160, height: 24)
+                }
+                .help("クリックして新しいキーを入力します。Deleteでデフォルト（⌃S）に戻り、Escでキャンセルします。")
 
                 if aiBackend.value == .openAI {
                     HStack {
