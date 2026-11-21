@@ -232,10 +232,6 @@ public final class SegmentsManager {
         )
     }
 
-    private func hasDebugTypoCorrectionWeights() -> Bool {
-        DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: self.downloadedInputN5LMDir)
-    }
-
     public var azooKeyMemoryDir: URL {
         self.applicationDirectoryURL
     }
@@ -386,17 +382,14 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
-        guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
+        guard Config.DebugTypoCorrection().value,
+              count == 1,
+              DebugTypoCorrectionWeights.canReadRequiredWeightFiles(modelDirectoryURL: self.downloadedInputN5LMDir) else {
             self.backspaceAdjustedPredictionCandidate = nil
             self.backspaceTypoCorrectionLock = nil
             return
         }
         let currentConvertTarget = self.composingText.convertTarget
-        guard count == 1 else {
-            self.backspaceAdjustedPredictionCandidate = nil
-            self.backspaceTypoCorrectionLock = nil
-            return
-        }
         if let lock = self.backspaceTypoCorrectionLock {
             self.backspaceAdjustedPredictionCandidate = Self.makeBackspaceTypoCorrectionPredictionCandidate(
                 currentConvertTarget: currentConvertTarget,
@@ -988,9 +981,6 @@ public final class SegmentsManager {
 
     @MainActor
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
-        guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
-            return []
-        }
         guard !targetComposingText.isEmpty else {
             return []
         }
