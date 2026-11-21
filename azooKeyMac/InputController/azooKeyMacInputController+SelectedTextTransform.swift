@@ -269,6 +269,7 @@ extension azooKeyMacInputController {
                     modelName: modelName,
                     apiKey: apiKey,
                     apiEndpoint: self.endpoint,
+                    reasoningEffort: Config.OpenAiReasoningEffort().value,
                     logger: { [weak self] message in
                         self?.appendDebugMessage(message)
                     }
@@ -453,6 +454,7 @@ extension azooKeyMacInputController {
             modelName: modelName,
             apiKey: apiKey,
             apiEndpoint: self.endpoint,
+            reasoningEffort: Config.OpenAiReasoningEffort().value,
             logger: { [weak self] message in
                 self?.appendDebugMessage(message)
             }

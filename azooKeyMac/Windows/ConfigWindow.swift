@@ -13,6 +13,7 @@ struct ConfigWindow: View {
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
+    @ConfigState private var openAiReasoningEffort = Config.OpenAiReasoningEffort()
     @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
     @ConfigState private var learning = Config.Learning()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
@@ -232,7 +233,8 @@ struct ConfigWindow: View {
             let testRequest = OpenAIRequest(
                 prompt: "テスト",
                 target: "",
-                modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value
+                modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value,
+                reasoningEffort: openAiReasoningEffort.value
             )
             _ = try await OpenAIClient.sendRequest(
                 testRequest,
@@ -416,6 +418,13 @@ struct ConfigWindow: View {
                         )
                     }
                     TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+                    Picker("推論の強さ", selection: $openAiReasoningEffort) {
+                        Text("モデルの既定値").tag(nil as OpenAIReasoningEffort?)
+                        ForEach(OpenAIReasoningEffort.allCases, id: \.self) { effort in
+                            Text(effort.rawValue).tag(Optional(effort))
+                        }
+                    }
+                    .help("利用できる値はモデルによって異なります。対応していない場合は「モデルの既定値」を選んでください。")
                     TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
                         .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
 

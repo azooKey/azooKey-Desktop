@@ -909,7 +909,12 @@ extension azooKeyMacInputController {
 
         let apiKey = Config.OpenAiApiKey().value
         let modelName = Config.OpenAiModelName().value
-        let request = OpenAIRequest(prompt: requestPrompt, target: composingText, modelName: modelName.isEmpty ? Config.OpenAiModelName.default : modelName)
+        let request = OpenAIRequest(
+            prompt: requestPrompt,
+            target: composingText,
+            modelName: modelName.isEmpty ? Config.OpenAiModelName.default : modelName,
+            reasoningEffort: Config.OpenAiReasoningEffort().value
+        )
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
 
         // Get selected backend
