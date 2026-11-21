@@ -114,7 +114,8 @@ struct LegacyDataMigrationTests {
         )
         try data.write(to: preferences)
 
-        let imported = try #require(LegacyDataMigration.readUserDictionary(from: preferences))
+        let decoded = try LegacyDataMigration.readUserDictionary(from: preferences)
+        let imported = try #require(decoded)
         let merged = LegacyDataMigration.mergeUserDictionary(imported, into: .init(items: [entry]))
         #expect(merged.items.map(\.word) == [entry.word, editedEntry.word])
         #expect(merged.items[0].nonNullHint == "現在")
