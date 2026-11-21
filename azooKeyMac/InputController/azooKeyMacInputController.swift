@@ -165,10 +165,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // refreshCandidateWindow / refreshPredictionWindow は composing/selecting 状態で
         // client.attributes(...) を呼ぶ経路があるため、activate 中は使わずウィンドウを
         // 明示的に閉じる。
-        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         self.candidatesWindow.setIsVisible(false)
         self.candidatesWindow.orderOut(nil)
-        self.candidatesViewController.hide()
         self.hidePredictionWindow()
     }
 
@@ -176,11 +174,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override func deactivateServer(_ sender: Any!) {
         self.segmentsManager.deactivate(flushLearningData: false)
         (NSApplication.shared.delegate as? AppDelegate)?.scheduleLearningDataCommit()
-        self.inputState = .none
+        if self.inputState == .replaceSuggestion {
+            // 入力先を離れたあとに非同期の置換候補を表示しない。
+            self.inputState = .composing
+            self.segmentsManager.resetSuggestionSelection()
+        }
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
-        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
     }
 
