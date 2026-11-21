@@ -12,6 +12,7 @@ struct PromptInputView: View {
     @State private var isNavigatingHistory: Bool = false
     @State private var includeContext: Bool = Config.IncludeContextInAITransform().value
     @State private var editingShortcutFor: PromptHistoryItem?
+    @State private var didCopy: Bool = false
     @FocusState private var isTextFieldFocused: Bool
 
     let initialPrompt: String?
@@ -303,6 +304,14 @@ struct PromptInputView: View {
 
                     Spacer()
 
+                    Button(didCopy ? "Copied" : "Copy") {
+                        copyPreviewToClipboard()
+                    }
+                    .buttonStyle(ModernSecondaryButtonStyle())
+                    .disabled(isLoading || previewText.isEmpty)
+                    .help("Copy result (⌘C)")
+                    .keyboardShortcut("c", modifiers: .command)
+
                     Button("Apply") {
                         // Execute apply first
                         onApply(previewText)
@@ -418,6 +427,19 @@ struct PromptInputView: View {
                     self.onPreviewModeChanged(true)
                 }
             }
+        }
+    }
+
+    private func copyPreviewToClipboard() {
+        guard !previewText.isEmpty else {
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(previewText, forType: .string)
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            didCopy = false
         }
     }
 
