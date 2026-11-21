@@ -62,6 +62,22 @@ public enum DebugTypoCorrectionWeights {
         }
     }
 
+    static func canReadRequiredWeightFiles(modelDirectoryURL: URL) -> Bool {
+        Self.requiredFiles.allSatisfy { required in
+            let fileURL = modelDirectoryURL.appendingPathComponent(required.fileName)
+            do {
+                guard try fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+                    return false
+                }
+                let handle = try FileHandle(forReadingFrom: fileURL)
+                defer { try? handle.close() }
+                return try handle.read(upToCount: 1)?.count == 1
+            } catch {
+                return false
+            }
+        }
+    }
+
     public static func state(modelDirectoryURL: URL) -> DebugTypoCorrectionState {
         do {
             return try Self.validateWeights(modelDirectoryURL: modelDirectoryURL) ? .downloaded : .notDownloaded
@@ -119,10 +135,42 @@ public enum DebugTypoCorrectionWeights {
             }
         }
 
-        if fileManager.fileExists(atPath: modelDirectoryURL.path) {
-            try fileManager.removeItem(at: modelDirectoryURL)
+        try await Self.installWeights(from: stagingDirectoryURL, to: modelDirectoryURL)
+    }
+
+    public static func migrateLegacyWeightsIfNeeded(from sourceURL: URL, to targetURL: URL) async throws {
+        guard sourceURL.standardizedFileURL != targetURL.standardizedFileURL,
+              !Self.hasRequiredWeightFiles(modelDirectoryURL: targetURL),
+              Self.hasRequiredWeightFiles(modelDirectoryURL: sourceURL) else {
+            return
         }
-        try fileManager.moveItem(at: stagingDirectoryURL, to: modelDirectoryURL)
+
+        let fileManager = FileManager.default
+        let parentDirectoryURL = targetURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parentDirectoryURL, withIntermediateDirectories: true)
+        let stagingDirectoryURL = parentDirectoryURL.appendingPathComponent(".\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: stagingDirectoryURL) }
+        try fileManager.copyItem(at: sourceURL, to: stagingDirectoryURL)
+        guard try Self.validateWeights(modelDirectoryURL: stagingDirectoryURL) else {
+            return
+        }
+
+        try await MainActor.run {
+            guard !Self.hasRequiredWeightFiles(modelDirectoryURL: targetURL) else {
+                return
+            }
+            try Self.installWeights(from: stagingDirectoryURL, to: targetURL)
+        }
+    }
+
+    // Backspace での読み取り確認とモデル読み込みの間に、モデルの置き換えが入らないようにする。
+    @MainActor
+    private static func installWeights(from sourceURL: URL, to targetURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: targetURL.path) {
+            try fileManager.removeItem(at: targetURL)
+        }
+        try fileManager.moveItem(at: sourceURL, to: targetURL)
     }
 
     private static func fileMD5HexString(fileURL: URL) throws -> String {

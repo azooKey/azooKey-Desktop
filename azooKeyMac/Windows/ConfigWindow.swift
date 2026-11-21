@@ -109,7 +109,7 @@ struct ConfigWindow: View {
         let modelDirectoryURL = self.debugTypoCorrectionModelDirectoryURL
         let legacyModelDirectoryURL = self.legacyDebugTypoCorrectionModelDirectoryURL
         let state = await Task.detached(priority: .utility) { () -> DebugTypoCorrectionState in
-            Self.migrateLegacyDebugTypoCorrectionWeightsIfNeeded(
+            try? await DebugTypoCorrectionWeights.migrateLegacyWeightsIfNeeded(
                 from: legacyModelDirectoryURL,
                 to: modelDirectoryURL
             )
@@ -148,29 +148,6 @@ struct ConfigWindow: View {
                     self.debugTypoCorrectionDownloadInProgress = false
                 }
             }
-        }
-    }
-
-    nonisolated private static func migrateLegacyDebugTypoCorrectionWeightsIfNeeded(from sourceURL: URL, to targetURL: URL) {
-        guard sourceURL.standardizedFileURL != targetURL.standardizedFileURL else {
-            return
-        }
-        guard !DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: targetURL),
-              DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: sourceURL) else {
-            return
-        }
-        do {
-            let fileManager = FileManager.default
-            try fileManager.createDirectory(
-                at: targetURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            if fileManager.fileExists(atPath: targetURL.path) {
-                try fileManager.removeItem(at: targetURL)
-            }
-            try fileManager.copyItem(at: sourceURL, to: targetURL)
-        } catch {
-            // The status check below will surface a notDownloaded/failed state.
         }
     }
 
