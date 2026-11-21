@@ -263,6 +263,12 @@ struct ConfigWindow: View {
             return
         }
 
+        do {
+            try LegacyDataMigration.discardStagedLearning(for: AppGroup.memoryDirectoryURL())
+        } catch {
+            learningResetMessage = .error(error.localizedDescription)
+            return
+        }
         appDelegate.kanaKanjiConverter.resetMemory()
         learningResetMessage = .success
 
@@ -567,6 +573,7 @@ struct ConfigWindow: View {
                 } label: {
                     Text("履歴学習データ")
                 }
+                LegacyDataImportView(privateApplicationSupportURL: self.legacyAzooKeyApplicationSupportDirectoryURL)
             } header: {
                 Label("学習", systemImage: "memorychip")
             }

@@ -136,6 +136,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        do {
+            try LegacyDataMigration.applyStagedLearning(to: AppGroup.memoryDirectoryURL())
+        } catch {
+            NSLog("Failed to import legacy learning data: %@", error.localizedDescription)
+        }
         // Insert code here to initialize your application
         self.server = IMKServer(name: Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String, bundleIdentifier: Bundle.main.bundleIdentifier)
         NSLog("tried connection")
