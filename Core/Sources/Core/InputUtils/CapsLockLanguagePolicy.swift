@@ -2,6 +2,16 @@ import Foundation
 
 /// Caps Lockの物理状態を、既存のJapanese/Roman入力モードへ対応づける。
 public enum CapsLockLanguagePolicy {
+    /// A normal keyDown must not undo an explicitly selected Japanese/Roman mode.
+    /// Only a Caps key event or a missed change in its physical state switches modes.
+    public static func shouldSwitch(
+        previousCapsLockOn: Bool?,
+        capsLockOn: Bool,
+        isCapsLockEvent: Bool
+    ) -> Bool {
+        isCapsLockEvent || (previousCapsLockOn.map { $0 != capsLockOn } ?? false)
+    }
+
     public static func language(
         capsLockOn: Bool,
         behavior: Config.CapsLockBehavior.Value

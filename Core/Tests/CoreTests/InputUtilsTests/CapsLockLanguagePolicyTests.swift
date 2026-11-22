@@ -57,3 +57,27 @@ import Testing
     let result = CapsLockLanguagePolicy.normalizedEvent(key, capsLockOn: true, behavior: .englishWhenOff)
     #expect(result.characters == "Àあ@123/abc")
 }
+
+@Test func manualRomanSelectionSurvivesOrdinaryKeyDown() {
+    #expect(!CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: false, capsLockOn: false, isCapsLockEvent: false
+    ))
+    #expect(!CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: true, capsLockOn: true, isCapsLockEvent: false
+    ))
+    #expect(!CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: nil, capsLockOn: false, isCapsLockEvent: false
+    ))
+}
+
+@Test func physicalCapsToggleOrMissedFlagsChangedReenablesAutomaticModeSwitch() {
+    #expect(CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: false, capsLockOn: true, isCapsLockEvent: true
+    ))
+    #expect(CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: true, capsLockOn: false, isCapsLockEvent: false
+    ))
+    #expect(CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: nil, capsLockOn: true, isCapsLockEvent: true
+    ))
+}

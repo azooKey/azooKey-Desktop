@@ -8,6 +8,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var segmentsManager: SegmentsManager
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
+    private var lastObservedCapsLockOn: Bool?
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -162,6 +163,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
+        if self.lastObservedCapsLockOn == nil {
+            self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        }
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
@@ -220,6 +224,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         if let value = value as? NSString {
+            if value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" {
+                // Manual source selection takes priority until the next physical Caps change.
+                self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+            }
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
             let englishMode = value == "com.apple.inputmethod.Roman"
 
@@ -288,25 +296,20 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let behavior = Config.CapsLockBehavior().value
-        if behavior != .capsLock {
-            if event.type == .flagsChanged {
-                guard event.keyCode == 57 else {
-                    return false
-                }
-                self.synchronizeCapsLockMode(
-                    capsLockOn: event.modifierFlags.contains(.capsLock),
-                    behavior: behavior,
-                    client: client
-                )
-                return true
+        let capsKeyEvent = event.type == .flagsChanged && event.keyCode == 57
+        if behavior != .capsLock && (capsKeyEvent || event.type == .keyDown) {
+            let capsLockOn = event.modifierFlags.contains(.capsLock)
+            let shouldSwitch = CapsLockLanguagePolicy.shouldSwitch(
+                previousCapsLockOn: self.lastObservedCapsLockOn,
+                capsLockOn: capsLockOn,
+                isCapsLockEvent: capsKeyEvent
+            )
+            self.lastObservedCapsLockOn = capsLockOn
+            if shouldSwitch {
+                self.synchronizeCapsLockMode(capsLockOn: capsLockOn, behavior: behavior, client: client)
             }
-            if event.type == .keyDown {
-                // Also synchronize when an application did not forward flagsChanged.
-                self.synchronizeCapsLockMode(
-                    capsLockOn: event.modifierFlags.contains(.capsLock),
-                    behavior: behavior,
-                    client: client
-                )
+            if capsKeyEvent {
+                return true
             }
         }
         guard event.type == .keyDown else {
