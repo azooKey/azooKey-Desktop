@@ -2,7 +2,7 @@ import Cocoa
 import Core
 import KanaKanjiConverterModule
 
-protocol CandidatesViewControllerDelegate: AnyObject {
+@MainActor protocol CandidatesViewControllerDelegate: AnyObject {
     func candidateSubmitted()
     func candidateSelectionChanged(_ row: Int)
 }
