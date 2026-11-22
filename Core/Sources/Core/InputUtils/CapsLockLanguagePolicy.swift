@@ -1,6 +1,6 @@
 import Foundation
 
-/// Caps Lockの物理状態を、選択中の日本語入力ソースの内部言語へ対応づける。
+/// Caps Lockの物理状態を、既存のJapanese/Roman入力モードへ対応づける。
 public enum CapsLockLanguagePolicy {
     public static func language(
         capsLockOn: Bool,
@@ -8,7 +8,6 @@ public enum CapsLockLanguagePolicy {
     ) -> InputLanguage? {
         switch behavior {
         case .capsLock:
-            // Why not: デフォルトではCaps Lockを言語切替に流用しない。
             return nil
         case .englishWhenOn:
             return capsLockOn ? .english : .japanese
@@ -27,8 +26,7 @@ public enum CapsLockLanguagePolicy {
             return event
         }
 
-        // Why: 「オフのとき英字」ではCaps ONで日本語入力となるため、
-        // 日本語ローマ字入力にも大文字化の解除が必要。
+        // Caps ONで日本語入力する設定でも、ローマ字を大文字のまま渡さない。
         let shift = event.modifierFlags.contains(.shift)
         return .init(
             modifierFlags: event.modifierFlags,
@@ -39,8 +37,7 @@ public enum CapsLockLanguagePolicy {
     }
 
     private static func normalizeASCIILetters(_ text: String, upper: Bool) -> String {
-        // Why not: lowercased()/uppercased() は非ASCII・文字数を変え得る。
-        // 記号やレイアウト固有文字はIMEに届いたまま保持する。
+        // 非ASCII文字やレイアウト固有の記号は変更しない。
         text.unicodeScalars.map { scalar -> String in
             switch scalar.value {
             case 65...90:

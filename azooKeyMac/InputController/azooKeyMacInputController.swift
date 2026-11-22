@@ -8,8 +8,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var segmentsManager: SegmentsManager
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
-    private var isJapaneseInputMode = true
-    private var lastCapsLockBehavior: Config.CapsLockBehavior.Value = .capsLock
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -146,9 +144,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        // Why: 設定画面から動作を変更しても、再起動せず修飾キーを検知する。
-        // Why not: キーの監視アプリやキーイベントの再送は不要。
-        Int(NSEvent.EventTypeMask([.keyDown, .flagsChanged]).rawValue)
+        // 通常設定ではInputMethodKit標準のクリック確定処理を維持する。
+        let events: NSEvent.EventTypeMask = Config.CapsLockBehavior().value == .capsLock
+            ? [.keyDown] : [.keyDown, .flagsChanged]
+        return Int(events.rawValue)
     }
 
     @MainActor
@@ -163,17 +162,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
-        self.lastCapsLockBehavior = Config.CapsLockBehavior().value
-
-        // Why: 他アプリから戻るときにはflagsChangedが届かない場合がある。
-        // UIへの同期問い合わせではなく、OSのCaps Lock状態だけを見る。
-        if self.isJapaneseInputMode,
-           let language = CapsLockLanguagePolicy.language(
-               capsLockOn: CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift),
-               behavior: Config.CapsLockBehavior().value
-           ) {
-            self.inputLanguage = language
-        }
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
@@ -232,20 +220,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         if let value = value as? NSString {
-            self.lastCapsLockBehavior = Config.CapsLockBehavior().value
-            let englishMode = value == "com.apple.inputmethod.Roman"
-            self.isJapaneseInputMode = !englishMode
-            if !englishMode,
-               let language = CapsLockLanguagePolicy.language(
-                   capsLockOn: CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift),
-                   behavior: Config.CapsLockBehavior().value
-               ) {
-                // Why not: Caps Lockで毎回Roman入力ソースをselectModeしない。
-                // 明示的にRomanモードが選ばれた場合は従来どおり扱う。
-                self.inputLanguage = language
-                return
-            }
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
+            let englishMode = value == "com.apple.inputmethod.Roman"
 
             if englishMode {
                 // 英語モードへの切り替え通知（実際の処理はhandleで行う）
@@ -283,8 +259,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu
     }
 
-    /// 日本語入力ソースを選択したまま、Caps Lockで内部言語だけを切り替える。
-    @MainActor private func applyCapsLockInputState(
+    /// Caps Lockの状態に合わせて、既存のJapanese/Romanモードを選択する。
+    @MainActor private func synchronizeCapsLockMode(
         capsLockOn: Bool,
         behavior: Config.CapsLockBehavior.Value,
         client: IMKTextInput
@@ -292,27 +268,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         guard let language = CapsLockLanguagePolicy.language(capsLockOn: capsLockOn, behavior: behavior),
               language != self.inputLanguage else { return }
 
-        let hasComposition = self.inputState != .none || !self.segmentsManager.isEmpty
+        // Reuse the normal commit and mode-selection paths before changing modes.
         if !self.segmentsManager.isEmpty {
-            // Why: 未確定の日本語を保持したまま英語へ切り替えると
-            // 後続の英字が変換対象に混ざる。切替時点で一度だけ確定する。
-            let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            if !text.isEmpty {
-                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            }
+            self.commitComposition(client)
         }
         self.inputState = .none
-        self.inputLanguage = language
-
-        // Why not: 未入力状態のCaps Lock操作で候補ウィンドウや
-        // 入力先アプリへ同期問い合わせを行わない。切替の応答性を保つ。
-        guard hasComposition else {
-            return
-        }
-        self.replaceSuggestionWindow.orderOut(nil)
-        self.refreshMarkedText()
-        self.refreshCandidateWindow()
-        self.refreshPredictionWindow()
+        self.switchInputLanguage(language, client: client)
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -327,40 +288,34 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let behavior = Config.CapsLockBehavior().value
-        if self.lastCapsLockBehavior != behavior {
-            self.lastCapsLockBehavior = behavior
-            if self.isJapaneseInputMode && behavior == .capsLock {
-                // Why: 設定を標準へ戻した際、直前の内部英語モードを残さない。
-                self.inputLanguage = .japanese
+        if behavior != .capsLock {
+            if event.type == .flagsChanged {
+                guard event.keyCode == 57 else {
+                    return false
+                }
+                self.synchronizeCapsLockMode(
+                    capsLockOn: event.modifierFlags.contains(.capsLock),
+                    behavior: behavior,
+                    client: client
+                )
+                return true
             }
-        }
-        let usesCapsLock = self.isJapaneseInputMode && behavior != .capsLock
-        if usesCapsLock && event.type == .flagsChanged {
-            guard event.keyCode == 57 else {
-                return false
+            if event.type == .keyDown {
+                // Also synchronize when an application did not forward flagsChanged.
+                self.synchronizeCapsLockMode(
+                    capsLockOn: event.modifierFlags.contains(.capsLock),
+                    behavior: behavior,
+                    client: client
+                )
             }
-            self.applyCapsLockInputState(
-                capsLockOn: event.modifierFlags.contains(.capsLock),
-                behavior: behavior,
-                client: client
-            )
-            return true
         }
         guard event.type == .keyDown else {
             return false
         }
-        if usesCapsLock {
-            // Why: アプリがflagsChangedを転送しない場合も最初の文字から整合させる。
-            self.applyCapsLockInputState(
-                capsLockOn: event.modifierFlags.contains(.capsLock),
-                behavior: behavior,
-                client: client
-            )
-        }
         let keyCore = CapsLockLanguagePolicy.normalizedEvent(
             event.keyEventCore,
             capsLockOn: event.modifierFlags.contains(.capsLock),
-            behavior: usesCapsLock ? behavior : .capsLock
+            behavior: behavior
         )
 
         // カスタムプロンプトショートカットのチェック
@@ -648,10 +603,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             if inputState != .replaceSuggestion {
                 self.replaceSuggestionWindow.orderOut(nil)
             }
-            if inputState == .none,
-               !(self.isJapaneseInputMode && Config.CapsLockBehavior().value != .capsLock) {
-                // Why not: Caps Lockで内部英語モードになったときに
-                // Roman入力ソースへselectModeすると、以後のCaps操作がIMEへ届かない。
+            if inputState == .none {
                 self.switchInputLanguage(self.inputLanguage, client: client)
             }
             self.inputState = inputState
@@ -667,9 +619,6 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
         self.inputLanguage = language
-        // Why: 英数・かなキーで明示的に選んだ入力モードは尊重する。
-        // Caps Lockによる内部切替だけはこのメソッドを通さない。
-        self.isJapaneseInputMode = language == .japanese
         client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
         switch language {
         case .english:
