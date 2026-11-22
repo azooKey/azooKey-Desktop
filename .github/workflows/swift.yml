@@ -6,14 +6,12 @@ on:
 jobs:
   macos-build:
     name: Build and Test on macOS
-    runs-on: macos-15
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
-      - name: Select Xcode 16.3
-        run: |
-          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
-          echo "Using Xcode at $XCODE_PATH"
-          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
-          xcodebuild -version
+      - name: Check Xcode version
+        run: xcodebuild -version
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -40,19 +38,15 @@ jobs:
 
   xcodebuild-test:
     name: Xcodebuild test on macOS
-    runs-on: macos-15
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
-      - name: Select Xcode 16.3
-        run: |
-          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
-          echo "Using Xcode at $XCODE_PATH"
-          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
-          xcodebuild -version
+      - name: Check Xcode version
+        run: xcodebuild -version
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Verify xcodebuild installation
-        run: xcodebuild -version
       - name: List available schemes
         run: xcodebuild -project azooKeyMac.xcodeproj -list
       - name: Test building azooKeyMac (Release configuration)
