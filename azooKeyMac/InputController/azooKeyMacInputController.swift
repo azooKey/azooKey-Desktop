@@ -235,7 +235,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let englishMode = value == "com.apple.inputmethod.Roman"
             let mode: InputLanguage = englishMode ? .english : .japanese
             if self.inputLanguage != mode {
-                // Explicit mode changes leave Caps-managed switching.
+                // macOS側でモードが切り替わった場合はCaps連動を解除する。
                 self.capsManagedRoman = false
                 self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
             }
@@ -379,7 +379,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 }
                 if !self.segmentsManager.isEmpty {
                     _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
-                    self.switchInputLanguage(.english, client: client)
+                    self.switchInputLanguageFromAction(.english, client: client)
                     return true
                 }
             }
@@ -546,11 +546,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .forgetMemory:
             self.segmentsManager.forgetMemory()
         case .selectInputLanguage(let language):
-            self.switchInputLanguage(language, client: client)
+            self.switchInputLanguageFromAction(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-            self.switchInputLanguage(language, client: client)
+            self.switchInputLanguageFromAction(language, client: client)
         // PredictiveSuggestion
         case .requestPredictiveSuggestion:
             // 「つづき」を直接入力し、コンテキストを渡す
@@ -632,6 +632,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
         return true
+    }
+
+    // 明示的な言語切替だけCaps連動を解除し、既存のモード切替処理を使う。
+    @MainActor private func switchInputLanguageFromAction(_ language: InputLanguage, client: IMKTextInput) {
+        self.capsManagedRoman = false
+        self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        self.switchInputLanguage(language, client: client)
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {

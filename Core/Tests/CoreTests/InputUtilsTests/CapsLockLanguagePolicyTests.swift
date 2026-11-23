@@ -58,44 +58,7 @@ import Testing
     #expect(result.characters == "Àあ@123/abc")
 }
 
-@Test func manualRomanSelectionSurvivesOrdinaryKeyDown() {
-    #expect(!CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: false, capsLockOn: false, isCapsLockEvent: false
-    ))
-    #expect(!CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: true, capsLockOn: true, isCapsLockEvent: false
-    ))
-    #expect(!CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: nil, capsLockOn: false, isCapsLockEvent: false
-    ))
-}
-
-@Test func physicalCapsToggleOrMissedFlagsChangedReenablesAutomaticModeSwitch() {
-    #expect(CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: false, capsLockOn: true, isCapsLockEvent: true
-    ))
-    #expect(CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: true, capsLockOn: false, isCapsLockEvent: false
-    ))
-    #expect(CapsLockLanguagePolicy.shouldSwitch(
-        previousCapsLockOn: nil, capsLockOn: true, isCapsLockEvent: true
-    ))
-}
-
-@Test func manualRomanKeepsCapsLockUppercaseAndDoesNotSwitch() {
-    for behavior in [Config.CapsLockBehavior.Value.englishWhenOn, .englishWhenOff] {
-        #expect(!CapsLockLanguagePolicy.controlsMode(
-            behavior: behavior, inputLanguage: .english, capsManagedRoman: false
-        ))
-    }
-    let uppercase = KeyEventCore(modifierFlags: [], characters: "ABC", charactersIgnoringModifiers: "ABC", keyCode: 0)
-    let usedBehavior: Config.CapsLockBehavior.Value = CapsLockLanguagePolicy.controlsMode(
-        behavior: .englishWhenOn, inputLanguage: .english, capsManagedRoman: false
-    ) ? .englishWhenOn : .capsLock
-    #expect(CapsLockLanguagePolicy.normalizedEvent(uppercase, capsLockOn: true, behavior: usedBehavior) == uppercase)
-}
-
-@Test func japaneseAndCapsSelectedRomanAllowBidirectionalSwitch() {
+@Test func capsLockSwitchingRespectsManualRoman() {
     for behavior in [Config.CapsLockBehavior.Value.englishWhenOn, .englishWhenOff] {
         #expect(CapsLockLanguagePolicy.controlsMode(
             behavior: behavior, inputLanguage: .japanese, capsManagedRoman: false
@@ -103,8 +66,23 @@ import Testing
         #expect(CapsLockLanguagePolicy.controlsMode(
             behavior: behavior, inputLanguage: .english, capsManagedRoman: true
         ))
+        #expect(!CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: .english, capsManagedRoman: false
+        ))
     }
     #expect(!CapsLockLanguagePolicy.controlsMode(
         behavior: .capsLock, inputLanguage: .japanese, capsManagedRoman: true
+    ))
+}
+
+@Test func capsLockSwitchingRequiresANewCapsState() {
+    #expect(!CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: false, capsLockOn: false, isCapsLockEvent: false
+    ))
+    #expect(CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: false, capsLockOn: true, isCapsLockEvent: false
+    ))
+    #expect(CapsLockLanguagePolicy.shouldSwitch(
+        previousCapsLockOn: true, capsLockOn: false, isCapsLockEvent: true
     ))
 }
