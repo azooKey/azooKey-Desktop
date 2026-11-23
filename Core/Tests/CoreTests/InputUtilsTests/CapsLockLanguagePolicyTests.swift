@@ -81,3 +81,30 @@ import Testing
         previousCapsLockOn: nil, capsLockOn: true, isCapsLockEvent: true
     ))
 }
+
+@Test func manualRomanKeepsCapsLockUppercaseAndDoesNotSwitch() {
+    for behavior in [Config.CapsLockBehavior.Value.englishWhenOn, .englishWhenOff] {
+        #expect(!CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: .english, capsManagedRoman: false
+        ))
+    }
+    let uppercase = KeyEventCore(modifierFlags: [], characters: "ABC", charactersIgnoringModifiers: "ABC", keyCode: 0)
+    let usedBehavior: Config.CapsLockBehavior.Value = CapsLockLanguagePolicy.controlsMode(
+        behavior: .englishWhenOn, inputLanguage: .english, capsManagedRoman: false
+    ) ? .englishWhenOn : .capsLock
+    #expect(CapsLockLanguagePolicy.normalizedEvent(uppercase, capsLockOn: true, behavior: usedBehavior) == uppercase)
+}
+
+@Test func japaneseAndCapsSelectedRomanAllowBidirectionalSwitch() {
+    for behavior in [Config.CapsLockBehavior.Value.englishWhenOn, .englishWhenOff] {
+        #expect(CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: .japanese, capsManagedRoman: false
+        ))
+        #expect(CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: .english, capsManagedRoman: true
+        ))
+    }
+    #expect(!CapsLockLanguagePolicy.controlsMode(
+        behavior: .capsLock, inputLanguage: .japanese, capsManagedRoman: true
+    ))
+}

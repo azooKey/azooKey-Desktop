@@ -8,6 +8,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var segmentsManager: SegmentsManager
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
+    private var capsManagedRoman = false
     private var lastObservedCapsLockOn: Bool?
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
@@ -146,8 +147,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     override func recognizedEvents(_ sender: Any!) -> Int {
         // 通常設定ではInputMethodKit標準のクリック確定処理を維持する。
-        let events: NSEvent.EventTypeMask = Config.CapsLockBehavior().value == .capsLock
-            ? [.keyDown] : [.keyDown, .flagsChanged]
+        let usesCapsLock = CapsLockLanguagePolicy.controlsMode(
+            behavior: Config.CapsLockBehavior().value,
+            inputLanguage: self.inputLanguage,
+            capsManagedRoman: self.capsManagedRoman
+        )
+        let events: NSEvent.EventTypeMask = usesCapsLock ? [.keyDown, .flagsChanged] : [.keyDown]
         return Int(events.rawValue)
     }
 
@@ -224,12 +229,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         if let value = value as? NSString {
-            if value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" {
-                // Manual source selection takes priority until the next physical Caps change.
+            guard value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" else {
+                return
+            }
+            let englishMode = value == "com.apple.inputmethod.Roman"
+            let mode: InputLanguage = englishMode ? .english : .japanese
+            if self.inputLanguage != mode {
+                // Explicit mode changes leave Caps-managed switching.
+                self.capsManagedRoman = false
                 self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
             }
             self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
-            let englishMode = value == "com.apple.inputmethod.Roman"
 
             if englishMode {
                 // 英語モードへの切り替え通知（実際の処理はhandleで行う）
@@ -281,6 +291,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.commitComposition(client)
         }
         self.inputState = .none
+        self.capsManagedRoman = language == .english
         self.switchInputLanguage(language, client: client)
     }
 
@@ -296,8 +307,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let behavior = Config.CapsLockBehavior().value
+        let usesCapsLock = CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: self.inputLanguage, capsManagedRoman: self.capsManagedRoman
+        )
         let capsKeyEvent = event.type == .flagsChanged && event.keyCode == 57
-        if behavior != .capsLock && (capsKeyEvent || event.type == .keyDown) {
+        if usesCapsLock && (capsKeyEvent || event.type == .keyDown) {
             let capsLockOn = event.modifierFlags.contains(.capsLock)
             let shouldSwitch = CapsLockLanguagePolicy.shouldSwitch(
                 previousCapsLockOn: self.lastObservedCapsLockOn,
@@ -318,7 +332,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         let keyCore = CapsLockLanguagePolicy.normalizedEvent(
             event.keyEventCore,
             capsLockOn: event.modifierFlags.contains(.capsLock),
-            behavior: behavior
+            behavior: usesCapsLock ? behavior : .capsLock
         )
 
         // カスタムプロンプトショートカットのチェック
