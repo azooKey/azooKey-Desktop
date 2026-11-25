@@ -157,6 +157,35 @@ extension Config {
 }
 
 extension Config {
+    /// Caps LockによるJapanese/Romanモード切替の設定。
+    public struct CapsLockBehavior: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable {
+            case capsLock
+            case englishWhenOn
+            case englishWhenOff
+        }
+
+        public init() {}
+        public static let `default`: Value = .capsLock
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.capsLockBehavior"
+
+        public var value: Value {
+            get {
+                // キーイベント毎の既定値読取でログを出さない。
+                guard let data = Config.data(forKey: Self.key),
+                      let value = try? JSONDecoder().decode(Value.self, from: data) else {
+                    return Self.default
+                }
+                return value
+            }
+            nonmutating set {
+                Config.set(try? JSONEncoder().encode(newValue), forKey: Self.key)
+            }
+        }
+    }
+}
+
+extension Config {
     public struct InputStyle: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {
             case `default`

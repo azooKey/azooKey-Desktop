@@ -5,6 +5,7 @@ import SwiftUI
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var inputStyle = Config.InputStyle()
+    @ConfigState private var capsLockBehavior = Config.CapsLockBehavior()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
     @ConfigState private var typeHalfSpace = Config.TypeHalfSpace()
@@ -612,6 +613,11 @@ struct ConfigWindow: View {
                     } label: {
                         Text("カスタム入力テーブル")
                     }
+                }
+                Picker("Caps Lockの動作", selection: $capsLockBehavior) {
+                    Text("Caps Lock").tag(Config.CapsLockBehavior.Value.capsLock)
+                    Text("オンのとき英字").tag(Config.CapsLockBehavior.Value.englishWhenOn)
+                    Text("オフのとき英字").tag(Config.CapsLockBehavior.Value.englishWhenOff)
                 }
             } header: {
                 Label("入力方式", systemImage: "keyboard")

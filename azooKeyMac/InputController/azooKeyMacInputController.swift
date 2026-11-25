@@ -8,6 +8,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var segmentsManager: SegmentsManager
     private(set) var inputState: InputState = .none
     private var inputLanguage: InputLanguage = .japanese
+    private var capsManagedRoman = false
+    private var lastObservedCapsLockOn: Bool?
     /// 入力先アプリに未確定文字列が残っているか。確定直後に空の setMarkedText を送らないために使う
     private var clientMarkedTextTracker = ClientMarkedTextTracker()
     var liveConversionEnabled: Bool {
@@ -145,6 +147,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.setupMenu()
     }
 
+    override func recognizedEvents(_ sender: Any!) -> Int {
+        // 通常設定ではInputMethodKit標準のクリック確定処理を維持する。
+        let usesCapsLock = CapsLockLanguagePolicy.controlsMode(
+            behavior: Config.CapsLockBehavior().value,
+            inputLanguage: self.inputLanguage,
+            capsManagedRoman: self.capsManagedRoman
+        )
+        let events: NSEvent.EventTypeMask = usesCapsLock ? [.keyDown, .flagsChanged] : [.keyDown]
+        return Int(events.rawValue)
+    }
+
     @MainActor
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
@@ -158,6 +171,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
+        if self.lastObservedCapsLockOn == nil {
+            self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        }
 
         if let client = sender as? IMKTextInput {
             client.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
@@ -217,8 +233,17 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         if let value = value as? NSString {
-            self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
+            guard value == "com.apple.inputmethod.Roman" || value == "com.apple.inputmethod.Japanese" else {
+                return
+            }
             let englishMode = value == "com.apple.inputmethod.Roman"
+            let mode: InputLanguage = englishMode ? .english : .japanese
+            if self.inputLanguage != mode {
+                // macOS側でモードが切り替わった場合はCaps連動を解除する。
+                self.capsManagedRoman = false
+                self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+            }
+            self.client()?.overrideKeyboard(withKeyboardNamed: Config.KeyboardLayout().value.layoutIdentifier)
 
             if englishMode {
                 // 英語モードへの切り替え通知（実際の処理はhandleで行う）
@@ -256,17 +281,63 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu
     }
 
+    /// Caps Lockの状態に合わせて、既存のJapanese/Romanモードを選択する。
+    @MainActor private func synchronizeCapsLockMode(
+        capsLockOn: Bool,
+        behavior: Config.CapsLockBehavior.Value,
+        client: IMKTextInput
+    ) {
+        guard let language = CapsLockLanguagePolicy.language(capsLockOn: capsLockOn, behavior: behavior),
+              language != self.inputLanguage else { return }
+
+        // Reuse the normal commit and mode-selection paths before changing modes.
+        if !self.segmentsManager.isEmpty {
+            self.commitComposition(client)
+        }
+        self.inputState = .none
+        self.capsManagedRoman = language == .english
+        self.switchInputLanguage(language, client: client)
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     @MainActor override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         defer {
-            (NSApplication.shared.delegate as? AppDelegate)?.postponeLearningDataCommit()
+            if event?.type == .keyDown {
+                (NSApplication.shared.delegate as? AppDelegate)?.postponeLearningDataCommit()
+            }
         }
         guard let event, let client = sender as? IMKTextInput else {
             return false
         }
+
+        let behavior = Config.CapsLockBehavior().value
+        let usesCapsLock = CapsLockLanguagePolicy.controlsMode(
+            behavior: behavior, inputLanguage: self.inputLanguage, capsManagedRoman: self.capsManagedRoman
+        )
+        let capsKeyEvent = event.type == .flagsChanged && event.keyCode == 57
+        if usesCapsLock && (capsKeyEvent || event.type == .keyDown) {
+            let capsLockOn = event.modifierFlags.contains(.capsLock)
+            let shouldSwitch = CapsLockLanguagePolicy.shouldSwitch(
+                previousCapsLockOn: self.lastObservedCapsLockOn,
+                capsLockOn: capsLockOn,
+                isCapsLockEvent: capsKeyEvent
+            )
+            self.lastObservedCapsLockOn = capsLockOn
+            if shouldSwitch {
+                self.synchronizeCapsLockMode(capsLockOn: capsLockOn, behavior: behavior, client: client)
+            }
+            if capsKeyEvent {
+                return true
+            }
+        }
         guard event.type == .keyDown else {
             return false
         }
+        let keyCore = CapsLockLanguagePolicy.normalizedEvent(
+            event.keyEventCore,
+            capsLockOn: event.modifierFlags.contains(.capsLock),
+            behavior: usesCapsLock ? behavior : .capsLock
+        )
 
         // カスタムプロンプトショートカットのチェック
         if let matchedPrompt = checkCustomPromptShortcut(event: event) {
@@ -297,7 +368,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             return true
         }
 
-        let userAction = UserAction.getUserAction(eventCore: event.keyEventCore, inputLanguage: inputLanguage)
+        let userAction = UserAction.getUserAction(eventCore: keyCore, inputLanguage: inputLanguage)
 
         // 英数キー（keyCode 102）の処理
         if event.keyCode == 102 {
@@ -312,7 +383,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 }
                 if !self.segmentsManager.isEmpty {
                     _ = self.handleClientAction(.submitHalfWidthRomanCandidate, clientActionCallback: .transition(.none), client: client)
-                    self.switchInputLanguage(.english, client: client)
+                    self.switchInputLanguageFromAction(.english, client: client)
                     return true
                 }
             }
@@ -360,7 +431,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
 
         let (clientAction, clientActionCallback) = inputState.event(
-            eventCore: event.keyEventCore,
+            eventCore: keyCore,
             userAction: userAction,
             inputLanguage: self.inputLanguage,
             liveConversionEnabled: Config.LiveConversion().value,
@@ -479,11 +550,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .forgetMemory:
             self.segmentsManager.forgetMemory()
         case .selectInputLanguage(let language):
-            self.switchInputLanguage(language, client: client)
+            self.switchInputLanguageFromAction(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
             self.insertTextToClient(text, client: client)
-            self.switchInputLanguage(language, client: client)
+            self.switchInputLanguageFromAction(language, client: client)
         // PredictiveSuggestion
         case .acceptPredictionCandidate:
             self.acceptPredictionCandidate()
@@ -561,6 +632,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.refreshCandidateWindow()
         self.refreshPredictionWindow()
         return true
+    }
+
+    // 明示的な言語切替だけCaps連動を解除し、既存のモード切替処理を使う。
+    @MainActor private func switchInputLanguageFromAction(_ language: InputLanguage, client: IMKTextInput) {
+        self.capsManagedRoman = false
+        self.lastObservedCapsLockOn = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        self.switchInputLanguage(language, client: client)
     }
 
     @MainActor func switchInputLanguage(_ language: InputLanguage, client: IMKTextInput) {
