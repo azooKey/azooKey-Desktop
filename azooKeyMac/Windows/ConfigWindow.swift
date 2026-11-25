@@ -14,6 +14,7 @@ struct ConfigWindow: View {
     @ConfigState private var zenzaiPersonalizationLevel = Config.ZenzaiPersonalizationLevel()
     @ConfigState private var openAiApiKey = Config.OpenAiApiKey()
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
+    @ConfigState private var openAiReasoningEffort = Config.OpenAiReasoningEffort()
     @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
     @ConfigState private var learning = Config.Learning()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
@@ -24,6 +25,7 @@ struct ConfigWindow: View {
     @ConfigState private var systemUserDictionary = Config.SystemUserDictionary()
     @ConfigState private var keyboardLayout = Config.KeyboardLayout()
     @ConfigState private var aiBackend = Config.AIBackendPreference()
+    @ConfigState private var transformShortcut = Config.TransformShortcut()
 
     @State private var selectedTab: Tab = .basic
     @State private var zenzaiProfileHelpPopover = false
@@ -231,9 +233,10 @@ struct ConfigWindow: View {
 
         do {
             let testRequest = OpenAIRequest(
-                prompt: "テスト",
-                target: "",
-                modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value
+                prompt: "Text before: おはようございます。今日も",
+                target: "てんき",
+                modelName: openAiModelName.value.isEmpty ? Config.OpenAiModelName.default : openAiModelName.value,
+                reasoningEffort: openAiReasoningEffort.value
             )
             _ = try await OpenAIClient.sendRequest(
                 testRequest,
@@ -264,6 +267,12 @@ struct ConfigWindow: View {
             return
         }
 
+        do {
+            try LegacyDataMigration.discardStagedLearning(for: AppGroup.memoryDirectoryURL())
+        } catch {
+            learningResetMessage = .error(error.localizedDescription)
+            return
+        }
         appDelegate.kanaKanjiConverter.resetMemory()
         learningResetMessage = .success
 
@@ -402,6 +411,14 @@ struct ConfigWindow: View {
                     }
                 }
 
+                HStack {
+                    Text("ショートカット")
+                    Spacer()
+                    KeyboardShortcutRecorder(shortcut: $transformShortcut)
+                        .frame(width: 160, height: 24)
+                }
+                .help("クリックして新しいキーを入力します。Deleteでデフォルト（⌃S）に戻り、Escでキャンセルします。")
+
                 if aiBackend.value == .openAI {
                     HStack {
                         SecureField("APIキー", text: $openAiApiKey, prompt: Text("例:sk-xxxxxxxxxxx"))
@@ -411,6 +428,13 @@ struct ConfigWindow: View {
                         )
                     }
                     TextField("モデル名", text: $openAiModelName, prompt: Text("例: gpt-4o-mini"))
+                    Picker("推論の強さ", selection: $openAiReasoningEffort) {
+                        Text("モデルの既定値").tag(nil as OpenAIReasoningEffort?)
+                        ForEach(OpenAIReasoningEffort.allCases, id: \.self) { effort in
+                            Text(effort.rawValue).tag(Optional(effort))
+                        }
+                    }
+                    .help("利用できる値はモデルによって異なります。対応していない場合は「モデルの既定値」を選んでください。")
                     TextField("エンドポイント", text: $openAiApiEndpoint, prompt: Text("例: https://api.openai.com/v1/chat/completions"))
                         .help("例: https://api.openai.com/v1/chat/completions\nGemini: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
 
@@ -568,6 +592,7 @@ struct ConfigWindow: View {
                 } label: {
                     Text("履歴学習データ")
                 }
+                LegacyDataImportView(privateApplicationSupportURL: self.legacyAzooKeyApplicationSupportDirectoryURL)
             } header: {
                 Label("学習", systemImage: "memorychip")
             }

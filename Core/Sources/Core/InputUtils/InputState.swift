@@ -88,15 +88,9 @@ public enum InputState: Sendable, Hashable {
                 } else {
                     return (.insertWithoutMarkedText(" "), .fallthrough)
                 }
-            case .suggest:
-                if enableSuggestion {
-                    return (.requestPredictiveSuggestion, .transition(.replaceSuggestion))
-                } else {
-                    return (.fallthrough, .fallthrough)
-                }
             case .startUnicodeInput:
                 return (.enterUnicodeInputMode, .transition(.unicodeInput("")))
-            case .unknown, .navigation, .backspace, .enter, .escape, .function, .editSegment, .tab, .forget, .transformSelectedText:
+            case .unknown, .navigation, .backspace, .enter, .escape, .function, .editSegment, .tab, .forget, .suggest, .transformSelectedText:
                 return (.fallthrough, .fallthrough)
             }
         case .attachDiacritic(let diacritic):

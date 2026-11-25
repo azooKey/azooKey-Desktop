@@ -49,7 +49,6 @@ public enum ClientAction {
     case submitHalfWidthRomanCandidate
 
     // PredictiveSuggestion
-    case requestPredictiveSuggestion
     case acceptPredictionCandidate
 
     // ReplaceSuggestion

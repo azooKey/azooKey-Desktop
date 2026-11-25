@@ -232,10 +232,6 @@ public final class SegmentsManager {
         )
     }
 
-    private func hasDebugTypoCorrectionWeights() -> Bool {
-        DebugTypoCorrectionWeights.hasRequiredWeightFiles(modelDirectoryURL: self.downloadedInputN5LMDir)
-    }
-
     public var azooKeyMemoryDir: URL {
         self.applicationDirectoryURL
     }
@@ -248,10 +244,6 @@ public final class SegmentsManager {
 
     @MainActor
     public func activate() {
-        self.shouldShowCandidateWindow = false
-        self.backspaceAdjustedPredictionCandidate = nil
-        self.backspaceTypoCorrectionLock = nil
-        self.lastInputStyle = .direct
         self.zenzaiPersonalizationMode = self.getZenzaiPersonalizationMode()
     }
 
@@ -272,20 +264,10 @@ public final class SegmentsManager {
 
     @MainActor
     public func deactivate(flushLearningData: Bool = true) {
-        self.withConverter { $0.stopComposition() }
+        // 入力セッションはウィンドウを切り替えても存続するため、未確定入力を保持する。
         if flushLearningData {
             self.withConverter { $0.commitUpdateLearningData() }
         }
-        self.rawCandidates = nil
-        self.didExperienceSegmentEdition = false
-        self.lastOperation = .other
-        self.composingText.stopComposition()
-        self.shouldShowCandidateWindow = false
-        self.selectionIndex = nil
-        self.resetAdditionalCandidates()
-        self.backspaceAdjustedPredictionCandidate = nil
-        self.backspaceTypoCorrectionLock = nil
-        self.lastInputStyle = .direct
     }
 
     @MainActor
@@ -400,17 +382,14 @@ public final class SegmentsManager {
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
-        guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
+        guard Config.DebugTypoCorrection().value,
+              count == 1,
+              DebugTypoCorrectionWeights.canReadRequiredWeightFiles(modelDirectoryURL: self.downloadedInputN5LMDir) else {
             self.backspaceAdjustedPredictionCandidate = nil
             self.backspaceTypoCorrectionLock = nil
             return
         }
         let currentConvertTarget = self.composingText.convertTarget
-        guard count == 1 else {
-            self.backspaceAdjustedPredictionCandidate = nil
-            self.backspaceTypoCorrectionLock = nil
-            return
-        }
         if let lock = self.backspaceTypoCorrectionLock {
             self.backspaceAdjustedPredictionCandidate = Self.makeBackspaceTypoCorrectionPredictionCandidate(
                 currentConvertTarget: currentConvertTarget,
@@ -1002,9 +981,6 @@ public final class SegmentsManager {
 
     @MainActor
     private func requestTypoCorrectionCandidates(composingText targetComposingText: ComposingText, inputStyle: InputStyle) -> [String] {
-        guard Config.DebugTypoCorrection().value && self.hasDebugTypoCorrectionWeights() else {
-            return []
-        }
         guard !targetComposingText.isEmpty else {
             return []
         }

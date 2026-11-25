@@ -39,6 +39,7 @@ public enum AIClient {
         modelName: String = "",
         apiKey: String = "",
         apiEndpoint: String = "",
+        reasoningEffort: OpenAIReasoningEffort? = nil,
         logger: ((String) -> Void)? = nil
     ) async throws -> String {
         switch backend {
@@ -49,7 +50,8 @@ public enum AIClient {
                 prompt: prompt,
                 modelName: modelName,
                 apiKey: apiKey,
-                apiEndpoint: apiEndpoint
+                apiEndpoint: apiEndpoint,
+                reasoningEffort: reasoningEffort
             )
         }
     }

@@ -387,3 +387,66 @@ private func makeControlEvent(
         }
     }
 }
+
+private func isSuggest(_ action: UserAction) -> Bool {
+    if case .suggest = action {
+        return true
+    }
+    return false
+}
+
+@Test func testDefaultTransformShortcutIsControlS() {
+    let action = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "s", characters: "\u{13}", modifiers: [.control], keyCode: 1),
+        inputLanguage: .japanese,
+        transformShortcut: .defaultTransformShortcut
+    )
+    #expect(isSuggest(action))
+}
+
+@Test func testTransformShortcutRequiresCompositionWhenThereIsNoSelection() {
+    let event = makeControlEvent(logicalKey: "s", characters: "\u{13}", modifiers: [.control], keyCode: 1)
+    let (idleAction, idleCallback) = InputState.none.event(
+        eventCore: event,
+        userAction: .suggest,
+        inputLanguage: .japanese,
+        liveConversionEnabled: false,
+        enableDebugWindow: false,
+        enableSuggestion: true
+    )
+    guard case .fallthrough = idleAction, case .fallthrough = idleCallback else {
+        Issue.record("Expected the shortcut to fall through without a composition, got \(idleAction), \(idleCallback)")
+        return
+    }
+
+    let (composingAction, composingCallback) = InputState.composing.event(
+        eventCore: event,
+        userAction: .suggest,
+        inputLanguage: .japanese,
+        liveConversionEnabled: false,
+        enableDebugWindow: false,
+        enableSuggestion: true
+    )
+    guard case .requestReplaceSuggestion = composingAction, case .transition(.replaceSuggestion) = composingCallback else {
+        Issue.record("Expected the shortcut to open suggestions during composition, got \(composingAction), \(composingCallback)")
+        return
+    }
+}
+
+@Test func testCustomTransformShortcutReplacesControlS() {
+    let custom = KeyboardShortcut(key: "g", modifiers: [.control, .shift])
+    let newKey = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "g", characters: "\u{7}", modifiers: [.control, .shift], keyCode: 5),
+        inputLanguage: .japanese,
+        transformShortcut: custom
+    )
+    #expect(isSuggest(newKey))
+
+    // 変更後は Ctrl+S では発動しない（ホストアプリへ渡す）
+    let oldKey = UserAction.getUserAction(
+        eventCore: makeControlEvent(logicalKey: "s", characters: "\u{13}", modifiers: [.control], keyCode: 1),
+        inputLanguage: .japanese,
+        transformShortcut: custom
+    )
+    #expect(!isSuggest(oldKey))
+}

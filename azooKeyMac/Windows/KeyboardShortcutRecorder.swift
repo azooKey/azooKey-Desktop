@@ -53,8 +53,7 @@ class ShortcutRecorderView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.cornerRadius = 4
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.masksToBounds = true
     }
 
     override var acceptsFirstResponder: Bool {
@@ -119,7 +118,7 @@ class ShortcutRecorderView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let backgroundColor: NSColor = isRecording ? .controlAccentColor.withAlphaComponent(0.1) : .controlBackgroundColor
+        let backgroundColor: NSColor = isRecording ? .controlAccentColor.withAlphaComponent(0.1) : NSColor.labelColor.withAlphaComponent(0.08)
         backgroundColor.setFill()
         bounds.fill()
 

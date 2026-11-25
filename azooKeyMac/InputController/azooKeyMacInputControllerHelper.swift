@@ -9,14 +9,25 @@ extension azooKeyMacInputController {
         self.appMenu.autoenablesItems = true
         self.liveConversionToggleMenuItem = NSMenuItem(title: "ライブ変換", action: #selector(self.toggleLiveConversion(_:)), keyEquivalent: "")
         self.appMenu.addItem(self.liveConversionToggleMenuItem)
-        self.transformSelectedTextMenuItem = NSMenuItem(title: TransformMenuTitle.normal, action: #selector(self.performTransformSelectedText(_:)), keyEquivalent: "s")
-        self.transformSelectedTextMenuItem.keyEquivalentModifierMask = [.control]
+        self.transformSelectedTextMenuItem = NSMenuItem(title: TransformMenuTitle.normal, action: #selector(self.performTransformSelectedText(_:)), keyEquivalent: "")
+        self.updateTransformSelectedTextMenuItemShortcut()
         self.transformSelectedTextMenuItem.target = self
         self.appMenu.addItem(self.transformSelectedTextMenuItem)
         self.appMenu.addItem(NSMenuItem.separator())
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub…", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
-        self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateTransformSelectedTextMenuItemTitle()
+    }
+
+    func updateTransformSelectedTextMenuItemShortcut() {
+        let shortcut = Config.TransformShortcut().value
+        var mask: NSEvent.ModifierFlags = []
+        if shortcut.modifiers.contains(.control) { mask.insert(.control) }
+        if shortcut.modifiers.contains(.option) { mask.insert(.option) }
+        if shortcut.modifiers.contains(.shift) { mask.insert(.shift) }
+        if shortcut.modifiers.contains(.command) { mask.insert(.command) }
+        self.transformSelectedTextMenuItem.keyEquivalent = shortcut.key
+        self.transformSelectedTextMenuItem.keyEquivalentModifierMask = mask
     }
 
     @objc func toggleLiveConversion(_ sender: Any) {
@@ -56,8 +67,6 @@ extension azooKeyMacInputController {
         switch self.inputState {
         case .composing, .replaceSuggestion:
             _ = self.handleClientAction(.requestReplaceSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
-        case .none:
-            _ = self.handleClientAction(.requestPredictiveSuggestion, clientActionCallback: .transition(.replaceSuggestion), client: client)
         default:
             break
         }
@@ -67,32 +76,20 @@ extension azooKeyMacInputController {
         guard menuItem == self.transformSelectedTextMenuItem else {
             return true
         }
-        let aiBackendEnabled = Config.AIBackendPreference().value != .off
-        self.updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: aiBackendEnabled)
-        return self.canPerformTransformSelectedText(client: self.client())
-    }
-
-    func updateTransformSelectedTextMenuItemEnabledState() {
-        let aiBackendEnabled = Config.AIBackendPreference().value != .off
-        self.updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: aiBackendEnabled)
-        self.transformSelectedTextMenuItem.isEnabled = self.canPerformTransformSelectedText(client: self.client())
-    }
-
-    private func canPerformTransformSelectedText(client: IMKTextInput?) -> Bool {
+        self.updateTransformSelectedTextMenuItemTitle()
         guard !self.isPromptWindowVisible else {
             return false
         }
-        guard let client else {
+        guard let client = self.client() else {
             return false
         }
-        // 入力状態だけで有効と分かる場合は、入力先アプリへの同期問い合わせを行わない。
+        // 選択範囲はメニューの検証時に取得し、入力開始時の同期問い合わせを避ける。
         return self.inputState == .composing
             || self.inputState == .replaceSuggestion
-            || self.inputState == .none
-            || client.selectedRange().length > 0 // hasSelection
+            || client.selectedRange().length > 0
     }
 
-    private func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool) {
+    func updateTransformSelectedTextMenuItemTitle(aiBackendEnabled: Bool = Config.AIBackendPreference().value != .off) {
         self.transformSelectedTextMenuItem.title = aiBackendEnabled ? TransformMenuTitle.normal : TransformMenuTitle.noBackend
     }
 

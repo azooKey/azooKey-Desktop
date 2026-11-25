@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AppGroup {
-    public static let azooKeyMacIdentifier = "group.dev.ensan.inputmethod.azooKeyMac"
+    public static let azooKeyMacIdentifier = "group.com.azookey.mac"
 
     #if os(macOS)
     public static func containerURL(fileManager: FileManager = .default) -> URL? {
@@ -9,7 +9,7 @@ public enum AppGroup {
             ?? Self.containerURL(homeDirectoryURL: fileManager.homeDirectoryForCurrentUser)
     }
 
-    /// 既存バージョンと同じ共有コンテナを、App Group APIが利用できない環境でも参照する。
+    /// App Group APIが利用できない環境で参照する共有コンテナのURLを組み立てる。
     public static func containerURL(homeDirectoryURL: URL) -> URL {
         homeDirectoryURL
             .appendingPathComponent("Library", isDirectory: true)

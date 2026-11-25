@@ -62,6 +62,22 @@ public enum DebugTypoCorrectionWeights {
         }
     }
 
+    static func canReadRequiredWeightFiles(modelDirectoryURL: URL) -> Bool {
+        Self.requiredFiles.allSatisfy { required in
+            let fileURL = modelDirectoryURL.appendingPathComponent(required.fileName)
+            do {
+                guard try fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+                    return false
+                }
+                let handle = try FileHandle(forReadingFrom: fileURL)
+                defer { try? handle.close() }
+                return try handle.read(upToCount: 1)?.count == 1
+            } catch {
+                return false
+            }
+        }
+    }
+
     public static func state(modelDirectoryURL: URL) -> DebugTypoCorrectionState {
         do {
             return try Self.validateWeights(modelDirectoryURL: modelDirectoryURL) ? .downloaded : .notDownloaded
@@ -119,10 +135,17 @@ public enum DebugTypoCorrectionWeights {
             }
         }
 
-        if fileManager.fileExists(atPath: modelDirectoryURL.path) {
-            try fileManager.removeItem(at: modelDirectoryURL)
+        try await Self.installWeights(from: stagingDirectoryURL, to: modelDirectoryURL)
+    }
+
+    // Backspaceでの読み取り確認とモデルの読み込みを、配置の途中で実行しない。
+    @MainActor
+    private static func installWeights(from sourceURL: URL, to targetURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: targetURL.path) {
+            try fileManager.removeItem(at: targetURL)
         }
-        try fileManager.moveItem(at: stagingDirectoryURL, to: modelDirectoryURL)
+        try fileManager.moveItem(at: sourceURL, to: targetURL)
     }
 
     private static func fileMD5HexString(fileURL: URL) throws -> String {

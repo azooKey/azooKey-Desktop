@@ -10,6 +10,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private var inputLanguage: InputLanguage = .japanese
     private var capsManagedRoman = false
     private var lastObservedCapsLockOn: Bool?
+    /// 入力先アプリに未確定文字列が残っているか。確定直後に空の setMarkedText を送らないために使う
+    private var clientMarkedTextTracker = ClientMarkedTextTracker()
     var liveConversionEnabled: Bool {
         Config.LiveConversion().value
     }
@@ -164,7 +166,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // Register custom input table (if available) for `.tableName` usage
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
-        self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateTransformSelectedTextMenuItemTitle()
+        self.updateTransformSelectedTextMenuItemShortcut()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
@@ -181,10 +184,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         // refreshCandidateWindow / refreshPredictionWindow は composing/selecting 状態で
         // client.attributes(...) を呼ぶ経路があるため、activate 中は使わずウィンドウを
         // 明示的に閉じる。
-        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         self.candidatesWindow.setIsVisible(false)
         self.candidatesWindow.orderOut(nil)
-        self.candidatesViewController.hide()
         self.hidePredictionWindow()
     }
 
@@ -192,11 +193,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     override func deactivateServer(_ sender: Any!) {
         self.segmentsManager.deactivate(flushLearningData: false)
         (NSApplication.shared.delegate as? AppDelegate)?.scheduleLearningDataCommit()
-        self.inputState = .none
+        if self.inputState == .replaceSuggestion {
+            // 入力先を離れたあとに非同期の置換候補を表示しない。
+            self.inputState = .composing
+            self.segmentsManager.resetSuggestionSelection()
+        }
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
-        self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
     }
 
@@ -213,7 +217,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
         if let client = sender as? IMKTextInput {
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
         }
         self.inputState = .none
         self.refreshMarkedText()
@@ -360,7 +364,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             inputState: inputState,
             typeBackSlash: Config.TypeBackSlash().value
            ) {
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
             return true
         }
 
@@ -480,21 +484,21 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
             self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
         case .insertWithoutMarkedText(let string):
-            client.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(string, client: client)
         case .editSegment(let count):
             self.segmentsManager.editSegment(count: count)
         case .commitMarkedText:
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
         case .commitMarkedTextAndAppendToMarkedText(let string):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
             // 英語モードの場合は.directでローマ字変換せずそのまま入力
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
             self.segmentsManager.insertAtCursorPosition(string, inputStyle: inputStyle)
         case .commitMarkedTextAndAppendPieceToMarkedText(let pieces):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
             // 英語モードの場合は.directでローマ字変換せずそのまま入力
             let inputStyle: InputStyle = self.inputLanguage == .english ? .direct : self.inputStyle
             self.segmentsManager.insertAtCursorPosition(pieces: pieces, inputStyle: inputStyle)
@@ -549,13 +553,9 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.switchInputLanguageFromAction(language, client: client)
         case .commitMarkedTextAndSelectInputLanguage(let language):
             let text = self.segmentsManager.commitMarkedText(inputState: self.inputState)
-            client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(text, client: client)
             self.switchInputLanguageFromAction(language, client: client)
         // PredictiveSuggestion
-        case .requestPredictiveSuggestion:
-            // 「つづき」を直接入力し、コンテキストを渡す
-            self.segmentsManager.insertAtCursorPosition("つづき", inputStyle: self.inputStyle)
-            self.requestReplaceSuggestion()
         case .acceptPredictionCandidate:
             self.acceptPredictionCandidate()
         // ReplaceSuggestion
@@ -590,7 +590,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         case .submitUnicodeInput(let codePoint):
             if let scalar = UInt32(codePoint, radix: 16), let unicodeScalar = Unicode.Scalar(scalar) {
                 let character = String(Character(unicodeScalar))
-                client.insertText(character, replacementRange: NSRange(location: NSNotFound, length: 0))
+                self.insertTextToClient(character, client: client)
             }
         case .cancelUnicodeInput:
             // 状態遷移は clientActionCallback で行われるので、ここでは何もしない
@@ -601,7 +601,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             // 残りのテキストがあればひらがなのまま確定
             if !self.segmentsManager.isEmpty {
                 let text = self.segmentsManager.convertTarget
-                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                self.insertTextToClient(text, client: client)
                 self.segmentsManager.stopComposition()
             }
         // MARK: 特殊ケース
@@ -853,11 +853,26 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
                 )
             )
         }
-        self.client()?.setMarkedText(
+        let markedTextIsEmpty = text.length == 0
+        // 確定直後など、入力先アプリに未確定文字列が残っていないときに空の setMarkedText を送ると、
+        // アプリによっては長さ0の未確定範囲が残り続ける（「メモ」で先頭の文字が消える・意図しない改行が入る原因）。
+        // そのため、空の未確定文字列は消すべきものがあるときだけ送る。
+        guard self.clientMarkedTextTracker.shouldSendMarkedText(markedTextIsEmpty: markedTextIsEmpty),
+              let client = self.client() else {
+            return
+        }
+        client.setMarkedText(
             text,
             selectionRange: currentMarkedText.selectionRange,
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
+        self.clientMarkedTextTracker.didSendMarkedText(markedTextIsEmpty: markedTextIsEmpty)
+    }
+
+    /// 入力先アプリに文字列を確定させる。確定するとアプリ側の未確定文字列はなくなる
+    func insertTextToClient(_ text: String, client: IMKTextInput) {
+        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        self.clientMarkedTextTracker.didInsertText()
     }
 
     @MainActor
@@ -865,7 +880,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         if let client = self.client() {
             // インサートを行う前にコンテキストを取得する
             let cleanLeftSideContext = self.segmentsManager.getCleanLeftSideContext(maxCount: 30)
-            client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            self.insertTextToClient(candidate.text, client: client)
             // アプリケーションサポートのディレクトリを準備しておく
             self.segmentsManager.prefixCandidateCommited(candidate, leftSideContext: cleanLeftSideContext ?? "")
         }
@@ -972,6 +987,9 @@ extension azooKeyMacInputController {
         }
 
         let composingText = self.segmentsManager.convertTarget
+        guard !composingText.isEmpty else {
+            return
+        }
 
         // プロンプトを取得
         let leftContext = self.getLeftSideContext(maxCount: 100) ?? ""
@@ -986,7 +1004,12 @@ extension azooKeyMacInputController {
 
         let apiKey = Config.OpenAiApiKey().value
         let modelName = Config.OpenAiModelName().value
-        let request = OpenAIRequest(prompt: requestPrompt, target: composingText, modelName: modelName.isEmpty ? Config.OpenAiModelName.default : modelName)
+        let request = OpenAIRequest(
+            prompt: requestPrompt,
+            target: composingText,
+            modelName: modelName.isEmpty ? Config.OpenAiModelName.default : modelName,
+            reasoningEffort: Config.OpenAiReasoningEffort().value
+        )
         self.segmentsManager.appendDebugMessage("APIリクエスト準備完了: prompt=\(prompt), target=\(composingText), modelName=\(modelName)")
 
         // Get selected backend
@@ -1079,7 +1102,7 @@ extension azooKeyMacInputController {
     @MainActor func submitSelectedSuggestionCandidate() {
         if let candidate = self.replaceSuggestionsViewController.getSelectedCandidate() {
             if let client = self.client() {
-                client.insertText(candidate.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                self.insertTextToClient(candidate.text, client: client)
                 self.replaceSuggestionWindow.setIsVisible(false)
                 self.replaceSuggestionWindow.orderOut(nil)
                 self.segmentsManager.stopComposition()
